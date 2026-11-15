@@ -86,6 +86,23 @@ A tap selects; a press-and-hold inspects. They show different things on purpose.
   its marks, plus ring arc length under the card × 4, plus 4 × overlap with the finger (press point
   ± 60). A tie goes to the corner farther from the finger (`HudDocking.choose_card`).
 
+### Mine caption
+
+A plain tap on a mine the viewer knows (their own, or an enemy mine an engineer of theirs found,
+`Mines.is_known`) shows a **mine caption**: the unit tag's shape with the name only («Ваша міна» /
+«Ворожа міна»), in the owner's HP-bar colour (`UnitView.hp_fill_color`), without silhouette,
+player stripe or pips. A tap on an unfound enemy mine behaves exactly as on empty ground: no
+caption, no signal difference.
+
+- **Placed by `TagPlacement`**, with the mine's tile as the unit box. It avoids every visible unit,
+  the selected unit's tag and all HUD chrome, and gets a leader when it must stand away. The
+  selected unit's tag avoids the caption in turn (it is chrome for the tag). With no legal spot the
+  caption hides.
+- **One at a time.** The next plain tap, a new selection, a handover, arming the drone or a verb,
+  and the hold card all take it down; the card brings it back on release if nothing else cleared it.
+- **No input**: the tag ignores touches like the unit tag, so the tap lands on the tile below.
+- It follows the tile on pan and is placed again when the camera settles.
+
 ## Action previews
 
 A shot, drone or unit-repair preview opens the cluster: the **preview plate** (252 × ≈ 84, `plate_solid`: target row 24, glyph 26 × 40, sector word 16, damage 26) over the **action row**. A pending move and the clear-mine and bridge verbs have **no plate**: only the action row (Cancel, Confirm) shows, docked the same way with a zero-height plate.
