@@ -15,16 +15,19 @@ extends Node
 ## Шостий аргумент real [set=N] ставить як справжні юніти зі смугами HP польову гармату, гаубицю,
 ## інженерну машину й важкий танк на найближчому й найдальшому зумі. З set=N усі чотири
 ## належать гравцеві з набором N (без нього — власники 0, 1, 2), а відділення гравця 0 розвідує
-## для них ґрунт. Змінні середовища:
-##   SHOT_GROUND=meadow|plough — луг чи рілля під гарматою й гаубицею (помилка, якщо такого
-##     місця нема); без неї — будь-яке поле. Група завжди стоїть далі за клітинку від води.
-##   SHOT_GROUND_CELLS=1 — вимога до поверхні лише для клітинки гармати (типово для гармати й
-##     гаубиці; на River двох таких поруч нема).
+## для них ґрунт. Група стоїть на полі, дорозі чи узвишші, не на краю карти й не ближче за
+## клітинку до води. Змінні середовища:
+##   SHOT_GROUND=meadow|plough — луг чи рілля під першими двома юнітами групи (помилка, якщо
+##     такого місця нема), а поруч, на клітинку навколо, немає будівель і руїн. Без неї група
+##     стоїть на будь-якому полі, далі за клітинку від лісу й за дві від будівель.
+##   SHOT_GROUND_CELLS=1|2 — скільки перших юнітів групи вимагають цієї поверхні (типово 2).
+##     Лише разом із SHOT_GROUND; на River двох клітинок ріллі поруч нема, тож там 1.
 ##   SHOT_ENGINEERS=1 — замість гармат і танка інженерні машини наборів 0, 1, 2 поруч із
-##     середнім танком; несумісна з set=N.
+##     середнім танком; несумісна з set=N і SHOT_PAIR.
 ##   SHOT_PAIR=1 — лише інженерна машина й середній танк набору N (потрібен set=N), клітинки
 ##     через дві.
 ##   SHOT_ZOOMS=8,20 — зуми кадрів між найближчим і найдальшим (типово обидва крайні).
+##   SHOT_NO_HP=1 — без смуг і чисел HP, щоб судити про силует.
 ## Шостий аргумент spin [set=N] ставить одну модель типу type_id нерухомо на найближчому зумі й знімає три кадри (_s0, _s1, _s2): перші два
 ## з однаковим `travel` (контроль), третій — на пів радіуса колеса далі; між ними мають змінитися лише колеса.
 ## Шостий аргумент rear [set=N] ставить чотири танки набору N (важкий, середній, винищувач, легкий) у ряд через тайл,
@@ -250,10 +253,10 @@ func _lineup(screen: BattleScreen, map: MapData, out: String, tag: String) -> vo
 
 
 ## Найближче до центру карти місце `p`, де кожна клітинка групи (`p + rel`) — поле, дорога чи
-## узвишшя, а в радіусі клітинки довкола неї немає води. Без `surface` ще й немає лісу в радіусі
-## клітинки та будівель у радіусі двох. З `surface >= 0` перші `ground_cells` клітинок групи
-## (гармата, гаубиця) ще й цієї поверхні, а чотири їхні сусіди — поле.
-## `Vector2i(-1, -1)` — місця нема.
+## узвишшя, не на краю карти, а в радіусі клітинки довкола неї немає води. Без `surface` ще й
+## немає лісу в радіусі клітинки та будівель і руїн у радіусі двох. З `surface >= 0` немає
+## будівель і руїн у радіусі клітинки (дах не накриває юніта), а перші `ground_cells` клітинок
+## групи ще й цієї поверхні, з полем на чотири боки. `Vector2i(-1, -1)` — місця нема.
 func _group_origin(m: MapData, rel: Array[Vector2i], surface: int, ground_cells: int = 2) -> Vector2i:
 	var best := Vector2i(-1, -1)
 	var best_d: int = 1 << 30
@@ -281,10 +284,10 @@ func _group_origin(m: MapData, rel: Array[Vector2i], surface: int, ground_cells:
 							ok = false
 						elif surface < 0 and near and kind == Terrain.Kind.FOREST:
 							ok = false
-						elif surface < 0 and kind in [Terrain.Kind.BUILDING, Terrain.Kind.RUBBLE]:
+						elif kind in [Terrain.Kind.BUILDING, Terrain.Kind.RUBBLE] and (near or surface < 0):
 							ok = false
 			if ok and surface >= 0:
-				# перші дві клітинки групи — гармата й гаубиця — стоять на цій поверхні
+				# перші клітинки групи стоять на цій поверхні
 				for gi in ground_cells:
 					var g: Vector2i = p + rel[gi]
 					if m.surface_at(g) != surface:
@@ -320,8 +323,7 @@ func _real(screen: BattleScreen, map: MapData, out: String, tag: String, set_id:
 	var surface: int = -1
 	if ground != "":
 		surface = MapData.FieldSurface.PLOUGHED if ground == "plough" else MapData.FieldSurface.MEADOW
-	# type_id, власник, зсув від `p`: сусіди через дві клітинки, щоб смуги HP не лягали на відвал чи
-	# плуг
+	# type_id, власник, зсув від `p`: сусіди через клітинку, щоб смуги HP не лягали на відвал чи плуг
 	var plan: Array = []
 	var cam := Vector2i(2, 1)
 	if pair:
@@ -330,8 +332,7 @@ func _real(screen: BattleScreen, map: MapData, out: String, tag: String, set_id:
 	elif engineers:
 		plan = [[11, 0, Vector2i(0, 0)], [11, 1, Vector2i(2, 0)], [11, 2, Vector2i(4, 0)], [5, 0, Vector2i(2, 2)]]
 	else:
-		# set=N: усі чотири юніти належать гравцеві з набором N, тож гармати й інженерна машина — з
-		# цього набору
+		# set=N: усі чотири юніти гравця з набором N, тож гармати й інженерна машина — з цього набору
 		var o: Array[int] = [0, 1, 2, 0]
 		if set_id >= 0:
 			o = [set_id, set_id, set_id, set_id]
@@ -343,10 +344,17 @@ func _real(screen: BattleScreen, map: MapData, out: String, tag: String, set_id:
 		rel.append(e[2])
 	if spotter:
 		rel.append(Vector2i(2, 3) if not pair else Vector2i(1, 2))
-	var cells: int = int(OS.get_environment("SHOT_GROUND_CELLS")) if OS.get_environment("SHOT_GROUND_CELLS") != "" else 2
-	var p: Vector2i = _group_origin(m, rel, surface, clampi(cells, 1, 2))
+	var cells_text: String = OS.get_environment("SHOT_GROUND_CELLS")
+	var cells: int = 2
+	if cells_text != "":
+		if ground == "" or not cells_text.is_valid_int() or int(cells_text) < 1 or int(cells_text) > 2:
+			push_error("unit_shot: SHOT_GROUND_CELLS — 1 або 2 і лише разом із SHOT_GROUND, а не %s" % cells_text)
+			get_tree().quit(1)
+			return
+		cells = int(cells_text)
+	var p: Vector2i = _group_origin(m, rel, surface, cells)
 	if p.x < 0:
-		push_error("unit_shot: на карті нема поля без води під групу юнітів (SHOT_GROUND=%s)" % ground)
+		push_error("unit_shot: нема місця під групу юнітів: поле, дорога чи узвишшя не на краю карти й без води, лісу чи будівель поруч (SHOT_GROUND=%s, SHOT_GROUND_CELLS=%d)" % [ground, cells])
 		get_tree().quit(1)
 		return
 	m.spawns = []
@@ -365,6 +373,7 @@ func _real(screen: BattleScreen, map: MapData, out: String, tag: String, set_id:
 				return
 			zooms.append(z)
 	screen.setup(m, 3, 1)
+	var no_hp: bool = OS.get_environment("SHOT_NO_HP") != ""
 	var rig: IsoCameraRig = screen.get_node("%CameraRig")
 	for f in SETTLE_FRAMES:
 		await get_tree().process_frame
@@ -373,6 +382,11 @@ func _real(screen: BattleScreen, map: MapData, out: String, tag: String, set_id:
 		rig.zoom_by(z / rig.zoom_level)
 		for f in SETTLE_FRAMES * 2:
 			await get_tree().process_frame
+		if no_hp:
+			# смуга — MultiMesh екрана, число — вузол кожного вигляду; вигляди перестворюються, тож ховаємо щоразу
+			screen._hp_bars.visible = false
+			for view: Node in screen.find_children("*", "UnitView", true, false):
+				(view as UnitView)._hp_label.visible = false
 		await RenderingServer.frame_post_draw
 		get_viewport().get_texture().get_image().save_png("%s/%s_z%d.png" % [out, tag, int(z)])
 	print("UNIT real at %s" % p)
