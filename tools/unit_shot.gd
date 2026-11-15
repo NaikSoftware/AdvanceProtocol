@@ -55,6 +55,9 @@ func _ready() -> void:
 	if a.size() > 5 and a[5] == "forest_n2":
 		await _forest_n2(screen, map, out, tag)
 		return
+	if a.size() > 5 and a[5] == "forest_deep":
+		await _forest_deep(screen, map, out, tag)
+		return
 	if a.size() > 5 and a[5] == "fall":
 		await _fall(screen, map, out, tag)
 		return
@@ -443,10 +446,14 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 	print("UNIT gate zoom %.2f" % rig.zoom_level)
 	for cl: Array in cells:
 		var cell: Vector2i = cl[1]
-		# Штурмове міряється на простих бійцях, без труб дрона: гейт — про тон бійця, а темна труба над
-		# головою тягнула б світлішу половину пікселів униз і міряла б трубу, а не людину.
-		var m: Node3D = UnitSilhouettes.build_merged(type_id, -1, set_id, 0)
+		# Відділення таким, яким воно стоїть на початку матчу: штурмове — зі своїми трубами дрона.
+		var drones: int = int(UnitTypes.get_type(type_id).get("drones", 0))
+		var m: Node3D = UnitSilhouettes.build_merged(type_id, -1, set_id, drones)
 		_place(m, cell, 0)
+		# Крона над ним гасне так само, як над юнітом у грі: гейт міряє те, що бачить гравець.
+		# _shown_cells теж: екран сам пересилає їх дошці після перебудови юнітів, і перезаписав би наше.
+		screen._shown_cells.assign([cell])
+		screen._board_view.set_reveal_cells([cell] as Array[Vector2i], true)
 		if (UnitSilhouettes.spec(type_id, set_id).extras as Array).has(&"figures"):
 			# Відділення стоїть ступнями на основі 0,05 над своїм початком, а гра опускає його на `SQUAD_SINK`.
 			m.position.y -= UnitView.SQUAD_SINK
@@ -462,10 +469,23 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 		flat.albedo_color = Color(1.0, 0.0, 1.0)
 		for mi: MeshInstance3D in m.find_children("*", "MeshInstance3D", true, false):
 			mi.material_override = flat
+		# Крізь розчинену крону (35 %) пурпур уже не чистий: на масці її не малюємо — маска позначає все,
+		# що гравець бачить крізь неї, а виміри однаково на кадрах із кроною.
+		var soft: Array[Node] = screen._board_view._forest._soft_nodes
+		for nd: Node in soft:
+			(nd as Node3D).visible = false
 		for f in 4:
 			await get_tree().process_frame
 		await RenderingServer.frame_post_draw
 		var mask: Image = get_viewport().get_texture().get_image()
+		for nd: Node in soft:
+			(nd as Node3D).visible = true
+		if cl == cells[0]:
+			var tris: int = 0
+			for mi: MeshInstance3D in m.find_children("*", "MeshInstance3D", true, false):
+				for si in mi.mesh.get_surface_count():
+					tris += (mi.mesh.surface_get_arrays(si)[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3
+			print("UNIT gate model type %d set %d drones %d: %d tris" % [type_id, set_id, drones, tris])
 		m.queue_free()
 		for f in 10:
 			await get_tree().process_frame
@@ -904,7 +924,70 @@ func _fall(screen: BattleScreen, map: MapData, out: String, tag: String) -> void
 		await RenderingServer.frame_post_draw
 		if Time.get_ticks_msec() - t0 >= frames.size() * 100:
 			frames.append(get_viewport().get_texture().get_image())
+	# пил улігся: кадр через 3,5 с після пострілу
+	while Time.get_ticks_msec() - t0 < 3500:
+		await RenderingServer.frame_post_draw
+	var settled: Image = get_viewport().get_texture().get_image()
 	for i in frames.size():
 		frames[i].save_png("%s/%s_fall_%02d.png" % [out, tag, i])
+	settled.save_png("%s/%s_fall_35.png" % [out, tag])
 	print("UNIT fall at %s: hp %d -> %d, figures %d -> %d" % [c, hp0, squad.hp, Casualties.figures(hp0, squad.max_hp()), Casualties.figures(squad.hp, squad.max_hp())])
+	get_tree().quit()
+
+
+## Шостий аргумент forest_deep: штурмове відділення (значок дронів) на клітинці лісу, довкола якої на дві
+## клітинки ліс (якщо такої нема — на одну). Кадри _deep_z6, _deep_z20 і на зумі 6 пари для порівняння: _deep_z6_nofade (крона не
+## гасне) і _deep_z6_noforest (лісу нема).
+func _forest_deep(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
+	var m: MapData = map.duplicate(true)
+	m.take_over_path(map.resource_path)
+	var c := Vector2i(m.width / 2, m.height / 2)
+	var deep := Vector2i(-1, -1)
+	# ліс на дві клітинки довкола, а якщо такого нема — хоч на одну
+	for ring in [2, 1]:
+		for y in range(ring, m.height - ring):
+			for x in range(ring, m.width - ring):
+				var ok: bool = true
+				for dy in range(-ring, ring + 1):
+					for dx in range(-ring, ring + 1):
+						if m.tiles[(y + dy) * m.width + x + dx] != Terrain.Kind.FOREST:
+							ok = false
+				var p := Vector2i(x, y)
+				if ok and (deep.x < 0 or (p - c).length_squared() < (deep - c).length_squared()):
+					deep = p
+		if deep.x >= 0:
+			break
+	if deep.x < 0:
+		push_error("unit_shot: на карті нема клітинки глибоко в лісі")
+		get_tree().quit()
+		return
+	m.spawns = [{"type_id": 1, "owner": 0, "pos": deep, "facing": 2}]
+	screen.setup(m, 2, 1)
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	for f in SETTLE_FRAMES:
+		await get_tree().process_frame
+	rig.center_on(deep)
+	var shots: Dictionary = {}
+	for z: float in [IsoCameraRig.MIN_ZOOM, IsoCameraRig.MAX_ZOOM]:
+		rig.zoom_by(z / rig.zoom_level)
+		for f in SETTLE_FRAMES * 2:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		shots["%s/%s_deep_z%d.png" % [out, tag, int(z)]] = get_viewport().get_texture().get_image()
+	rig.zoom_by(IsoCameraRig.MIN_ZOOM / rig.zoom_level)
+	for f in SETTLE_FRAMES * 2:
+		await get_tree().process_frame
+	var bv: BoardView = screen._board_view
+	bv.set_reveal_cells([] as Array[Vector2i], true)
+	for f in 6:
+		await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	shots["%s/%s_deep_z6_nofade.png" % [out, tag]] = get_viewport().get_texture().get_image()
+	bv._forest.visible = false
+	await RenderingServer.frame_post_draw
+	await RenderingServer.frame_post_draw
+	shots["%s/%s_deep_z6_noforest.png" % [out, tag]] = get_viewport().get_texture().get_image()
+	for path: String in shots:
+		(shots[path] as Image).save_png(path)
+	print("UNIT forest_deep at %s" % deep)
 	get_tree().quit()

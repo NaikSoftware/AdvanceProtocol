@@ -56,6 +56,9 @@ const OVERLAY_PRIORITY: int = 10
 ## Фігур у відділенні; стоїть одна на кожну чверть HP, що лишилась (правило — Casualties у core).
 const SQUAD_FIGURES: int = Casualties.SQUAD_FIGURES
 const _FALL_SEC: float = 0.5
+## Перекидання бійця, що впав: 0,2 с — помітно на справжній швидкості й не затримує хід.
+const FALL_TIP_SEC: float = 0.2
+const FALL_TIP_ANGLE: float = -1.45
 ## Знищена техніка зникає під спалахом, і саме тим кроком анімація закінчується:
 ## програвач одразу грає WreckLeft, тож уламки стають на тайл у тому самому кадрі, ще
 ## під кулею, а не після того, як дим розійшовся.
@@ -672,10 +675,30 @@ func _set_standing(count: int) -> void:
 	if not (UnitSilhouettes.spec(_type_id, _set_id()).extras as Array).has(&"figures"):
 		_standing = 0
 		return
+	if count < _standing and is_inside_tree():
+		_tip_over(count, _standing, _layout)
 	_standing = count
 	# Розкладка — за id юніта й нинішнім напрямом: стоячі не стають один за одним уздовж погляду камери.
 	_layout = UnitSilhouettes.pick_layout(_unit_id, rotation.y)
 	(_silhouette.get_node("Hull") as MeshInstance3D).mesh = UnitSilhouettes.merged_mesh(_type_id, count, _set_id(), _drones_left, _layout)
+
+
+## Бійці місць `from .. to - 1` перекидаються навзнак довкола ступень за FALL_TIP_SEC; тіло на землі з'являється
+## слідом (BattleScreen._on_figures_fell). Лише вигляд: правила вже вирішили, хто впав.
+func _tip_over(from: int, to: int, layout: int) -> void:
+	var mesh: ArrayMesh = UnitSilhouettes.model_mesh(UnitSilhouettes.PLAIN_FIGURE, _set_id())
+	if mesh == null:
+		return
+	for i in range(from, to):
+		var mi := MeshInstance3D.new()
+		mi.mesh = mesh
+		mi.material_override = UnitSilhouettes.model_material(UnitSilhouettes.PLAIN_FIGURE, _set_id())
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.transform = UnitSilhouettes.model_figure_transform(i, layout)
+		_silhouette.add_child(mi)
+		var tween: Tween = mi.create_tween()
+		tween.tween_property(mi, "rotation:x", FALL_TIP_ANGLE, FALL_TIP_SEC).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+		tween.tween_callback(mi.queue_free)
 
 
 ## Твінує _silhouette, а не self: self.scale належить play_destroyed() відділення, і два
@@ -777,6 +800,8 @@ const FIGURE_CONTACT_SIZE: float = 0.11
 ## Непрозорість тіні бійця на будь-якій карті: сила карти для техніки різна (0,6–0,78), а під людиною
 ## ґрунт має темніти на 5–10 L*, не більше, тож ця — стала, а не частка карти.
 const FIGURE_CONTACT_ALPHA: float = 0.39
+## Під сонцем боєць кидає й справжню тінь, і дві разом темнили ґрунт під ним до ~20 L*: там плями менше.
+const FIGURE_CONTACT_SUNNY: float = 0.65
 
 
 func contact_slots() -> int:
@@ -787,7 +812,10 @@ func contact_slots() -> int:
 func contact_strength() -> float:
 	if not _has_figures():
 		return 1.0
-	return clampf(FIGURE_CONTACT_ALPHA / WeatherRig.unit_contact, 0.0, 1.0) if WeatherRig.unit_contact > 0.0 else 0.0
+	if WeatherRig.unit_contact <= 0.0:
+		return 0.0
+	var alpha: float = FIGURE_CONTACT_ALPHA * (FIGURE_CONTACT_SUNNY if WeatherRig.sun_ground != Vector2.ZERO else 1.0)
+	return clampf(alpha / WeatherRig.unit_contact, 0.0, 1.0)
 
 
 func contact_transforms() -> Array[Transform3D]:

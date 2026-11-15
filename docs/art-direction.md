@@ -120,7 +120,8 @@ falls back to the box placeholder, so a model may land one type at a time.
   view, so survivors do not jump when a figure falls and squads are not all the same diamond.
   `rifle_soldier` is the plain soldier; `rifle_soldier_crouch` is the same man crouched (1.42 m),
   on slots 1 and 3, so a squad does not stand in one pose; `assault_soldier` is the plain soldier
-  with the drone launch tube (1.52 × 0.19 m, dark olive with dark end caps, upright on the back,
+  with the drone launch tube (1.52 × 0.19 m, sand composite with dark olive end caps, the lightest
+  kit on the figure and its mark from afar; upright on the back,
   bottom at hip height, top 0.6 m above the helmet); the fallen are three separate meshes —
   `rifle_soldier_body` on his side with knees bent and an arm under the torso,
   `rifle_soldier_body_prone` face down, `rifle_soldier_body_back` on his back — each with the rifle on
@@ -130,30 +131,34 @@ falls back to the box placeholder, so a model may land one type at a time.
   under a copy of the plain soldier's material with the shader uniform `fallen`. An assault squad carries
   as many tubes as it has drones left (0–2, public by §3.9), on its first standing slots, which
   fall last; the rest are plain figures, so at 0 drones it looks like a rifle squad, which by then
-  it is. The remaining count also shows as a small munition pictogram with one pip per drone,
-  butted against the left end of the squad's own HP bar at its height and sized with the bar in
-  world units (0.40 tile wide, about 18 px at the farthest zoom), so it reads as part of that bar
-  and never lands on a neighbour's bar or label.
-- **The fallen** are the same cloth, darker: hue within 6° of the living, chroma at most 0.85 of
-  theirs, a third of neutral mud brown, never ash grey and never a greener second uniform, and
-  faces turned sideways or down darker still, so a body keeps its form instead of a flat patch;
-  about ground lightness in game. A faint elongated contact patch lies under each torso. Each body
-  lies around the tile's centre, clear of the standing slots, 1.7–2.9 m out (one body of a
-  destroyed squad on the edge of its scorch) with a fixed seeded shift of up to 0.3 m and turn, its long axis at least 35° off the
-  camera's view (along it, a body foreshortens into a standing shape). Next to water the ring
-  tightens so no body reaches the water, which comes to 0.3 tile from a land cell's centre; on a
-  bridge the bodies lie along the deck within 0.18 of its axis, at deck height.
+  it is. The remaining count also shows as a small munition pictogram with one pip per drone, in
+  the HP-number row above the left end of the squad's own bar, never past that bar's left edge,
+  with the number moved right of it. It is sized with the bar in world units (0.42 tile wide;
+  each pip at least 3 × 3 px with a 2 px gap at the farthest zoom) and drawn over everything, as
+  the bar is, so a faded crown never hides it.
+- **The fallen** are the same cloth, darker and matte: hue within 5° of the living, chroma at
+  least half of theirs, a touch of warm mud, never ash grey and never a greener second uniform;
+  faces turned sideways or down darker still, so the shading inside a body spans at least
+  10 L*; the median body no lighter than the ground under it plus 2 L*. Specular at most 0.1,
+  roughness 1.0. A faint elongated contact patch lies under each torso. A figure that falls tips
+  over about its feet in 0.2 s, and then lies where it fell. Each body lies around the tile's
+  centre, clear of the standing slots, 1.6–3.2 m out and up to 40° off its own slot's direction
+  (one body of a destroyed squad on the edge of its scorch), with a fixed seeded shift of up to
+  0.3 m and turn, its long axis at least 35° off the camera's view (along it, a body foreshortens
+  into a standing shape). Next to water the ring tightens so no body reaches the water, which
+  comes to 0.3 tile from a land cell's centre; on a bridge the bodies lie in a row along the deck,
+  1.2 m apart and within 0.5 m of its axis, at deck height.
 - **Contact under soldiers.** Each standing soldier has his own contact shadow, a 0.9 m quad
-  (about 0.6 m of visible core) under his feet at a fixed opacity of 0.39 on every map: the ground
-  under him drops 5–10 L*, never to black.
-- **Soldier tones.** Slot 0's cloth is plain olive, uniform and helmet (146, 148, 104), plate
-  carrier (112, 114, 78), up-facing cloth at 0.7 (no hot helmets and shoulders), roughness 0.95
-  and a weak specular (0.2), gloves, boots and rifle dark: a middle-value olive with the tank
-  paint's hue (within 8°), chroma 17–24 under sun (River's overcast mutes it to about 13–14, as it
-  mutes the tank's paint to 17–18) and the brightest tenth of the cloth no lighter than L* 64. The
-  contrast gate passes at the farthest zoom (`unit_contrast_gate.py`, whole squad, top ΔE ≥ 14.5);
-  at the closest zoom (`--zoom 6`, the assault squad measured on its plain figures) the darker
-  tops leave it below that on Ridge's field. A set's soldiers drop in through the same path
+  (about 0.6 m of visible core) under his feet at a fixed opacity of 0.39 under overcast and 0.65
+  of that under sun, where he also casts a real shadow: the ground under him drops 5–10 L*, never
+  more than about 15 and never to black.
+- **Soldier tones.** Slot 0's cloth is plain olive, uniform and helmet (153, 147, 93), plate
+  carrier (118, 113, 61), up-facing cloth at 0.7 (no hot helmets and shoulders), roughness 0.95
+  and a weak specular (0.2), gloves, boots and rifle dark: a middle-value olive that renders at
+  hue 95° or more on Crossroads and 100–112° on Ridge and River, within 8° of the set's tank on
+  every map, and the brightest tenth of the cloth no lighter than L* 64. The contrast gate at
+  the farthest zoom is the rule (`unit_contrast_gate.py`, whole squad as it starts a match, top
+  ΔE ≥ 14.5); the closest zoom (`--zoom 6`) is advisory. A set's soldiers drop in through the same path
   (`set<N>/rifle_soldier.glb`, `set<N>/rifle_soldier_crouch.glb`, `set<N>/assault_soldier.glb` and
   `set<N>/rifle_soldier_body.glb` with its `_prone` and `_back` poses, with their `_SET_SPECS` rows).
 - **One mesh, one primitive, one material**, node transforms applied (a leftover transform is
@@ -286,15 +291,13 @@ falls back to the box placeholder, so a model may land one type at a time.
   broken wood keeps its bark colour: no pale fresh breaks or splintered ends anywhere, they only
   litter the picture.
 - **Whatever hides a visible unit turns semi-transparent** — crowns, roofs and walls between the
-  camera and a unit the current player can see fade smoothly with alpha blending: crowns and
-  garden trees to about 12 % opacity, since a squad's standing figures are its HP and half-hidden
-  figures misread it, and roofs and walls to about 30–40 %. At that opacity a crown's leaves are
-  dropped entirely, since a thin film of leaf cards reads as speckle, while its trunk and branches
-  stay at about 45 %. A crown counts when it really hides the soldiers on screen: taken as a
-  column of its own radius from a quarter of the tree's height to its top, the line of sight from
-  the soldiers' feet to their heads towards the camera passes through it. In front of the unit
-  that reaches as far as the ray stays under the treetops; behind it, only a crown the unit
-  stands under counts. Never a dither, stipple or hole pattern; low rubble that cannot hide a unit stays solid.
+  camera and a unit the current player can see fade smoothly with alpha blending to about
+  30–40 % (crowns and garden trees 35 %), bark a little more. Only the nearest faded surface
+  blends, so stacked crowns do not darken one another, and the zone contours and the drone icon
+  stay visible through them. A crown counts when its centre lies within half a unit's width (plus
+  a small margin) of the line of sight towards the camera and that line, from mid-figure height,
+  passes between a quarter of the tree's height and its top somewhere across the crown's depth;
+  behind the unit, only a crown it stands under counts. Never a dither, stipple or hole pattern; low rubble that cannot hide a unit stays solid.
 - **Scars respect the fog:** crushed props, wrecks and their scorch show only where the viewer's
   `seen` covers the tile, cut at the tile's edge with no blur into unseen ground, or they report
   enemy movement. A destroyed squad's scorch is restrained and has no ash flecks; nothing is

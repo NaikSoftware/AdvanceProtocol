@@ -94,6 +94,10 @@ func test_squad_contact_is_a_small_weak_shadow_under_each_standing_figure() -> v
 	assert_almost_eq(view.contact_strength() * WeatherRig.unit_contact, UnitView.FIGURE_CONTACT_ALPHA, 0.0001, "стала непрозорість бійця")
 	WeatherRig.unit_contact = 0.78
 	assert_almost_eq(view.contact_strength() * 0.78, UnitView.FIGURE_CONTACT_ALPHA, 0.0001, "і на карті з густішою тінню техніки")
+	WeatherRig.sun_ground = Vector2(0.6, 0.8)
+	assert_almost_eq(view.contact_strength() * 0.78, UnitView.FIGURE_CONTACT_ALPHA * UnitView.FIGURE_CONTACT_SUNNY, 0.0001,
+			"під сонцем — слабша: є ще справжня тінь")
+	WeatherRig.sun_ground = Vector2.ZERO
 	WeatherRig.unit_contact = 0.6
 	for i in UnitView.SQUAD_FIGURES:
 		var xf: Transform3D = contacts.transform_of(i)
@@ -423,6 +427,26 @@ func _icon_rect(anchor: Vector2) -> Rect2:
 	var tex: Vector2 = Vector2(UnitView.drone_texture(2).get_size())
 	var centre: Vector2 = anchor + UnitView.DRONE_ICON_OFFSET * px
 	return Rect2(centre - tex * px * 0.5, tex * px)
+
+
+## Фігура, що впала, перекидається навзнак за FALL_TIP_SEC і зникає — далі тіло лежить у шарі тіл.
+func test_fallen_figures_tip_over_then_go() -> void:
+	UnitSilhouettes.use_models({0: UnitModelFixture.soldier(), 1: UnitModelFixture.tube_soldier()})
+	view.bind(_unit(0))
+	var before: int = view._silhouette.get_child_count()
+	view.set_hp(40, 100)
+	var tipping: Array = view._silhouette.get_children().slice(before)
+	assert_eq(tipping.size(), 2, "з чотирьох стоячих лишилось два — два перекидаються")
+	# твін стартує з кадром-другим запізнення під навантаженням: чекаємо нахилу, а не точного часу
+	var tilted: bool = false
+	var t0: int = Time.get_ticks_msec()
+	while not tilted and Time.get_ticks_msec() - t0 < 1000 and is_instance_valid(tipping[0]):
+		tilted = (tipping[0] as Node3D).rotation.x < -0.1
+		await get_tree().process_frame
+	tilted = tilted or not is_instance_valid(tipping[0])  # звільняється лише після твіна
+	assert_true(tilted, "перекидається")
+	await get_tree().create_timer(UnitView.FALL_TIP_SEC + 0.2).timeout
+	assert_eq(view._silhouette.get_child_count(), before, "перекинувшись, зникає")
 
 
 ## Значок дронів — публічне число саме цього відділення (§3.9): у площині екрана він не налазить ні на свій

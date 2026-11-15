@@ -1648,11 +1648,14 @@ func test_a_falling_body_shows_only_if_the_viewer_has_been_shown_it() -> void:
 	far.hp = 40
 	var hidden: Casualties.Body = (Casualties.record(state, far, 100)[0] as Events.FiguresFell).body
 	screen._on_figures_fell(hidden)
+	await get_tree().create_timer(UnitView.FALL_TIP_SEC + 0.05).timeout
 	assert_eq(layer.fallen_count(), 0, "тіло на нерозвіданому — донос про бій")
 	near.hp = 40
 	var seen: Casualties.Body = (Casualties.record(state, near, 100)[0] as Events.FiguresFell).body
 	screen._on_figures_fell(seen)
-	assert_eq(layer.fallen_count(), seen.count, "на розвіданому — лягає одразу")
+	assert_eq(layer.fallen_count(), 0, "спершу фігура перекидається")
+	await get_tree().create_timer(UnitView.FALL_TIP_SEC + 0.05).timeout
+	assert_eq(layer.fallen_count(), seen.count, "на розвіданому — лягає, щойно перекинулась")
 	assert_false(screen._scars.has_squad_scorch(near.pos), "живе відділення плями не лишає")
 	# Ніхто не лишився стояти — відділення знищене: стримана пляма на його тайлі.
 	var before: int = near.hp

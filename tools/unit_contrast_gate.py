@@ -133,6 +133,8 @@ def shoot(set_id, type_id, maps, out, zoom=None):
             fails.append("%s: Godot run timed out after %d s" % (mp, GODOT_TIMEOUT))
             continue
         announced = re.findall(r"UNIT gate (\S+) cell", r.stdout)
+        for line in re.findall(r"UNIT gate model .*", r.stdout):
+            print("%s: %s" % (mp, line))  # which model was measured: its triangles and drone tubes
         if r.returncode != 0 or "UNIT gate zoom" not in r.stdout:
             tail = " | ".join(l for l in (r.stdout + r.stderr).splitlines() if "rror" in l or "SCRIPT" in l)[:300]
             fails.append("%s: Godot run failed (exit %d)%s" % (mp, r.returncode, (": " + tail) if tail else ""))

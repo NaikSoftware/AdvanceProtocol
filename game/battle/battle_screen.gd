@@ -1318,7 +1318,8 @@ func _on_wreck_left(pos: Vector2i, type_id: int, facing: int, owner: int) -> voi
 func _on_figures_fell(body: Casualties.Body) -> void:
 	for b: Casualties.Body in _state().bodies:
 		if b.unit_id == body.unit_id and b.seq == body.seq and b.shown_to(_shown_viewer):
-			_wreck_layer.add_body(b)
+			# тіло лягає, коли фігура вже перекинулась (UnitView._tip_over)
+			get_tree().create_timer(UnitView.FALL_TIP_SEC).timeout.connect(_wreck_layer.add_body.bind(b))
 	# Ніхто не лишився стояти — відділення знищене: стримана пляма (на нерозвіданому її ховає маска).
 	if body.first == 0 and _scars != null and not _no_scorch(body.pos):
 		_scars.stamp_squad_scorch(body.pos)

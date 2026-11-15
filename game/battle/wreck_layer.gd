@@ -540,6 +540,10 @@ func rebuild_fallen(state: BattleState, observer: int) -> void:
 ## Щойно впалі (подія `FiguresFell`) — одразу, а не на перебудові після пакета: інакше фігура
 ## зникала б із відділення й лягала б аж по всьому. Чи показане тіло глядачеві, вирішує той, хто кличе.
 func add_body(body: Casualties.Body) -> void:
+	# Пізнє додавання (після перекидання фігури) може прийти вже після перебудови з тим самим тілом.
+	for b in _bodies:
+		if b.unit_id == body.unit_id and b.seq == body.seq:
+			return
 	_bodies.append(body)
 	_rebuild_body_meshes()
 
