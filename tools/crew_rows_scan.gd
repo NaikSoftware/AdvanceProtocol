@@ -1,17 +1,31 @@
 extends SceneTree
 ## Перевіряє й підбирає місця розрахунку гармати (рядки `crew` і `crew_travel` у `UnitSilhouettes`).
 ##   $GODOT --headless --path . -s tools/crew_rows_scan.gd -- check <тип> <набір> <0|1>
-##       друкує для кожного бійця рядка: у тайлі й між поручнями, відстань до моделі, закриття з камери;
-##   $GODOT --headless --path . -s tools/crew_rows_scan.gd -- scan <тип> <набір> <0|1> <боєць 0|1> <x> <z>
-##       до 12 найближчих до (x, z) місць, що проходять усі вимоги.
-## Третій аргумент: 1 — похідне положення (станини зведені, на мосту), 0 — розведені станини.
-## Вимоги ті самі, що в тестах: боєць у тайлі (у похідному — між поручнями найвужчого з мостів), не ближче
-## 0,3 м (0,0375 тайла) до трикутників моделі нижче його зросту, а гармата закриває з камери не більше
-## 30 % його вершин за напрямів 0 і 4 на найближчому й найдальшому нахилі.
+##       друкує для кожного бійця рядка: у тайлі й між поручнями, відстань до моделі, закриття
+##       з камери, частка в тіні;
+##   $GODOT --headless --path . -s tools/crew_rows_scan.gd -- scan <тип> <набір> <0|1>
+##       <боєць> <x> <z>: до 12 найближчих до (x, z) місць, що проходять усі вимоги.
+## Третій аргумент: 1 — похідне положення (станини зведені, на мосту), 0 — розведені станини. Вимоги
+## ті самі, що в тестах: боєць у тайлі (у похідному — між поручнями найвужчого з мостів), не ближче
+## 0,3 м (0,0375 тайла; в похідному 0,05) до трикутників моделі нижче його зросту, а гармата
+## закриває з камери не більше 15 % його вершин за напрямів 0 і 4 на найближчому й найдальшому
+## нахилі. Стоячи на землі (не на мосту), боєць ще й міряється тінню гармати: частка його вершин у
+## ній на напрямі 0 за сонцем Crossroads і Ridge (стовпчик shade). Тіло в тіні на темній ріллі
+## зливається із землею, і гармата читається з одним бійцем; щоб відкинути такі місця, SHADE_MAX=0.2
+## у середовищі.
 const Legal := preload("res://tools/crew_body_legal.gd")
+## Запас до моделі: 0,3 м на землі, 0,4 м в похідному положенні (там боєць ближче до гармати, і
+## зливається з нею).
 const MARGIN: float = 0.0375
-const MAX_COVER: float = 0.30
+const MARGIN_TRAVEL: float = 0.05
+## Гармата закриває з камери не більше цієї частки вершин бійця (на мосту й на землі).
+const MAX_COVER: float = 0.15
 const BRIDGES: Array[String] = ["west", "centre", "east"]
+## Тінь — лише відомість у звіті, поки змінна середовища SHADE_MAX не вимагає меншого.
+const SHADE_MAX: float = 1.0
+const SHADE_RES: float = 0.01
+const SHADE_N: int = 160
+const LOOKS: Array[String] = ["crossroads", "ridge"]
 
 
 func _init() -> void:
@@ -48,11 +62,12 @@ func _init() -> void:
 					found.append([Vector2(c.x, c.y).distance_to(at), c, rep])
 		found.sort_custom(func(p: Array, q: Array) -> bool: return p[0] < q[0])
 		for f: Array in found.slice(0, 12):
-			print("SCAN figure %d  row %s  cover %.2f  clearance %.3f" % [fig, f[1], f[2].cover, f[2].clearance])
+			print("SCAN figure %d  row %s  cover %.2f  clearance %.3f  shade %.2f" % [fig, f[1], f[2].cover, f[2].clearance, f[2].shade])
 		quit()
 
 
-## Усе потрібне для перевірок гармати: трикутники низу, екранні тіні на напрямах 0 і 4, фігури, поручні.
+## Усе потрібне для перевірок гармати: трикутники низу, екранні тіні на напрямах 0 і 4, фігури,
+## поручні.
 func _context(id: int, set_id: int, travel: bool) -> Dictionary:
 	var gun: ArrayMesh = UnitSilhouettes.travel_mesh(id, set_id) if travel else UnitSilhouettes.model_mesh(id, set_id)
 	if gun == null:
@@ -91,13 +106,19 @@ func _context(id: int, set_id: int, travel: bool) -> Dictionary:
 		for p: Vector3 in ((how.surface_get_arrays(0) as Array)[Mesh.ARRAY_VERTEX] as PackedVector3Array):
 			if p.y < UnitSilhouettes.FIGURE_SIZE.y:
 				pts2.append(Vector2(p.x, p.z - 1.0))
+	var margin: float = MARGIN_TRAVEL if travel else MARGIN
 	var bucket: Dictionary = {}
 	for p in pts2:
-		var k := Vector2i(floori(p.x / MARGIN), floori(p.y / MARGIN))
+		var k := Vector2i(floori(p.x / margin), floori(p.y / margin))
 		if not bucket.has(k):
 			bucket[k] = []
 		(bucket[k] as Array).append(p)
-	return {"low": low, "bucket": bucket, "bufs": bufs, "figures": [stand, kneel if kneel != null else stand], "inner": inner, "travel": travel}
+	var shade: Array = []
+	if not travel:
+		var b0 := Basis(Vector3.UP, deg_to_rad(UnitView._degrees_for_facing(0)))
+		for look_name: String in LOOKS:
+			shade.append(_shadow_grid(v, idx, b0, load("res://game/battle/look/%s.tres" % look_name) as BattleLook))
+	return {"margin": margin, "low": low, "bucket": bucket, "shade": shade, "bufs": bufs, "figures": [stand, kneel if kneel != null else stand], "inner": inner, "travel": travel}
 
 
 ## Відповідь про одного бійця в точці `row` (x, z, поворот): {pass, tile, clearance, cover}.
@@ -111,7 +132,7 @@ func report(ctx: Dictionary, fig: int, row: Vector3) -> Dictionary:
 		for sz: float in [-1.0, 1.0]:
 			var p: Vector2 = rot * Vector2(sx * half.x, sz * half.y)
 			tile = tile and absf(p.x) < reach and absf(p.y) <= 0.5
-			padded.append(rot * Vector2(sx * (half.x + MARGIN), sz * (half.y + MARGIN)))
+			padded.append(rot * Vector2(sx * (half.x + ctx.margin), sz * (half.y + ctx.margin)))
 	var clear: bool = true
 	for tri: Array in ctx.low:
 		if _tri_overlaps_rect(tri, padded):
@@ -122,7 +143,8 @@ func report(ctx: Dictionary, fig: int, row: Vector3) -> Dictionary:
 	if tile and clear:
 		for key: Vector2 in ctx.bufs:
 			cover = maxf(cover, Legal.figure_cover(pts, Vector2(row.x, row.y), int(key.x), ctx.bufs[key], key.y))
-	# справжня сітка бійця (руки, гвинтівка): у тайлі й між поручнями, і не ближче за запас до моделі
+	# справжня сітка бійця (руки, гвинтівка): у тайлі й між поручнями, і не ближче за запас до
+	# моделі
 	var basis := Basis(Vector3.UP, deg_to_rad(row.z))
 	var worst: float = INF
 	if tile and clear and cover <= MAX_COVER:
@@ -131,13 +153,66 @@ func report(ctx: Dictionary, fig: int, row: Vector3) -> Dictionary:
 			if absf(w.x) >= reach or absf(w.z) > 0.5:
 				tile = false
 				break
-			var c := Vector2i(floori(w.x / MARGIN), floori(w.z / MARGIN))
+			var c := Vector2i(floori(w.x / ctx.margin), floori(w.z / ctx.margin))
 			for dx in range(-1, 2):
 				for dz in range(-1, 2):
 					for q: Vector2 in ctx.bucket.get(c + Vector2i(dx, dz), []):
 						worst = minf(worst, q.distance_to(Vector2(w.x, w.z)))
-	clear = clear and worst >= MARGIN - 0.0005
-	return {"pass": tile and clear and cover <= MAX_COVER, "tile": tile, "clearance": snappedf(worst, 0.001), "cover": snappedf(cover, 0.01)}
+	clear = clear and worst >= ctx.margin - 0.0005
+	var shaded: float = 0.0
+	if tile and clear and cover <= MAX_COVER:
+		var b0 := Basis(Vector3.UP, deg_to_rad(UnitView._degrees_for_facing(0)))
+		for grid: PackedByteArray in ctx.shade:
+			var n: int = 0
+			for v in pts:
+				var w: Vector3 = b0 * (basis * v + Vector3(row.x, 0.0, row.y))
+				var gx: int = floori(w.x / SHADE_RES) + SHADE_N / 2
+				var gz: int = floori(w.z / SHADE_RES) + SHADE_N / 2
+				if gx >= 0 and gz >= 0 and gx < SHADE_N and gz < SHADE_N and grid[gz * SHADE_N + gx] == 1:
+					n += 1
+			shaded = maxf(shaded, float(n) / float(pts.size()))
+	return {"pass": tile and clear and cover <= MAX_COVER and shaded <= _shade_max(), "shade": snappedf(shaded, 0.01), "tile": tile, "clearance": snappedf(worst, 0.001), "cover": snappedf(cover, 0.01)}
+
+
+## Тінь моделі гармати на землі при сонці карти `look`: кожен трикутник зсувається від сонця на свою
+## висоту й заливається в сітку SHADE_N × SHADE_N з кроком SHADE_RES навколо середини тайла. Напрям
+## на сонце — як у `BattleScreen._apply_forest_sun`. SHADE_MAX дозволяє підняти змінна середовища
+## SHADE_MAX (для огляду кандидатів у сильній тіні).
+func _shade_max() -> float:
+	return float(OS.get_environment("SHADE_MAX")) if OS.get_environment("SHADE_MAX") != "" else SHADE_MAX
+
+
+func _shadow_grid(v: PackedVector3Array, idx: PackedInt32Array, b0: Basis, look: BattleLook) -> PackedByteArray:
+	var sun: Vector3 = Basis.from_euler(Vector3(deg_to_rad(-look.light_pitch_deg), deg_to_rad(look.light_yaw_deg), 0.0)).z
+	var grid := PackedByteArray()
+	grid.resize(SHADE_N * SHADE_N)
+	var pts := PackedVector2Array()
+	pts.resize(v.size())
+	for i in v.size():
+		var w: Vector3 = b0 * v[i]
+		pts[i] = Vector2(w.x - sun.x / sun.y * w.y, w.z - sun.z / sun.y * w.y)
+	for t in range(0, idx.size(), 3):
+		var a: Vector2 = pts[idx[t]]
+		var b: Vector2 = pts[idx[t + 1]]
+		var c: Vector2 = pts[idx[t + 2]]
+		var den: float = (b.y - c.y) * (a.x - c.x) + (c.x - b.x) * (a.y - c.y)
+		if absf(den) < 1e-12:
+			continue
+		var x0: int = maxi(floori(minf(a.x, minf(b.x, c.x)) / SHADE_RES) + SHADE_N / 2, 0)
+		var x1: int = mini(floori(maxf(a.x, maxf(b.x, c.x)) / SHADE_RES) + SHADE_N / 2, SHADE_N - 1)
+		var z0: int = maxi(floori(minf(a.y, minf(b.y, c.y)) / SHADE_RES) + SHADE_N / 2, 0)
+		var z1: int = mini(floori(maxf(a.y, maxf(b.y, c.y)) / SHADE_RES) + SHADE_N / 2, SHADE_N - 1)
+		for gz in range(z0, z1 + 1):
+			for gx in range(x0, x1 + 1):
+				var px: float = (float(gx - SHADE_N / 2) + 0.5) * SHADE_RES
+				var pz: float = (float(gz - SHADE_N / 2) + 0.5) * SHADE_RES
+				var wa: float = ((b.y - c.y) * (px - c.x) + (c.x - b.x) * (pz - c.y)) / den
+				var wb: float = ((c.y - a.y) * (px - c.x) + (a.x - c.x) * (pz - c.y)) / den
+				if wa >= 0.0 and wb >= 0.0 and wa + wb <= 1.0:
+					grid[gz * SHADE_N + gx] = 1
+	if OS.get_environment("SHADE_DEBUG") != "":
+		print("SHADE sun %s filled %d of %d" % [sun, grid.count(1), grid.size()])
+	return grid
 
 
 func _rail_inner_face(name: String) -> float:
@@ -165,7 +240,8 @@ func _rail_inner_face(name: String) -> float:
 	return inner if inner < INF else curb
 
 
-## Перетин трикутника (проєкція на XZ) з опуклим чотирикутником: розділова вісь серед нормалей сторін обох.
+## Перетин трикутника (проєкція на XZ) з опуклим чотирикутником: розділова вісь серед нормалей
+## сторін обох.
 func _tri_overlaps_rect(tri: Array, rect: Array[Vector2]) -> bool:
 	var t: Array[Vector2] = [Vector2(tri[0].x, tri[0].z), Vector2(tri[1].x, tri[1].z), Vector2(tri[2].x, tri[2].z)]
 	var axes: Array[Vector2] = []

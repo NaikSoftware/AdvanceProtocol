@@ -303,9 +303,9 @@ func _lineup(screen: BattleScreen, map: MapData, out: String, tag: String) -> vo
 	get_tree().quit()
 
 
-## Шостий аргумент guns_bridge: польова гармата й гаубиця на двох клітинках мосту, напрям — SHOT_FACING. На мосту
-## гармати стоять у похідному положенні: станини зведені, розрахунок — перед лафетом. SHOT_SET=N — гармати
-## гравця з набором N (без неї набори 0 і 1).
+## Шостий аргумент guns_bridge: польова гармата й гаубиця на двох клітинках мосту, напрям —
+## SHOT_FACING. На мосту гармати стоять у похідному положенні: станини зведені, розрахунок — перед
+## лафетом. SHOT_SET=N — гармати гравця з набором N (без неї набори 0 і 1).
 func _guns_bridge(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
 	var m: MapData = map.duplicate(true)
 	m.take_over_path(map.resource_path)
@@ -317,7 +317,8 @@ func _guns_bridge(screen: BattleScreen, map: MapData, out: String, tag: String) 
 				bridge.append(Vector2i(x, y))
 	bridge.sort_custom(func(p: Vector2i, q: Vector2i) -> bool: return (p - c).length_squared() < (q - c).length_squared())
 	var f0: int = int(OS.get_environment("SHOT_FACING"))
-	# SHOT_SET=N — обидві гармати гравця з набором N (гравець 0 бачить їх, бо ґрунт під ними розвіданий)
+	# SHOT_SET=N — обидві гармати гравця з набором N (гравець 0 бачить їх, бо ґрунт під ними
+	# розвіданий)
 	var set_id: int = int(OS.get_environment("SHOT_SET")) if OS.get_environment("SHOT_SET") != "" else -1
 	m.spawns = [
 		{"type_id": 9, "owner": maxi(set_id, 0), "pos": bridge[0], "facing": f0},
@@ -346,9 +347,10 @@ func _guns_bridge(screen: BattleScreen, map: MapData, out: String, tag: String) 
 	get_tree().quit()
 
 
-## Шостий аргумент guns_dead: польова гармата й гаубиця гравця з набором SHOT_SET (1 чи 2) на полі, напрям —
-## SHOT_FACING. По одному танку гравця 0 добиває кожну справжнім пострілом (у гармат лишається 1 HP): уламок і
-## тіла розрахунку лягають, як у грі. Кадри `<tag>_z<зум>.png` з тілами й `<tag>_nobodies_z<зум>.png` без них.
+## Шостий аргумент guns_dead: польова гармата й гаубиця гравця з набором SHOT_SET (1 чи 2) на полі,
+## напрям — SHOT_FACING. По одному танку гравця 0 добиває кожну справжнім пострілом (у гармат
+## лишається 1 HP): уламок і тіла розрахунку лягають, як у грі. Кадри `<tag>_z<зум>.png` з тілами й
+## `<tag>_nobodies_z<зум>.png` без них.
 func _guns_dead(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
 	var m: MapData = map.duplicate(true)
 	m.take_over_path(map.resource_path)
@@ -380,7 +382,8 @@ func _guns_dead(screen: BattleScreen, map: MapData, out: String, tag: String) ->
 	for i in 2:
 		guns[i].hp = 1
 		print("UNIT guns_dead fire %d: '%s'" % [i, MatchService.submit(FireCommand.create(tanks[i].id, guns[i].id))])
-		# другий постріл — після того, як вигляд дограв події першого: інакше його уламок не з'являється
+		# другий постріл — після того, як вигляд дограв події першого: інакше його уламок не
+		# з'являється
 		var t1: int = Time.get_ticks_msec()
 		while Time.get_ticks_msec() - t1 < 3000:
 			await get_tree().process_frame
@@ -545,6 +548,10 @@ func _real(screen: BattleScreen, map: MapData, out: String, tag: String, set_id:
 			screen._hp_bars.visible = false
 			for view: Node in screen.find_children("*", "UnitView", true, false):
 				(view as UnitView)._hp_label.visible = false
+		# SHOT_NOCREW — без розрахунку гармат: близнюк кадру, за різницею видно, скільки бійців стоїть
+		if OS.get_environment("SHOT_NOCREW") != "":
+			for n: Node in screen.find_children("Crew", "MeshInstance3D", true, false):
+				(n as MeshInstance3D).visible = false
 		await RenderingServer.frame_post_draw
 		get_viewport().get_texture().get_image().save_png("%s/%s_z%d.png" % [out, tag, int(z)])
 	print("UNIT real at %s" % p)
