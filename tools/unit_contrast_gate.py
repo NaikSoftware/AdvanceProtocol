@@ -137,7 +137,11 @@ def shoot(set_id, type_id, maps, out, zoom=None):
         except subprocess.TimeoutExpired:
             fails.append("%s: Godot run timed out after %d s" % (mp, GODOT_TIMEOUT))
             continue
-        announced = re.findall(r"UNIT gate (\S+) cell", r.stdout)
+        announced = list(dict.fromkeys(re.findall(r"UNIT gate (\S+) cell", r.stdout)))
+        # A place the squad was hidden at (under 30 mask px: a pole, a crown) is shot again on the next cell of its kind: say so.
+        for name, cell, px in re.findall(r"UNIT gate (\S+) cell (\(.*?\)) hidden \((\d+) px\)", r.stdout):
+            final = [c for n, c in re.findall(r"UNIT gate (\S+) cell (\([^)]*\))\s*$", r.stdout, re.M) if n == name]
+            print("%s: place %s: cell %s hidden (%s px) -> cell %s" % (mp, name, cell, px, final[-1] if final else "?"))
         for line in re.findall(r"UNIT gate model .*", r.stdout):
             print("%s: %s" % (mp, line))  # which model was measured: its triangles and drone tubes
         if r.returncode != 0 or "UNIT gate zoom" not in r.stdout:

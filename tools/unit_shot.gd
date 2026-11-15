@@ -371,7 +371,6 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 	var c := Vector2i(map.width / 2, map.height / 2)
 	var picks: Dictionary = {}
 	var relaxed: Dictionary = {}
-	var sides: Dictionary = {}
 	var side_cands: Dictionary = {}
 	var dirs: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
 	for y in range(4, map.height - 4):
@@ -458,17 +457,27 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 		for i in chosen.size():
 			cells.append(["field%d%s" % [sv, "abcd"[i]], chosen[i], spare])
 	var names: Dictionary = {Vector2i(1, 0): "forestE", Vector2i(-1, 0): "forestW", Vector2i(0, 1): "forestS", Vector2i(0, -1): "forestN"}
+	# Клітинка одна на місце: поля вже зайняли свої (і запасні), а місця біля лісу не ділять між собою ні основну, ні запасні.
+	var taken: Dictionary = {}
+	for fc: Array in cells:
+		taken[fc[1]] = true
+		for sc: Vector2i in fc[2]:
+			taken[sc] = true
 	for key: Vector3i in side_cands:
-		var near: Array = side_cands[key]
+		var near: Array = (side_cands[key] as Array).filter(func(q: Vector2i) -> bool: return not taken.has(q))
+		if near.is_empty():
+			continue
 		near.sort_custom(by_dist)
+		taken[near[0]] = true
 		var spare_sides: Array[Vector2i] = []
 		for cand: Vector2i in near.slice(1):
 			var apart: bool = (cand - near[0]).length_squared() >= 9
 			for o: Vector2i in spare_sides:
 				if (o - cand).length_squared() < 9:
 					apart = false
-			if apart and spare_sides.size() < 4:
+			if apart and spare_sides.size() < 4 and not taken.has(cand):
 				spare_sides.append(cand)
+				taken[cand] = true
 		cells.append(["%s%d" % [names[Vector2i(key.x, key.y)], key.z], near[0], spare_sides])
 	var rig: IsoCameraRig = screen.get_node("%CameraRig")
 	for f in SETTLE_FRAMES:
