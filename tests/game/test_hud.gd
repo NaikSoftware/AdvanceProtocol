@@ -885,7 +885,7 @@ func test_unit_screen_box_contains_the_projected_unit_and_its_hp_bar() -> void:
 	assert_true(box.has_point(rig.unproject(bar.global_position)), "смуга HP — частина прямокутника юніта")
 
 
-## Відділення без стоячих (останній упав, вигляд ще не прибрано): порожня сітка бійців не дає ні помилки
+## Відділення без стоячих (останній упав, вигляд ще не прибрано): порожній меш бійців не дає ні помилки
 ## рушія, ні рамки, що тягнеться до кута екрана.
 func test_unit_screen_box_skips_a_squad_with_no_one_standing() -> void:
 	var state: BattleState = _state()
@@ -898,13 +898,13 @@ func test_unit_screen_box_skips_a_squad_with_no_one_standing() -> void:
 	view.global_position = IsoCameraRig.cell_to_world(u.pos)
 	view._set_standing(0)
 	var box: Rect2 = UnitScreenBox.of(view, rig)
-	# порожня сітка бійців не додає до рамки нічого: та сама рамка, що й зі схованою сіткою
+	# порожній меш бійців не додає до рамки нічого: та сама рамка, що й зі схованим мешем
 	var hull := view.get_node("Silhouette/Hull") as Node3D
 	hull.visible = false
 	var want: Rect2 = UnitScreenBox.of(view, rig)
 	hull.visible = true
-	assert_almost_eq(box.position, want.position, Vector2(0.01, 0.01), "порожня сітка не розширює рамку")
-	assert_almost_eq(box.size, want.size, Vector2(0.01, 0.01), "порожня сітка не розширює рамку")
+	assert_almost_eq(box.position, want.position, Vector2(0.01, 0.01), "порожній меш не розширює рамку")
+	assert_almost_eq(box.size, want.size, Vector2(0.01, 0.01), "порожній меш не розширює рамку")
 	assert_true(box.encloses(UnitScreenBox.part_rect(view.get_node("HpBar"), rig)), "смуга HP — у рамці")
 	UnitSilhouettes.use_models({})
 
