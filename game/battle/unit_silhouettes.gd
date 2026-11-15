@@ -18,7 +18,7 @@ const _STRIPE_COLOR := Color("d9b23a")
 ## `crew` (лише гармати): де стоять двоє розрахунків у системі юніта — (x, z) і поворот у градусах; ноги на землі,
 ## 1,8 м, без масштабування. Вони не входять до корпусу: уламки, тінь і дуло рахуються без них.
 ## `crew_travel` (лише гармати): те саме для похідного положення (станини зведені, на мосту): перед лафетом, збоку від
-## ствола, на 0,3 м від моделі й між поручнями; позаду зведені станини лишають занадто мало.
+## ствола, на 0,3 м від моделі. Між поручнями — лише поперек настилу: вздовж нього тайл не обмежений поручнями.
 ## `body_spots` (лише гармати): місця тіл розрахунку, коли гармату знищено, у системі гармати — (x, z) і курс у градусах;
 ## `body_legal` — для кожного з восьми напрямів гармати маска тих, що дозволені: поза уламком, яким його малюють, у тайлі
 ## й на виду з камери. Маску складає tools/crew_body_table.gd; тест порівнює її з перерахунком.
@@ -80,6 +80,7 @@ const MODEL_SLUGS: Array[String] = [
 	"tank_destroyer", "light_tank", "heavy_tank", "field_gun", "howitzer", "engineer_vehicle",
 ]
 const _MODEL_SHADER: Shader = preload("res://game/battle/shaders/unit_model.gdshader")
+const _FALLEN_SHADER: Shader = preload("res://game/battle/shaders/unit_fallen.gdshader")
 ## Сітка моделі за (набір, тип) у системі юніта (null — файлу нема); у відділення — одна фігура.
 static var _models: Dictionary = {}
 ## Тести підставляють сітки самі: тоді типи поза словником — без моделі, диск не читається.
@@ -573,6 +574,7 @@ static func fallen_material(set_id: int) -> Material:
 	if not _fallen_materials.has(key):
 		if body_mesh(set_id) != null and has_model(PLAIN_FIGURE, set_id):
 			var m := model_material(PLAIN_FIGURE, set_id).duplicate() as ShaderMaterial
+			m.shader = _FALLEN_SHADER
 			m.set_shader_parameter("fallen", true)
 			# Мокра від багна тканина не блищить: з відблиском бійця тіло під сонцем сіріло.
 			m.set_shader_parameter("specular", FALLEN_SPECULAR)

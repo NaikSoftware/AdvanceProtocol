@@ -953,8 +953,7 @@ static func _crew_pair(b: Casualties.Body, board: Board, earlier: Array) -> Dict
 	if board != null and board.kind_at(b.pos) == Terrain.Kind.BRIDGE:
 		deck = 1 if (_is_water(board, b.pos + Vector2i(1, 0)) or _is_water(board, b.pos + Vector2i(-1, 0))) else 0
 	var th: TerrainHeight = TerrainHeight.active
-	var key: Array = [b.unit_id, b.seq, b.pos, b.facing, b.type_id, set_id, dirs, deck, th.get_instance_id() if th != null else 0,
-			WeatherRig.sun_ground, WeatherRig.sun_shadow_per_height]
+	var key: Array = [b.unit_id, b.seq, b.pos, b.facing, b.type_id, set_id, dirs, deck, th.get_instance_id() if th != null else 0]
 	for e: Casualties.Body in earlier:
 		key.append_array([e.unit_id, e.seq])
 	if _crew_cache.has(key):
@@ -999,7 +998,7 @@ static func _crew_pair(b: Casualties.Body, board: Board, earlier: Array) -> Dict
 		var mid2 := Vector2(mid.x, mid.z)
 		var long := Vector2(xf.basis.z.x, xf.basis.z.z).normalized()
 		var wide := Vector2(-long.y, long.x)
-		var fits: bool = not in_cast_shadow(mid2, maxf(float(row.hull.x), float(row.hull.z)) * CAST_SHADOW_WIDTH, float(row.hull.y))
+		var fits: bool = true
 		for sl: float in [-1.0, 1.0]:
 			for sw: float in [-1.0, 1.0]:
 				var corner: Vector2 = mid2 + long * (BODY_LENGTH * 0.5 * sl) + wide * (BODY_WIDTH * 0.5 * sw)
@@ -1035,22 +1034,6 @@ static func _crew_pair(b: Casualties.Body, board: Board, earlier: Array) -> Dict
 		placed[b.first + placed.size()] = xf
 	_crew_cache[key] = placed
 	return placed
-
-
-## Чи лежить тіло в кинутій тіні уламка: смуга від його середини вздовж `sun_ground` завдовжки з тінь його висоти,
-## завширшки з уламок. Карта тіней тіло там не затіняє (шар тіл лежить впритул до землі, а тінь тонка), тож
-## тіло світилось би на темній смузі; на похмурій карті напряму світла нема, і смуги теж.
-static func in_cast_shadow(mid: Vector2, width: float, height: float) -> bool:
-	if WeatherRig.sun_ground == Vector2.ZERO:
-		return false
-	var len: float = height * WeatherRig.sun_shadow_per_height + CAST_SHADOW_PAD
-	var along: float = clampf(mid.dot(WeatherRig.sun_ground), 0.0, len)
-	return mid.distance_to(WeatherRig.sun_ground * along) < width * 0.5 + CAST_SHADOW_PAD
-
-
-const CAST_SHADOW_PAD: float = 0.1
-## Ширина смуги — частка більшого з розмірів корпуса: станини й ствол кидають тінь ширшу за лафет.
-const CAST_SHADOW_WIDTH: float = 1.7
 
 
 ## Видима середина тіла: меш лежить не на півоті, а зсунута в бік гвинтівки (+x тіла) на BODY_VISIBLE_SHIFT —

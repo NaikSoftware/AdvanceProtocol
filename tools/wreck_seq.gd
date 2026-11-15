@@ -35,13 +35,23 @@ func _ready() -> void:
 	if a.size() > 8 and a[8].contains(","):
 		cell = Vector2i(int(a[8].get_slice(",", 0)), int(a[8].get_slice(",", 1)))
 	var layer: WreckLayer = screen.get("_wreck_layer")
+	# WRECK_SHADER — шейдер матеріалу тіл із файлу (порівняння старого й нового); WRECK_SQUAD_AT=x,y (або c — клітинка кадру) — відділення там
+	if OS.get_environment("WRECK_SHADER") != "":
+		var sh_old := Shader.new()
+		sh_old.code = FileAccess.get_file_as_string(OS.get_environment("WRECK_SHADER"))
+		(UnitSilhouettes.fallen_material(0) as ShaderMaterial).shader = sh_old
 	layer.set("_frame", int(float(a[6]) * WreckLayer.FLIPBOOK_FPS))
 	# Народився давно: стовп уже повний, як у перебудованих зі стану уламків.
 	var wtype: int = int(OS.get_environment("WRECK_TYPE")) if OS.get_environment("WRECK_TYPE") != "" else MEDIUM_TANK
 	var wfacing: int = int(OS.get_environment("WRECK_FACING"))
 	layer.set("_board", (screen.call("_state") as BattleState).board)
-	layer.call("_add_node", cell, wtype, float(a[3]), wfacing, WreckLayer.LONG_AGO)
+	if OS.get_environment("WRECK_NOWRECK") == "":
+		layer.call("_add_node", cell, wtype, float(a[3]), wfacing, WreckLayer.LONG_AGO)
 	layer.call("_refresh_effects")
+	# WRECK_NOSUN — без тіней від сонця (той самий кадр без тіні: пара для заміру, наскільки тіло темніє в тіні)
+	if OS.get_environment("WRECK_NOSUN") != "":
+		for l: Node in get_tree().root.find_children("*", "DirectionalLight3D", true, false):
+			(l as DirectionalLight3D).shadow_enabled = false
 	# WRECK_NOBLOB — без м'якої тіні стовпа (чи темна смуга під тілом — вона, а не тінь із карти тіней)
 	if OS.get_environment("WRECK_NOBLOB") != "":
 		(layer.get("_shadows") as MultiMeshInstance3D).visible = false
@@ -55,10 +65,14 @@ func _ready() -> void:
 	var rig: IsoCameraRig = screen.get_node("%CameraRig")
 	for f in SETTLE_FRAMES:
 		await get_tree().process_frame
-	# Тіла лягають після того, як погода виставила сонце: місця залежать від напряму тіні.
+	# Тіла лягають після того, як погода виставила світло: їхній матеріал читає глобальні параметри неба.
 	if Casualties.has_crew(wtype) and OS.get_environment("WRECK_NOBODIES") == "":
 		# розрахунок знищеної гармати лягає біля уламка
 		layer.add_body(Casualties.Body.new(1, cell, 0, wtype, wfacing, 0, Casualties.CREW_FIGURES))
+	if OS.get_environment("WRECK_SQUAD_AT") != "":
+		var sq: PackedStringArray = OS.get_environment("WRECK_SQUAD_AT").split(",")
+		var sq_cell: Vector2i = cell if sq[0] == "c" else Vector2i(int(sq[0]), int(sq[1]))
+		layer.add_body(Casualties.Body.new(2, sq_cell, 0, 0, 0, 1, 3))
 	if OS.get_environment("WRECK_SQUAD") != "" and OS.get_environment("WRECK_NOBODIES") == "":
 		# для порівняння тону: тіла відділення на сусідньому тайлі, без вогню поруч
 		layer.add_body(Casualties.Body.new(2, cell + Vector2i(2, 0), 0, 0, 0, 1, 3))

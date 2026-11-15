@@ -1,8 +1,10 @@
 extends SceneTree
 ## Складає таблицю дозволених місць тіл розрахунку гармати (див. crew_body_legal.gd).
-##   $GODOT --headless --path . -s tools/crew_body_table.gd -- table      # body_legal для рядків 9 і 10
+##   $GODOT --headless --path . -s tools/crew_body_table.gd -- table      # перезаписує body_legal рядків 9 і 10 у _SPECS
 ##   $GODOT --headless --path . -s tools/crew_body_table.gd -- scan 9     # сітка кандидатів: скільки напрямів дозволяє
-## `table` друкує масиви для `_SPECS`; `scan` допомагає вибрати `body_spots`.
+## `table` — єдина команда, що оновлює таблицю (її ж називає тест `test_the_stored_crew_body_table_is_current`):
+## друкує маски й підставляє їх у `game/battle/unit_silhouettes.gd`. `scan` допомагає вибрати `body_spots`.
+const SPECS_PATH: String = "res://game/battle/unit_silhouettes.gd"
 
 const Legal := preload("res://tools/crew_body_legal.gd")
 
@@ -12,9 +14,11 @@ func _init() -> void:
 	if a.size() > 0 and a[0] == "scan":
 		_scan(int(a[1]))
 	else:
+		var source: String = FileAccess.get_file_as_string(SPECS_PATH)
 		for id: int in [9, 10]:
 			var masks: PackedInt32Array = Legal.legal_masks(id, 0)
 			print("TABLE type %d body_legal: %s" % [id, Array(masks)])
+			source = _with_masks(source, id, masks)
 			var spots: Array = UnitSilhouettes.spec(id).get("body_spots", [])
 			for facing in 8:
 				var legal: Array[int] = []
@@ -22,7 +26,21 @@ func _init() -> void:
 					if masks[facing] & (1 << i) != 0:
 						legal.append(i)
 				print("  facing %d legal %s" % [facing, legal])
+		var out := FileAccess.open(SPECS_PATH, FileAccess.WRITE)
+		out.store_string(source)
+		out.close()
 	quit()
+
+
+## Рядок `_SPECS` типу `id` (закінчується коментарем `# <id> `) з новим масивом `body_legal`.
+static func _with_masks(source: String, id: int, masks: PackedInt32Array) -> String:
+	var lines: PackedStringArray = source.split("\n")
+	for i in lines.size():
+		if lines[i].contains("\"body_legal\": [") and lines[i].contains("},  # %d " % id):
+			var from: int = lines[i].find("\"body_legal\": [")
+			var to: int = lines[i].find("]", from)
+			lines[i] = lines[i].substr(0, from) + "\"body_legal\": " + str(Array(masks)) + lines[i].substr(to + 1)
+	return "\n".join(lines)
 
 
 func _scan(id: int) -> void:

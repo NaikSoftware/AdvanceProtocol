@@ -64,8 +64,6 @@ static var _drops_cache: Dictionary = {}
 static var unit_contact: float = 0.0
 ## Напрям, куди сонце кладе тінь на землі (одиничний XZ): тінь-контакт юніта зсувається туди, як пляма props.
 static var sun_ground: Vector2 = Vector2.ZERO
-## Довжина тіні на землі з одиниці висоти: кидана тінь уламка лягає на `sun_ground` на стільки, скільки в нього висоти.
-static var sun_shadow_per_height: float = 0.0
 
 
 func _init() -> void:
@@ -142,7 +140,6 @@ func apply(look: BattleLook) -> void:
 	unit_contact = look.unit_contact_shadow
 	# Похмура карта (sky_clear 0) має розсіяне світло без напряму: зсуву плями немає.
 	sun_ground = Vector2(-sun.basis.z.x, -sun.basis.z.z).normalized() if look.sky_clear >= 0.5 else Vector2.ZERO
-	sun_shadow_per_height = Vector2(sun.basis.z.x, sun.basis.z.z).length() / maxf(sun.basis.z.y, 0.05) if sun_ground != Vector2.ZERO else 0.0
 	# Світло падає вздовж -Z сонця, тож напрям НА сонце — його +Z.
 	_set_global(&"sun_dir", sun.basis.z)
 	_set_global(&"haze_color", _rgb(look.haze_color))

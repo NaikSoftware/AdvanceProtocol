@@ -781,7 +781,7 @@ func test_the_stored_crew_body_table_is_current() -> void:
 		var row: Dictionary = UnitSilhouettes.spec(id)
 		assert_gte((row.body_spots as Array).size(), 8, "місць у рядку типу %d" % id)
 		var fresh: PackedInt32Array = CrewLegal.legal_masks(id, 0)
-		assert_eq(Array(fresh), row.body_legal, "таблиця типу %d: tools/crew_body_table.gd -- table" % id)
+		assert_eq(Array(fresh), row.body_legal, "таблиця типу %d застаріла: tools/godot_run.sh --headless --path . -s tools/crew_body_table.gd -- table (перезапише body_legal у _SPECS), і закомітити" % id)
 
 
 ## Кожне дозволене місце — поза уламком, яким його малює `build_wreck` (справжній нахил у різних тайлах), на тайлі й на
@@ -994,32 +994,3 @@ func test_add_body_after_a_demolition_agrees_with_a_fresh_layer() -> void:
 	add_child_autofree(fresh)
 	fresh.rebuild_fallen(state, 0)
 	assert_eq(layer.body_transforms(), fresh.body_transforms(), "add_body без перебудови: ті самі місця, що й у свіжому розрахунку")
-
-
-## Кидана тінь уламка: тіла розрахунку не лягають на смугу від уламка вздовж `sun_ground`, на похмурій карті смуги нема.
-func test_crew_bodies_avoid_the_cast_shadow_of_the_wreck() -> void:
-	UnitSilhouettes.reset_models()
-	var board := Board.create(8, 8, Terrain.GroundState.DRY)
-	var saved: Vector2 = WeatherRig.sun_ground
-	var saved_len: float = WeatherRig.sun_shadow_per_height
-	WeatherRig.sun_ground = Vector2(-0.707107, 0.707107)
-	WeatherRig.sun_shadow_per_height = 1.48
-	var row: Dictionary = UnitSilhouettes.spec(9)
-	var width: float = maxf(float(row.hull.x), float(row.hull.z)) * WreckLayer.CAST_SHADOW_WIDTH
-	var laid: int = 0
-	for unit_id in [3, 7, 11, 19]:
-		for facing in 8:
-			WreckLayer.clear_deck_cache()
-			var b := Casualties.Body.new(unit_id, Vector2i(3, 3), 0, 9, facing, 0, Casualties.CREW_FIGURES)
-			for slot in Casualties.CREW_FIGURES:
-				var xf: Transform3D = WreckLayer.body_transform(b, slot, board, [])
-				if WreckLayer.body_is_laid(xf):
-					laid += 1
-					var mid: Vector3 = WreckLayer.body_centre(xf) - IsoCameraRig.cell_to_world(b.pos)
-					assert_false(WreckLayer.in_cast_shadow(Vector2(mid.x, mid.z), width, float(row.hull.y)), "тіло поза тінню, напрям %d" % facing)
-	assert_gt(laid, 40, "тіла на сонячній карті лягають")
-	WeatherRig.sun_ground = Vector2.ZERO
-	assert_false(WreckLayer.in_cast_shadow(Vector2(0.1, 0.1), width, 0.28), "похмура карта — без смуги")
-	WeatherRig.sun_ground = saved
-	WeatherRig.sun_shadow_per_height = saved_len
-	WreckLayer.clear_deck_cache()

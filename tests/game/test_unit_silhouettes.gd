@@ -490,7 +490,11 @@ func test_the_second_crew_figure_is_the_crouch_mesh_when_the_set_has_one() -> vo
 
 
 ## Поручні мостів переправи: найближча до осі настилу грань вище за настил (вісь x, міст іде вздовж z); висота настилу — з PropLayer.
-const _BRIDGE_DECK_TOPS: Dictionary = {"west": 0.30, "centre": 0.30, "east": 0.21}
+const _BRIDGES: Array[String] = ["west", "centre", "east"]
+
+
+func _deck_top(name: String) -> float:
+	return float(PropLayer.spec_of(StringName("bridge_river_" + name))["deck_top"])
 
 
 func _rail_inner_face(name: String) -> float:
@@ -507,9 +511,9 @@ func _rail_inner_face(name: String) -> float:
 			for s in m.get_surface_count():
 				for v: Vector3 in (m.surface_get_arrays(s)[Mesh.ARRAY_VERTEX] as PackedVector3Array):
 					var p: Vector3 = xf * v
-					if p.y > float(_BRIDGE_DECK_TOPS[name]) + 0.03 and absf(p.x) > 0.05:
+					if p.y > _deck_top(name) + 0.03 and absf(p.x) > 0.05:
 						inner = minf(inner, absf(p.x))
-					if p.y > float(_BRIDGE_DECK_TOPS[name]) + 0.005 and absf(p.x) > 0.05:
+					if p.y > _deck_top(name) + 0.005 and absf(p.x) > 0.05:
 						curb = minf(curb, absf(p.x))
 		for c in n.get_children():
 			stack.append([c, xf])
@@ -523,7 +527,7 @@ func _rail_inner_face(name: String) -> float:
 func test_travel_pose_gun_and_crew_fit_between_the_rails_of_every_bridge() -> void:
 	UnitSilhouettes.reset_models()
 	var margin: float = 0.0375
-	for name: String in _BRIDGE_DECK_TOPS:
+	for name: String in _BRIDGES:
 		var inner: float = _rail_inner_face(name)
 		assert_lt(inner, 0.5, "передумова: поручні міста «%s» знайдено" % name)
 		for id: int in [9, 10]:

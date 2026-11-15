@@ -898,7 +898,7 @@ func contact_slots() -> int:
 
 ## Стопи розрахунку гармати в системі силуету (їх повертає разом із гарматою сам силует); у решти юнітів їх нема.
 func _crew_feet() -> Array[Vector3]:
-	return UnitSilhouettes.crew_feet(_type_id, _set_id(), _travel_pose and UnitSilhouettes.travel_mesh(_type_id, _set_id()) != null)
+	return UnitSilhouettes.crew_feet(_type_id, _set_id(), _travel_pose)
 
 
 ## Сила плями слота `i`: квад під гарматою — як у техніки, під розрахунком — як під бійцем відділення.
