@@ -141,10 +141,10 @@ occupancies and conflating them is a bug in either direction:
 
 - **Planning** — the zones, the path, and whether a destination is reachable at all — uses the full
   terrain, which is public (§3.5), the player's own units, enemy **units** standing on ground the
-  player has scouted (`seen`, §3.5), the enemy mines the player already knows of, which are
-  obstacles (§3.11), for a vehicle the wrecks on scouted ground (§3.14), and the broken forest
-  the player knows of. Ground that looks empty is planned through. Terrain never surprises a
-  move; only an enemy or its wreck can.
+  player has scouted (`seen`, §3.5), the mines the player knows of — their own and the enemy mines
+  found so far — which are obstacles (§3.11), for a vehicle the wrecks on scouted ground (§3.14),
+  and the broken forest the player knows of. Ground that looks empty is planned through. Terrain
+  never surprises a move; only an enemy or its wreck can.
 - **Walking** uses the truth. Before entering each tile the mover checks what is really there; if
   a unit it could not see is standing in the way, a vehicle meets a wreck on ground its side had
   not scouted, or an engineer has just found a mine there, the move **stops on the tile before
@@ -219,8 +219,11 @@ any number**. This is a deliberate call: in a hot-seat game with hidden informat
 silently shrinks your vision radius feels like cheating when you cannot see it. Atmosphere gets
 the whole visual budget and none of the rules budget.
 
-**Ground state is a rule, and it is explicit.** Each map has `ground_state ∈ {dry, mud, frozen}`,
-shown as a labelled icon in the HUD at all times. It offsets off-road terrain penalty:
+**Ground state is a rule, and it lives in the numbers.** Each map has
+`ground_state ∈ {dry, mud, frozen}`, fixed for the whole match. No label or icon shows it anywhere
+in the UI — not on the battle HUD, the handover gate or the pause menu — because every movement zone
+and move preview already includes it; naming it on screen adds reading and no decision. It offsets
+off-road terrain penalty:
 
 | state | off-road penalty | notes |
 | --- | --- | --- |

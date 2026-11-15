@@ -155,14 +155,20 @@ func boot(width: int, height: int, spawns: Array, opts: Dictionary = {}) -> void
 		var st: BattleState = service.state
 		st.refresh_vision(st.active_player)
 		Mines.reveal_near(st, st.active_player)
+		# І знімки повтору — заново, як у begin(): інакше повторний прогін розійдеться з правленим станом.
+		for p in st.player_count:
+			if p != st.active_player:
+				service.replay_log.mark(p, st)
 		screen._rebuild_units_for_active_player()
 	ignore_runner_gui([screen])
 	await settle()
 
 
-## Твіни камери й подій гасимо вручну, доки програвач не скаже, що закінчив.
+## Твіни камери й подій гасимо вручну, доки програвач не скаже, що закінчив, а повтор ходів
+## противників після гейта не дограє: між його тактами програвач вільний, а дошка ще чужа.
 func settle() -> void:
-	await wait_until(func() -> bool: return not screen._event_player.is_playing(), "програвання подій")
+	await wait_until(func() -> bool: return not screen._event_player.is_playing() and screen._replay_state == null,
+		"програвання подій")
 
 
 func hud() -> Hud:
@@ -223,7 +229,10 @@ func _mouse_button(p: Vector2, pressed: bool) -> void:
 
 
 func confirm() -> void:
-	press(hud().get_node("%ConfirmButton"))
+	# Підтвердження оживає, щойно плита прев'ю запеклася (сектор до кроку, §3.4).
+	var button: Button = hud().get_node("%ConfirmButton")
+	await wait_until(func() -> bool: return not button.disabled, "плита прев'ю запеклася")
+	press(button)
 	await settle()
 
 
@@ -233,6 +242,8 @@ func end_turn() -> void:
 
 
 func confirm_gate() -> void:
+	# «Готово» ігнорує ввід до кінця вхідного твіну гейта; докручуємо його, не чекаючи реального часу.
+	gate().entrance_tween.custom_step(HandoverGate.ENTRANCE_S + 0.01)
 	press(gate().get_node("%ConfirmButton"))
 	await settle()
 

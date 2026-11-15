@@ -110,7 +110,7 @@ func test_release_after_long_press_is_not_a_tap() -> void:
 	_e2e.release(Vector2i(5, 0))
 	await _e2e.settle()
 	assert_eq(car.facing, facing, "довгий натиск не повертає")
-	assert_true(_e2e.hud().get_node("%SelectionRow").is_visible_in_tree(), "вибір лишився")
+	assert_eq(_e2e.screen.input_controller()._selected_unit, _state().unit_at(CAR_POS), "вибір лишився")
 	assert_false(_e2e.hud().get_node("%CancelButton").is_visible_in_tree(), "прев'ю руху не з'явилось")
 
 

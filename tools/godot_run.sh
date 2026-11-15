@@ -4,6 +4,12 @@
 # Виклик: tools/godot_run.sh [--solo] <аргументи godot...>
 # --solo займає обидва слоти: замір бюджету кадру без сусіда.
 GODOT_BIN="${GODOT:-$HOME/.local/bin/godot}"
+# --solo знімаємо до того, як додамо аргументи вікна, інакше він уже не перший і замок не береться.
+SOLO=0
+if [ "$1" = "--solo" ]; then
+	SOLO=1
+	shift
+fi
 # Вікна знімків — у правій третині екрана, щоб не перекривати роботу власника.
 # Позицію вікна виконує лише x11 (XWayland); нативний Wayland її ігнорує.
 case " $* " in
@@ -14,8 +20,7 @@ LOCKS="${XDG_CACHE_HOME:-$HOME/.cache}/advance-protocol"
 mkdir -p "$LOCKS" || exit 1
 L1="$LOCKS/godot-slot1.lock"
 L2="$LOCKS/godot-slot2.lock"
-if [ "$1" = "--solo" ]; then
-	shift
+if [ "$SOLO" = 1 ]; then
 	exec flock "$L1" flock "$L2" timeout -k 10 180 "$GODOT_BIN" "$@"
 fi
 while true; do

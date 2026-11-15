@@ -223,6 +223,23 @@ func test_pause_button_opens_overlay_and_resume_closes_it() -> void:
 	assert_false(pause.visible)
 
 
+func test_pause_shows_map_and_turn_from_the_match() -> void:
+	var service: Node = _service()
+	var screen: BattleScreen = _screen()
+	screen.setup(_map(), 2, 1, service)
+	var pause: Control = screen.get_node("%PauseMenu")
+
+	(screen.get_node("%Hud").get_node("%PauseButton") as Button).pressed.emit()
+
+	assert_eq((pause.get_node("%TurnValue") as Label).text, str(service.state.turn_number))
+	assert_null(pause.get_node_or_null("%GroundValue"), "ґрунт не в інтерфейсі")
+	assert_null(pause.get_node_or_null("%GroundCaption"))
+	assert_null(pause.get_node_or_null("%GroundIcon"))
+	assert_not_null((pause.get_node("%Plate") as TextureRect).texture)
+	var gate: HandoverGate = screen.get_node("%HandoverGate")
+	assert_eq((gate.get_node("%TurnValue") as Label).text, str(service.state.turn_number))
+
+
 func test_save_and_quit_writes_the_save_and_leaves_to_menu() -> void:
 	var service: Node = _service()
 	var screen: BattleScreen = _screen()
@@ -305,7 +322,6 @@ func _result_state() -> BattleState:
 	s.get_unit(2).hp = 0
 	s.get_unit(4).hp = 0
 	s.get_unit(5).hp = 0
-	s.damage_dealt = [1250, 550, 0] as Array[int]
 	s.winner = 0
 	return s
 
@@ -317,23 +333,7 @@ func test_summary_numbers_from_constructed_state() -> void:
 	assert_eq(rows[0]["losses"], 1)
 	assert_eq(rows[1]["losses"], 0)
 	assert_eq(rows[2]["losses"], 2)
-	assert_eq(rows[0]["damage"], 1250)
-	assert_eq(rows[1]["damage"], 550)
-	assert_eq(rows[2]["damage"], 0)
-
-
-func test_summary_credits_a_mine_kill_to_the_mine_owner() -> void:
-	var s: BattleState = BattleState.create(Board.create(6, 6, Terrain.GroundState.DRY), 2, 1)
-	s.add_unit(11, 0, Vector2i(0, 0), 0)                 # інженер p0
-	var victim: Unit = s.add_unit(2, 1, Vector2i(3, 3), 0)
-	victim.hp = 10
-	Mines.place(s, Vector2i(3, 3), 0)
-	Mines.step_on(s, victim)
-	assert_false(victim.is_alive())
-	var rows: Array[Dictionary] = ResultsScreen.summarize(s)
-	assert_eq(rows[0]["damage"], 10, "шкода міни — власнику міни")
-	assert_eq(rows[1]["damage"], 0)
-	assert_eq(rows[1]["losses"], 1)
+	assert_false(rows[0].has("damage"), "завданої шкоди підсумок не рахує")
 
 
 func test_results_screen_shows_winner_and_rows_for_every_player() -> void:
@@ -345,6 +345,7 @@ func test_results_screen_shows_winner_and_rows_for_every_player() -> void:
 
 	var table: GridContainer = screen.get_node("%Table")
 	assert_eq(table.columns, 4, "підпис + 3 гравці")
+	assert_eq(table.get_child_count(), 8, "два рядки: номери гравців і втрати")
 	assert_string_contains((screen.get_node("%Winner") as Label).text, "1")
 
 

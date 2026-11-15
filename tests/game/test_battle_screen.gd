@@ -43,14 +43,30 @@ func before_each() -> void:
 
 func after_each() -> void:
 	Engine.max_fps = _fps_before
+	# Повтор прискорює весь процес: тест, що впав посеред повтору, не сміє лишити прискорення решті.
+	Engine.time_scale = 1.0
 	WeatherRig.sun_ground = Vector2.ZERO
 	UnitSilhouettes.reset_models()
+
+
+## Твін входу гейта (350 мс) докручуємо вручну: «Готово» до його кінця не реагує.
+func _press_gate_confirm(gate: Control) -> void:
+	(gate as HandoverGate).entrance_tween.custom_step(HandoverGate.ENTRANCE_S + 0.01)
+	(gate.get_node("%ConfirmButton") as Button).pressed.emit()
 
 
 func _screen() -> Node3D:
 	var screen: Node3D = BattleScreenScene.instantiate()
 	add_child_autofree(screen)
 	return screen
+
+
+## Стан правлено повз команди: знімки повтору беруться заново, як на старті матчу (MatchService.begin()),
+## інакше повторний прогін розійдеться зі станом і спрацює його перевірка.
+func _rebase_replay(service: Node) -> void:
+	for p in service.state.player_count:
+		if p != service.state.active_player:
+			service.replay_log.mark(p, service.state)
 
 
 # --- R1/R9: два кроки старту, туман зі стану ------------------------------
@@ -170,8 +186,7 @@ func test_handover_rebuilds_units_and_recenters_camera_before_gate_lifts() -> vo
 		observation["gate_was_visible"] = gate.visible
 	units_container.child_entered_tree.connect(watcher)
 
-	var confirm_button: Button = gate.get_node("%ConfirmButton")
-	confirm_button.pressed.emit()
+	_press_gate_confirm(gate)
 
 	assert_true(observation["observed"], "перебудова мусить справді додати хоч один вузол юніта гравця 1")
 	assert_true(observation["gate_was_visible"],
@@ -203,7 +218,7 @@ func test_handover_batches_track_exactly_the_incoming_players_known_units() -> v
 	screen.setup(m, 2, 1, service)
 	WeatherRig.unit_contact = 0.6
 	screen.get_node("%Hud").get_node("%EndTurnButton").pressed.emit()
-	screen.get_node("%HandoverGate").get_node("%ConfirmButton").pressed.emit()
+	_press_gate_confirm(screen.get_node("%HandoverGate"))
 	var known: int = service.state.known_occupied_map(service.state.active_player).size()
 	assert_gt(known, 0, "передумова: гравець, що заходить, знає юнітів")
 	assert_eq(screen._hp_bars.count(), known, "смуги HP — рівно відомі юніти")
@@ -896,8 +911,7 @@ func test_gate_recenter_never_animates_even_across_later_frames() -> void:
 	var end_turn_button: Button = screen.get_node("%Hud").get_node("%EndTurnButton")
 	end_turn_button.pressed.emit()
 	var gate: Control = screen.get_node("%HandoverGate")
-	var confirm_button: Button = gate.get_node("%ConfirmButton")
-	confirm_button.pressed.emit()
+	_press_gate_confirm(gate)
 
 	var target: Vector3 = IsoCameraRig.cell_to_world(service.state.units_of(1)[0].pos)
 	assert_eq(camera.global_position, target, "передумова: рецентрування вже на цілі одразу після confirmed")
@@ -1031,7 +1045,7 @@ func test_move_preview_does_not_mark_anyone() -> void:
 ## юнітом і не накриває ні його, ні кнопки) тримає tests/game/test_hud.gd на
 ## ригу, яким сам і керує; тут лишається рівно те, чого немає більше ніде —
 ## факт, що сцена бою звела ріг із HUD.
-func test_inspector_follows_the_camera_because_setup_wires_it() -> void:
+func test_hud_follows_the_camera_because_setup_wires_it() -> void:
 	var service: Node = MatchServiceScript.new()
 	add_child_autofree(service)
 	var m: MapData = _map(12, 12)
@@ -1120,6 +1134,7 @@ func test_handover_redraws_wrecks_from_the_incoming_players_seen() -> void:
 	assert_ne(p1_only, Vector2i(-1, -1), "передумова: є тайл, розвіданий лише гравцем 1")
 	state.wrecks.append(Wrecks.Wreck.new(p0_only, 5, 0, state.turn_clock() + 100))
 	state.wrecks.append(Wrecks.Wreck.new(p1_only, 5, 0, state.turn_clock() + 100))
+	_rebase_replay(service)
 	var layer: WreckLayer = screen.get_node("%WreckLayer")
 	screen._rebuild_wrecks()
 	assert_not_null(layer.wreck_at(p0_only), "передумова: гравець 0 бачить свої уламки")
@@ -1131,7 +1146,7 @@ func test_handover_redraws_wrecks_from_the_incoming_players_seen() -> void:
 	assert_null(layer.wreck_at(p1_only), "за гейтом ще світ гравця 0 — розвідане гравця 1 не малюється")
 	assert_not_null(layer.wreck_at(p0_only))
 
-	gate.get_node("%ConfirmButton").pressed.emit()
+	_press_gate_confirm(gate)
 	assert_eq(layer.wreck_count(), 1)
 	assert_not_null(layer.wreck_at(p1_only))
 	assert_null(layer.wreck_at(p0_only), "уламки над нерозвіданим гравцем 1 — донос про чужий бій")
@@ -1171,7 +1186,7 @@ func test_resume_draws_wrecks_already_in_state_only_on_seen_ground() -> void:
 	var screen: Node3D = _screen()
 	screen.resume(service)
 	var gate: Control = screen.get_node("%HandoverGate")
-	gate.get_node("%ConfirmButton").pressed.emit()
+	_press_gate_confirm(gate)
 	var layer: WreckLayer = screen.get_node("%WreckLayer")
 	assert_eq(layer.wreck_count(), 1)
 	assert_not_null(layer.wreck_at(_first_tile(state, 0, 1)))
@@ -1284,7 +1299,7 @@ func test_resume_warms_up_fx_on_the_first_gate_confirm() -> void:
 	screen.resume(service)
 	var units: Node3D = screen.get_node("%Units")
 	assert_eq(units.find_children("Explosion*", "", false, false).size(), 0, "за гейтом камера ще ніде")
-	screen.get_node("%HandoverGate").get_node("%ConfirmButton").pressed.emit()
+	_press_gate_confirm(screen.get_node("%HandoverGate"))
 	assert_eq(units.find_children("Explosion*", "", false, false).size(), 1)
 	assert_true((screen.get_node("%WreckLayer") as WreckLayer).is_warming())
 	_finish_all_processed_tweens()
@@ -1338,7 +1353,7 @@ func _assert_confirmed_mid_warm_up(pair: Array) -> void:
 	await wait_frames(3)
 	assert_true(gate.visible, "об'їзд іде під гейтом")
 	assert_eq(_unit_view_nodes(screen), 0, "юнітів під гейтом ще нема")
-	gate.get_node("%ConfirmButton").pressed.emit()
+	_press_gate_confirm(gate)
 	await wait_frames(WARM_FRAMES)
 	assert_false(gate.visible)
 	assert_true(_camera_at_first_unit(screen, service), "камера на першому юніті гравця")
@@ -1407,7 +1422,7 @@ func test_confirm_after_a_finished_warm_up_builds_the_units_once() -> void:
 	var pair: Array = _launched_with_warm_up()
 	var screen: Node3D = pair[0]
 	await wait_frames(WARM_FRAMES)
-	screen.get_node("%HandoverGate").get_node("%ConfirmButton").pressed.emit()
+	_press_gate_confirm(screen.get_node("%HandoverGate"))
 	assert_true(_camera_at_first_unit(screen, pair[1]))
 	assert_eq(_unit_view_nodes(screen), screen._unit_views.size())
 	assert_gt(screen._unit_views.size(), 0)
@@ -1451,7 +1466,7 @@ func test_handover_draws_roof_fade_of_the_incoming_player_at_once() -> void:
 	var props: PropLayer = (screen.get_node("%BoardView") as BoardView).props()
 	var gate: Control = screen.get_node("%HandoverGate")
 	(screen.get_node("%Hud").get_node("%EndTurnButton") as Button).pressed.emit()
-	(gate.get_node("%ConfirmButton") as Button).pressed.emit()
+	_press_gate_confirm(gate)
 	var faded: Array = props._fade_target.keys().filter(func(i: int) -> bool: return props._fade_target[i] == 1.0)
 	assert_false(faded.is_empty(), "передумова: дах над юнітом гравця 1")
 	for i: int in faded:
@@ -1459,7 +1474,7 @@ func test_handover_draws_roof_fade_of_the_incoming_player_at_once() -> void:
 		assert_true((props._fade_nodes[props._instances[i]["model"]] as MultiMeshInstance3D).visible)
 	assert_false(props.is_processing())
 	(screen.get_node("%Hud").get_node("%EndTurnButton") as Button).pressed.emit()
-	(gate.get_node("%ConfirmButton") as Button).pressed.emit()
+	_press_gate_confirm(gate)
 	for i: int in faded:
 		assert_eq(float(props._fade_level.get(i, 0.0)), 0.0, "у гравця 0 дах суцільний одразу")
 	assert_false(props.is_processing())
@@ -1483,8 +1498,9 @@ func test_handover_forest_shows_only_what_incoming_player_knows() -> void:
 	screen.setup(m, 2, 1, service)
 	var state: BattleState = service.state
 	state.broken_forest = {Vector2i(1, 1): true, Vector2i(2, 1): true, Vector2i(8, 8): true}
+	_rebase_replay(service)
 	(screen.get_node("%Hud").get_node("%EndTurnButton") as Button).pressed.emit()
-	(screen.get_node("%HandoverGate").get_node("%ConfirmButton") as Button).pressed.emit()
+	_press_gate_confirm(screen.get_node("%HandoverGate"))
 	assert_eq(state.active_player, 1, "передумова: хід гравця 1")
 	var forest: ForestLayer = (screen.get_node("%BoardView") as BoardView).forest()
 	var known: Dictionary = state.known_broken_map(1)
@@ -1511,3 +1527,682 @@ func test_wreck_left_draws_the_wreck_in_its_owners_set() -> void:
 	var layer: WreckLayer = screen.get_node("%WreckLayer")
 	assert_eq(layer.flame_size(pos), Vector2(WreckLayer.flame_width(5, 1), WreckLayer.flame_height(5, 1)))
 	assert_ne(WreckLayer.flame_width(5, 1), WreckLayer.flame_width(5, 0), "передумова: набори різняться")
+
+
+# --- Міни: покриття дороги доходить до шару мін ---------------------------
+
+## Карта з ґрунтівкою в (2, 2): вид клітинки ROAD, підтип DIRT.
+func _dirt_road_map() -> MapData:
+	var m: MapData = _map()
+	m.spawns = [
+		{"type_id": 5, "owner": 0, "pos": Vector2i(0, 0), "facing": 0},
+		{"type_id": 5, "owner": 1, "pos": Vector2i(5, 5), "facing": 0},
+	] as Array[Dictionary]
+	m.tiles[2 * m.width + 2] = Terrain.Kind.ROAD
+	var surf := PackedByteArray()
+	surf.resize(m.width * m.height)
+	surf[2 * m.width + 2] = MapData.RoadSurface.DIRT
+	m.surface = surf
+	return m
+
+
+func test_setup_gives_the_mine_layer_the_drawn_road_surface() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var m: MapData = _dirt_road_map()
+	var screen: Node3D = _screen()
+	screen.setup(m, 2, 1, service)
+	Mines.place(service.state, Vector2i(2, 2), 0)
+	screen._rebuild_units_for_active_player(true)
+	var layer: MineLayer = screen.get_node("%MineLayer")
+	assert_eq(layer.surface, m.surface)
+	assert_true(layer.get_node("Mines_0").has_node("Mine_2_2"), "ґрунтівка — ґрунтова модель, не асфальтова")
+
+
+## «Продовжити»: підтипи живуть у карті, а не в збереженні, тож шар мін бере їх з карти за шляхом.
+func test_resume_gives_the_mine_layer_the_drawn_road_surface() -> void:
+	var path: String = "user://dirt_road_map.tres"
+	var m: MapData = _dirt_road_map()
+	assert_eq(ResourceSaver.save(m, path), OK)
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	service.map_path = path
+	service.start_match(m.to_board(), 2, 1)
+	m.populate(service.state)
+	service.begin()
+	Mines.place(service.state, Vector2i(2, 2), 0)
+	var screen: Node3D = _screen()
+	screen.resume(service)
+	_press_gate_confirm(screen.get_node("%HandoverGate"))
+	var layer: MineLayer = screen.get_node("%MineLayer")
+	assert_eq(layer.surface, m.surface)
+	assert_true(layer.get_node("Mines_0").has_node("Mine_2_2"))
+	DirAccess.remove_absolute(path)
+
+
+## Знищене відділення лишає стриману пляму: перебудова відновлює її для кожного загиблого відділення
+## (пляма справді намальована), маска розвіданого ховає її там, де глядач не був, а у воді, на мосту й
+## на підірваному мосту плями нема — ні на перебудові, ні наживо.
+func test_dead_squads_leave_a_masked_restrained_scorch_but_none_on_water_or_bridges() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var m: MapData = _map(20, 6)
+	m.tiles[1 * 20 + 6] = Terrain.Kind.WATER
+	m.tiles[1 * 20 + 7] = Terrain.Kind.BRIDGE
+	m.tiles[1 * 20 + 9] = Terrain.Kind.BRIDGE_DESTROYED
+	m.spawns = [
+		{"type_id": 5, "owner": 0, "pos": Vector2i(1, 1), "facing": 0},
+		{"type_id": 0, "owner": 1, "pos": Vector2i(2, 1), "facing": 0},
+		{"type_id": 0, "owner": 1, "pos": Vector2i(18, 4), "facing": 0},
+		{"type_id": 0, "owner": 1, "pos": Vector2i(4, 4), "facing": 0},
+		{"type_id": 0, "owner": 1, "pos": Vector2i(7, 1), "facing": 0},
+		{"type_id": 0, "owner": 1, "pos": Vector2i(10, 1), "facing": 0},
+	] as Array[Dictionary]
+	var screen: Node3D = _screen()
+	screen.setup(m, 2, 1, service)
+	var state: BattleState = service.state
+	var scars: ScarMap = screen._scars
+	for p: Vector2i in [Vector2i(2, 1), Vector2i(18, 4), Vector2i(4, 4), Vector2i(7, 1), Vector2i(10, 1)]:
+		state.unit_at(p).hp = 0
+	state.units.values().filter(func(u: Unit) -> bool: return u.pos == Vector2i(4, 4))[0].pos = Vector2i(6, 1)  # у воді
+	state.units.values().filter(func(u: Unit) -> bool: return u.pos == Vector2i(10, 1))[0].pos = Vector2i(9, 1)  # з мостом
+	screen._rebuild_wrecks()
+	var px := func(c: Vector2i) -> Color:
+		return scars._img.get_pixel(c.x * ScarMap.PX_PER_TILE + ScarMap.PX_PER_TILE / 2, c.y * ScarMap.PX_PER_TILE + ScarMap.PX_PER_TILE / 2)
+	assert_true(scars.has_squad_scorch(Vector2i(2, 1)))
+	assert_gt(px.call(Vector2i(2, 1)).r, 0.2, "пляма справді намальована")
+	assert_lt(px.call(Vector2i(2, 1)).r, 0.6, "і стримана — половина темряви уламків")
+	assert_true(scars.is_painted(Vector2i(2, 1)))
+	assert_eq(px.call(Vector2i(2, 1)).a, 0.0, "без цяток попелу")
+	assert_true(scars.has_squad_scorch(Vector2i(18, 4)), "пляма ставиться й на нерозвіданому —")
+	assert_false(state.vision[0].is_seen(Vector2i(18, 4)))
+	assert_eq(scars._mask.get_pixel(18, 4).r, 0.0, "— але маска розвіданого її ховає")
+	assert_eq(scars._mask.get_pixel(2, 1).r, 1.0)
+	assert_false(scars.has_squad_scorch(Vector2i(6, 1)), "у воді — ні")
+	assert_false(scars.has_squad_scorch(Vector2i(7, 1)), "на мосту — ні: під настилом русло")
+	assert_false(scars.has_squad_scorch(Vector2i(9, 1)), "на підірваному мосту — ні: загиблі в річці")
+	# Наживо — так само: загибель на мосту й уламки на ньому плям не ставлять.
+	var on_bridge := Casualties.Body.new(99, Vector2i(7, 1), 1, 0, 0, 0, 4)
+	screen._on_figures_fell(on_bridge)
+	screen._on_wreck_left(Vector2i(7, 1), 5, 0, 1)
+	screen._on_wreck_left(Vector2i(9, 1), 5, 0, 1)
+	assert_false(scars.has_squad_scorch(Vector2i(7, 1)))
+	assert_false(scars.is_painted(Vector2i(7, 1)), "уламки на мосту — без плями")
+	assert_false(scars.is_painted(Vector2i(9, 1)), "і на підірваному")
+
+
+## Бійці падають у мить влучання, але програвач не фільтрує подій за глядачем (§6): тіло на тайлі, якого
+## глядач не розвідав, на екрані не з'являється, а на розвіданому — лягає одразу.
+func test_a_falling_body_shows_only_if_the_viewer_has_been_shown_it() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var m: MapData = _map(20, 6)
+	m.spawns = [
+		{"type_id": 5, "owner": 0, "pos": Vector2i(1, 1), "facing": 0},
+		{"type_id": 0, "owner": 1, "pos": Vector2i(18, 4), "facing": 0},
+		{"type_id": 0, "owner": 1, "pos": Vector2i(2, 1), "facing": 0},
+	] as Array[Dictionary]
+	var screen: Node3D = _screen()
+	screen.setup(m, 2, 1, service)
+	var state: BattleState = service.state
+	var layer: WreckLayer = screen.get_node("%WreckLayer")
+	var far: Unit = state.unit_at(Vector2i(18, 4))
+	var near: Unit = state.unit_at(Vector2i(2, 1))
+	assert_false(state.vision[0].is_seen(far.pos), "передумова: далеке відділення на нерозвіданому")
+	far.hp = 40
+	var hidden: Casualties.Body = (Casualties.record(state, far, 100)[0] as Events.FiguresFell).body
+	screen._on_figures_fell(hidden)
+	await get_tree().create_timer(UnitView.FALL_TIP_SEC + 0.05).timeout
+	assert_eq(layer.fallen_count(), 0, "тіло на нерозвіданому — донос про бій")
+	near.hp = 40
+	var seen: Casualties.Body = (Casualties.record(state, near, 100)[0] as Events.FiguresFell).body
+	screen._on_figures_fell(seen)
+	assert_eq(layer.fallen_count(), 0, "спершу фігура перекидається")
+	await get_tree().create_timer(UnitView.FALL_TIP_SEC + 0.05).timeout
+	assert_eq(layer.fallen_count(), seen.count, "на розвіданому — лягає, щойно перекинулась")
+	assert_false(screen._scars.has_squad_scorch(near.pos), "живе відділення плями не лишає")
+	# Ніхто не лишився стояти — відділення знищене: стримана пляма на його тайлі.
+	var before: int = near.hp
+	near.hp = 0
+	screen._on_figures_fell((Casualties.record(state, near, before)[0] as Events.FiguresFell).body)
+	assert_true(screen._scars.has_squad_scorch(near.pos), "знищене відділення лишає стриману пляму")
+
+
+# --- Повтор ходів противників після гейта ------------------------------------
+
+## Доводить до кінця все, що грається: пакет подій і повтор (твіни крокуються вручну).
+func _drain(screen: Node3D) -> void:
+	for _i in 60:
+		if not screen._event_player.is_playing() and screen._replay_state == null:
+			return
+		_finish_all_processed_tweens()
+
+
+## Танк A гравця 0 виїжджає з туману на розвідане гравцем 1 і повертається в туман, танк B
+## проїжджає розвіданим; потім кінець ходу. Гейт гравця 1 стоїть. Три такти повтору:
+## A з'являється, A зникає, B їде.
+func _screen_after_enemy_turn(service: Node) -> Node3D:
+	var m: MapData = _map()
+	m.spawns = [
+		{"type_id": 5, "owner": 0, "pos": Vector2i(1, 2), "facing": 2},
+		{"type_id": 5, "owner": 0, "pos": Vector2i(3, 5), "facing": 6},
+		{"type_id": 5, "owner": 1, "pos": Vector2i(4, 4), "facing": 6},
+	] as Array[Dictionary]
+	var screen: Node3D = _screen()
+	screen.setup(m, 2, 1, service)
+	var a: Unit = service.state.unit_at(Vector2i(1, 2))
+	var b: Unit = service.state.unit_at(Vector2i(3, 5))
+	assert_false(service.state.vision[1].is_seen(a.pos), "передумова: A стартує в тумані гравця 1")
+	for c: Array in [[a, Vector2i(2, 3)], [a, Vector2i(1, 2)], [b, Vector2i(2, 5)]]:
+		assert_eq(service.submit(MoveCommand.create((c[0] as Unit).id, c[1])), "")
+		_drain(screen)
+	(screen.get_node("%Hud").get_node("%EndTurnButton") as Button).pressed.emit()
+	_drain(screen)
+	assert_true(screen.get_node("%HandoverGate").visible, "передумова: гейт гравця 1")
+	return screen
+
+
+func _confirm_gate(screen: Node3D) -> void:
+	_press_gate_confirm(screen.get_node("%HandoverGate"))
+
+
+func _overlay(screen: Node3D) -> Control:
+	return screen.get_node_or_null("%ReplayOverlay") as Control
+
+
+func test_gate_confirm_with_replay_hides_gate_only_after_camera_is_on_first_focus() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var screen: Node3D = _screen_after_enemy_turn(service)
+	var r: ReplayFilter.Result = service.replay_for(1)
+	assert_not_null(r, "передумова: гравцеві 1 є що показати")
+	if r == null:
+		return
+	var gate: Control = screen.get_node("%HandoverGate")
+	var camera: IsoCameraRig = screen.get_node("%CameraRig")
+	var a_id: int = service.state.unit_at(Vector2i(1, 2)).id
+	var b_id: int = service.state.unit_at(Vector2i(2, 5)).id
+	var seen: Dictionary = {}
+	gate.visibility_changed.connect(func() -> void:
+		seen["camera"] = camera.global_position
+		seen["replaying"] = screen._replay_state != null
+		seen["a"] = screen.unit_view_for(a_id)
+		seen["b"] = screen.unit_view_for(b_id)
+		seen["hud"] = (screen.get_node("%Hud") as Control).visible
+		seen["overlay"] = _overlay(screen) != null and _overlay(screen).visible)
+	_confirm_gate(screen)
+	assert_false(gate.visible)
+	assert_true(seen.get("replaying", false), "гейт знято вже на повторі")
+	assert_eq(seen.get("camera"), camera._clamp_to_bounds(IsoCameraRig.cell_to_world(r.beats[0].focus)),
+		"перший кадр повтору — на першій видимій дії, не на камері попереднього гравця")
+	assert_null(seen.get("a"), "A на початку відрізка в тумані: на першому кадрі його нема")
+	var b_view: UnitView = seen.get("b") as UnitView
+	assert_not_null(b_view, "B на розвіданому з початку відрізка")
+	if b_view != null:
+		assert_eq(Vector2(b_view.position.x, b_view.position.z), Vector2(3, 5), "B стоїть там, де був на початку відрізка")
+	assert_false(seen.get("hud", true), "HUD сховано до зняття гейта")
+	assert_true(seen.get("overlay", false), "оверлей повтору — до зняття гейта")
+
+
+func test_replay_ends_on_real_state_and_first_unit() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var screen: Node3D = _screen_after_enemy_turn(service)
+	_confirm_gate(screen)
+	assert_eq(Engine.time_scale, 2.5, "повтор іде прискорено")
+	_drain(screen)
+	assert_null(screen._replay_state, "повтор скінчився")
+	assert_eq(screen._viewer(), 1)
+	assert_eq(Engine.time_scale, 1.0)
+	var camera: IsoCameraRig = screen.get_node("%CameraRig")
+	assert_eq(camera.global_position, camera._clamp_to_bounds(IsoCameraRig.cell_to_world(service.state.units_of(1)[0].pos)),
+		"камера — на першому юніті гравця, як після гейта")
+	var known: Dictionary = service.state.known_occupied_map(1)
+	assert_eq(screen._unit_views.size(), known.size(), "на дошці рівно відомі гравцеві 1 юніти справжнього стану")
+	for pos: Vector2i in known:
+		var view: UnitView = screen.unit_view_for(known[pos])
+		assert_not_null(view)
+		if view != null:
+			assert_eq(Vector2(view.position.x, view.position.z), Vector2(pos), "юніт %d — на справжній клітинці" % known[pos])
+	var hud: Hud = screen.get_node("%Hud")
+	assert_true(hud.visible, "HUD повернувся")
+	assert_eq(hud._state, service.state, "HUD — на справжньому стані")
+	assert_not_null(_overlay(screen))
+	if _overlay(screen) != null:
+		assert_false(_overlay(screen).visible, "оверлей сховано")
+	assert_false(screen._event_player.is_playing())
+
+
+func test_skip_twice_ends_replay_once() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var screen: Node3D = _screen_after_enemy_turn(service)
+	_confirm_gate(screen)
+	# Перший такт уже грається: A з'явився й рушив.
+	_finish_all_processed_tweens()
+	assert_true(screen._event_player.is_playing(), "передумова: пропуск посеред такту")
+	assert_not_null(_overlay(screen))
+	if _overlay(screen) == null:
+		return
+	var skip: Button = _overlay(screen).get_node("%SkipButton")
+	var units: Node3D = screen.get_node("%Units")
+	var added: Array[int] = [0]
+	units.child_entered_tree.connect(func(n: Node) -> void:
+		if n is UnitView:
+			added[0] += 1)
+	skip.pressed.emit()
+	assert_null(screen._replay_state, "пропуск кінчає повтор")
+	assert_false(screen._event_player.is_playing(), "програвач вільний одразу, не після вбитого твіна")
+	assert_eq(Engine.time_scale, 1.0)
+	var after_first: int = added[0]
+	assert_eq(after_first, service.state.known_occupied_map(1).size(), "дошка перебудована зі справжнього стану один раз")
+	skip.pressed.emit()
+	for _i in 5:
+		_finish_all_processed_tweens()
+	assert_eq(added[0], after_first, "другий пропуск і завислі корутини нічого не перебудовують")
+	assert_null(screen._replay_state)
+	assert_eq(Engine.time_scale, 1.0, "застарілий такт не повертає прискорення")
+	# Програвач придатний: живий хід грається далі.
+	var p1: Unit = service.state.units_of(1)[0]
+	assert_eq(service.submit(MoveCommand.create(p1.id, p1.pos + Vector2i(0, 1))), "")
+	assert_true(screen._event_player.is_playing(), "новий пакет подій грається після скасування")
+	_drain(screen)
+	assert_false(screen._event_player.is_playing())
+
+
+func test_tap_during_replay_never_submits() -> void:
+	var service := SpyMatchService.new()
+	add_child_autofree(service)
+	var screen: Node3D = _screen_after_enemy_turn(service)
+	_confirm_gate(screen)
+	var submitted: int = service.submitted.size()
+	var selections: Array = []
+	screen.input_controller().selection_changed.connect(func(u: Unit) -> void: selections.append(u))
+	var cam3d: Camera3D = screen.get_node("%CameraRig").get_node("Yaw/Camera3D")
+	var p1: Unit = service.state.units_of(1)[0]
+	for cell: Vector2i in [p1.pos, p1.pos + Vector2i(0, 1)]:
+		var at: Vector2 = cam3d.unproject_position(IsoCameraRig.cell_to_world(cell))
+		screen._unhandled_input(_mb(at, true))
+		screen._unhandled_input(_mb(at, false))
+	assert_eq(service.submitted.size(), submitted, "тап на повторі не доходить до правил")
+	assert_eq(selections.size(), 0, "тап на повторі нічого не вибирає")
+	assert_eq(Engine.time_scale, 20.0, "тап прискорює поточний такт")
+	# Наступний такт знову на звичайній швидкості повтору.
+	_finish_all_processed_tweens()
+	_finish_all_processed_tweens()
+	assert_true(screen._replay_state != null, "передумова: повтор на наступному такті")
+	assert_eq(Engine.time_scale, 2.5, "прискорення тапу — лише до кінця такту")
+
+
+func test_hold_during_replay_shows_no_rings() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var screen: Node3D = _screen_after_enemy_turn(service)
+	_confirm_gate(screen)
+	var inspections: Array = []
+	screen.input_controller().inspected.connect(func(i: Dictionary) -> void: inspections.append(i))
+	var cam3d: Camera3D = screen.get_node("%CameraRig").get_node("Yaw/Camera3D")
+	# Власний танк гравця 1 стоїть у справжньому стані: поза повтором огляд тут спрацював би.
+	var at: Vector2 = cam3d.unproject_position(IsoCameraRig.cell_to_world(Vector2i(4, 4)))
+	screen._unhandled_input(_mb(at, true))
+	screen._process(BattleScreen.LONG_PRESS_SEC)
+	assert_false(screen._long_pressed, "натиск на повторі не стає довгим")
+	screen._unhandled_input(_mb(at, false))
+	assert_true(screen._replay_state != null, "передумова: повтор ще йде")
+	assert_eq(inspections.size(), 0, "довгий натиск на повторі не відкриває огляду")
+	assert_false(screen.is_processing(), "натиск на повторі не вмикає кадр")
+	assert_true(screen._threatened.is_empty() and screen._drone_threatened.is_empty())
+
+
+func test_time_scale_restored_when_screen_exits_mid_replay() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var screen: Node3D = _screen_after_enemy_turn(service)
+	_confirm_gate(screen)
+	assert_eq(Engine.time_scale, 2.5, "передумова: повтор іде")
+	remove_child(screen)
+	assert_eq(Engine.time_scale, 1.0, "екран пішов посеред повтору — прискорення знято")
+	assert_null(screen._replay_state, "і поля повтору знято разом")
+	assert_eq(screen._replay_viewer, -1)
+	for _i in 5:
+		_finish_all_processed_tweens()
+	assert_eq(Engine.time_scale, 1.0, "завислий такт не повертає прискорення")
+	screen.free()
+
+
+func test_viewer_unit_killed_in_span_dies_on_screen() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var m: MapData = _map()
+	m.spawns = [
+		{"type_id": 5, "owner": 0, "pos": Vector2i(2, 2), "facing": 2},
+		{"type_id": 2, "owner": 1, "pos": Vector2i(3, 2), "facing": 6},
+		{"type_id": 5, "owner": 1, "pos": Vector2i(5, 5), "facing": 0},
+	] as Array[Dictionary]
+	var screen: Node3D = _screen()
+	screen.setup(m, 2, 1, service)
+	var victim: Unit = service.state.unit_at(Vector2i(3, 2))
+	victim.hp = 1
+	_rebase_replay(service)
+	var tank: Unit = service.state.unit_at(Vector2i(2, 2))
+	assert_eq(service.submit(FireCommand.create(tank.id, victim.id)), "")
+	_drain(screen)
+	assert_false(victim.is_alive(), "передумова: бронеавто знищене")
+	(screen.get_node("%Hud").get_node("%EndTurnButton") as Button).pressed.emit()
+	_drain(screen)
+	_confirm_gate(screen)
+	var view: UnitView = screen.unit_view_for(victim.id)
+	assert_not_null(view, "на початку відрізка бронеавто живе")
+	if view == null:
+		return
+	assert_eq(view.hp_ratio(), 1.0 / victim.max_hp(), "HP — як на початку відрізка")
+	var died: Array[bool] = [false]
+	view.tree_exiting.connect(func() -> void: died[0] = view.destroyed)
+	_drain(screen)
+	assert_true(died[0], "бронеавто загинуло на екрані, а не зникло з перебудовою")
+	assert_null(screen.unit_view_for(victim.id))
+	assert_not_null((screen.get_node("%WreckLayer") as WreckLayer).wreck_at(Vector2i(3, 2)), "уламки на його клітинці")
+
+
+func test_appeared_creates_and_vanished_frees_a_unit_view() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var screen: Node3D = _screen_after_enemy_turn(service)
+	var r: ReplayFilter.Result = service.replay_for(1)
+	assert_not_null(r)
+	if r == null:
+		return
+	var appeared: ReplayFilter.Appeared = r.beats[0].events[0] as ReplayFilter.Appeared
+	assert_not_null(appeared, "передумова: перший такт починається появою A")
+	if appeared == null:
+		return
+	var a_id: int = appeared.unit_id
+	_confirm_gate(screen)
+	assert_null(screen.unit_view_for(a_id))
+	# Камера долетіла — такт A: поява, і рух ще не почався.
+	_finish_all_processed_tweens()
+	var view: UnitView = screen.unit_view_for(a_id)
+	assert_not_null(view, "Appeared ставить вузол")
+	if view != null:
+		assert_eq(Vector2(view.position.x, view.position.z), Vector2(appeared.pos), "вузол — на клітинці появи, не в кінці ходу")
+		assert_eq(view.hp_ratio(), 1.0)
+	var gone: bool = false
+	for _i in 30:
+		_finish_all_processed_tweens()
+		if screen.unit_view_for(a_id) == null:
+			gone = true
+			break
+	assert_true(gone, "A зник")
+	assert_true(screen._replay_state != null, "A зник посеред повтору (Vanished), а не з кінцевою перебудовою")
+
+
+## Загін, що врешті сховався в будинку, не малюється на маршруті, хоч стан після першого кроку
+## (`after`) його й бачить: малює набір фільтра, а не видимість на копії.
+func test_replay_draws_units_from_filter_sets_not_after_visibility() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var m: MapData = _map(8, 3)
+	m.tiles[1 * 8 + 5] = Terrain.Kind.BUILDING
+	m.spawns = [
+		{"type_id": 0, "owner": 0, "pos": Vector2i(3, 1), "facing": 2},
+		{"type_id": 5, "owner": 0, "pos": Vector2i(4, 0), "facing": 2},
+		{"type_id": 5, "owner": 1, "pos": Vector2i(7, 1), "facing": 6},
+	] as Array[Dictionary]
+	var screen: Node3D = _screen()
+	screen.setup(m, 2, 1, service)
+	var squad: Unit = service.state.unit_at(Vector2i(3, 1))
+	var tank: Unit = service.state.unit_at(Vector2i(4, 0))
+	# Між двома кроками загону — видимий хід танка: повтор зупиниться на такті, де копія бачить загін.
+	assert_eq(service.submit(MoveCommand.create(squad.id, Vector2i(4, 1))), "")
+	_drain(screen)
+	assert_eq(service.submit(MoveCommand.create(tank.id, Vector2i(5, 0))), "")
+	_drain(screen)
+	assert_eq(service.submit(MoveCommand.create(squad.id, Vector2i(5, 1))), "")
+	_drain(screen)
+	(screen.get_node("%Hud").get_node("%EndTurnButton") as Button).pressed.emit()
+	_drain(screen)
+	var r: ReplayFilter.Result = service.replay_for(1)
+	assert_not_null(r, "передумова: є повтор")
+	if r == null:
+		return
+	assert_true(r.beats[0].after.can_see_unit(1, r.beats[0].after.get_unit(squad.id)),
+		"передумова: після першого кроку стан бачить загін")
+	assert_false(service.state.can_see_unit(1, squad), "передумова: загін сховався в будинку")
+	_confirm_gate(screen)
+	assert_not_null(screen.unit_view_for(squad.id), "на початку відрізка загін на розвіданому")
+	assert_eq(r.beats.size(), 2, "передумова: такт зникнення загону й такт танка")
+	var watched: int = 0
+	for _i in 30:
+		_finish_all_processed_tweens()
+		if screen._replay_state == null:
+			break
+		watched += 1
+		var copy: BattleState = screen._replay_state
+		assert_true(copy.can_see_unit(1, copy.get_unit(squad.id)), "передумова: копія на цьому такті бачить загін")
+		assert_null(screen.unit_view_for(squad.id), "загін не з'являється на маршруті до будинку")
+	assert_gt(watched, 0, "повтор спинявся між тактами, і дошку посеред нього перевірено")
+	assert_null(screen.unit_view_for(squad.id), "і після повтору він схований")
+
+
+func test_no_replay_keeps_todays_gate_flow() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var screen: Node3D = _two_tanks_in_corners(service)
+	(screen.get_node("%Hud").get_node("%EndTurnButton") as Button).pressed.emit()
+	_drain(screen)
+	assert_null(service.replay_for(1), "передумова: гравцеві 1 нема чого показувати")
+	_confirm_gate(screen)
+	assert_false(screen.get_node("%HandoverGate").visible)
+	assert_null(screen._replay_state)
+	assert_eq(Engine.time_scale, 1.0)
+	assert_true((screen.get_node("%Hud") as Control).visible)
+	assert_not_null(_overlay(screen))
+	if _overlay(screen) != null:
+		assert_false(_overlay(screen).visible, "без повтору оверлея нема")
+	var camera: IsoCameraRig = screen.get_node("%CameraRig")
+	assert_eq(camera.global_position, camera._clamp_to_bounds(IsoCameraRig.cell_to_world(service.state.units_of(1)[0].pos)))
+
+
+## Міст, який непомічений інженер підірвав раніше у відрізку, лишається цілим на екрані, поки
+## грається видимий підрив іншого мосту: стан такту несе обидва, а показ — лише свій.
+func test_hidden_bridge_change_is_not_drawn_with_a_later_visible_one() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var m: MapData = _map(10, 3)
+	var hidden := Vector2i(1, 1)
+	var shown := Vector2i(7, 1)
+	for c: Vector2i in [hidden, shown]:
+		m.tiles[c.y * m.width + c.x] = Terrain.Kind.BRIDGE
+	m.spawns = [
+		{"type_id": 11, "owner": 0, "pos": Vector2i(0, 1), "facing": 2},
+		{"type_id": 11, "owner": 0, "pos": Vector2i(6, 1), "facing": 2},
+		{"type_id": 5, "owner": 0, "pos": Vector2i(6, 2), "facing": 2},
+		{"type_id": 5, "owner": 1, "pos": Vector2i(9, 1), "facing": 6},
+	] as Array[Dictionary]
+	var screen: Node3D = _screen()
+	screen.setup(m, 2, 1, service)
+	var st: BattleState = service.state
+	assert_false(st.vision[1].is_seen(Vector2i(0, 1)), "передумова: інженер біля першого мосту в тумані гравця 1")
+	var demolish: int = EngineerCommand.Action.DEMOLISH_BRIDGE
+	assert_eq(service.submit(EngineerCommand.create(st.unit_at(Vector2i(0, 1)).id, demolish, hidden)), "")
+	_drain(screen)
+	assert_eq(service.submit(EngineerCommand.create(st.unit_at(Vector2i(6, 1)).id, demolish, shown)), "")
+	_drain(screen)
+	assert_eq(service.submit(MoveCommand.create(st.unit_at(Vector2i(6, 2)).id, Vector2i(7, 2))), "")
+	_drain(screen)
+	(screen.get_node("%Hud").get_node("%EndTurnButton") as Button).pressed.emit()
+	_drain(screen)
+	var r: ReplayFilter.Result = service.replay_for(1)
+	assert_not_null(r, "передумова: є повтор")
+	if r == null:
+		return
+	assert_eq(r.beats.size(), 2, "передумова: підрив видимого мосту й хід танка; прихований підрив — без такту")
+	var board_view: BoardView = screen.get_node("%BoardView")
+	_confirm_gate(screen)
+	assert_eq(board_view._kind_by_cell[hidden], Terrain.Kind.BRIDGE, "перший кадр — мости початку відрізка")
+	assert_eq(board_view._kind_by_cell[shown], Terrain.Kind.BRIDGE)
+	# Такт підриву дограно, повтор чекає на політ до танка.
+	_finish_all_processed_tweens()
+	assert_true(screen._replay_state != null, "передумова: повтор ще йде")
+	assert_eq(board_view._kind_by_cell[shown], Terrain.Kind.BRIDGE_DESTROYED, "видимий підрив показано")
+	assert_eq(board_view._kind_by_cell[hidden], Terrain.Kind.BRIDGE, "прихований підрив не показано раніше кінця")
+	_drain(screen)
+	assert_null(screen._replay_state)
+	assert_eq(board_view._kind_by_cell[hidden], Terrain.Kind.BRIDGE_DESTROYED, "після повтору — справжня дошка")
+	assert_eq(board_view._kind_by_cell[shown], Terrain.Kind.BRIDGE_DESTROYED)
+
+
+func test_replay_clamps_zoom_into_a_readable_range() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var screen: Node3D = _screen_after_enemy_turn(service)
+	var camera: IsoCameraRig = screen.get_node("%CameraRig")
+	camera.zoom_level = IsoCameraRig.MAX_ZOOM
+	camera._zoom_target = IsoCameraRig.MAX_ZOOM
+	var upper: float = (IsoCameraRig.MIN_ZOOM + IsoCameraRig.MAX_ZOOM) * 0.5
+	_confirm_gate(screen)
+	assert_true(camera.zoom_level <= upper, "повтор не грає з найбільшого віддалення: %s" % camera.zoom_level)
+	assert_eq(camera._zoom_target, camera.zoom_level, "зум стоїть, а не доїжджає")
+	for _i in 30:
+		if screen._replay_state == null:
+			break
+		_finish_all_processed_tweens()
+		camera._process(1.0)
+		assert_true(camera.zoom_level <= upper, "зум тримається весь повтор")
+	assert_null(screen._replay_state)
+	assert_true(camera.zoom_level <= upper, "після повтору зум попереднього гравця не повертається")
+
+
+func test_camera_flies_to_each_beat_focus() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var screen: Node3D = _screen_after_enemy_turn(service)
+	var r: ReplayFilter.Result = service.replay_for(1)
+	assert_not_null(r)
+	if r == null:
+		return
+	assert_eq(r.beats.size(), 3, "передумова: три такти")
+	var camera: IsoCameraRig = screen.get_node("%CameraRig")
+	_confirm_gate(screen)
+	for i in r.beats.size():
+		var fly: Tween = camera._recenter_tween
+		assert_true(fly != null and fly.is_valid(), "такт %d: камера летить" % i)
+		if fly == null or not fly.is_valid():
+			return
+		fly.custom_step(10.0)
+		assert_eq(camera.global_position, camera._clamp_to_bounds(IsoCameraRig.cell_to_world(r.beats[i].focus)),
+			"такт %d: камера на його першій дії" % i)
+		for _j in 10:
+			if screen._replay_state == null or (camera._recenter_tween != fly and camera._recenter_tween.is_valid()):
+				break
+			_finish_all_processed_tweens()
+	assert_null(screen._replay_state)
+
+
+## Повтор малює стан свого початку: відділення, знищене на ході суперника, на початку повтору ще стоїть,
+## тож плями під ним нема (плями — з загиблих показаного стану, не з того, що вже сталося наживо).
+func test_replay_starting_before_a_squad_dies_shows_no_scorch_under_it() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var m: MapData = _map()
+	m.spawns = [
+		{"type_id": 5, "owner": 0, "pos": Vector2i(4, 4), "facing": 2},
+		{"type_id": 0, "owner": 1, "pos": Vector2i(5, 4), "facing": 6},
+		{"type_id": 5, "owner": 1, "pos": Vector2i(0, 0), "facing": 2},  # гравець 1 не вибуває
+	] as Array[Dictionary]
+	var screen: Node3D = _screen()
+	screen.setup(m, 2, 1, service)
+	var squad: Unit = service.state.unit_at(Vector2i(5, 4))
+	squad.hp = 10
+	_rebase_replay(service)
+	assert_eq(service.submit(FireCommand.create(service.state.unit_at(Vector2i(4, 4)).id, squad.id)), "")
+	_drain(screen)
+	assert_false(squad.is_alive(), "передумова: постріл знищив відділення")
+	(screen.get_node("%Hud").get_node("%EndTurnButton") as Button).pressed.emit()
+	_drain(screen)
+	_confirm_gate(screen)
+	assert_true(screen._replay_state != null, "передумова: повтор іде")
+	assert_false(screen._scars.has_squad_scorch(squad.pos), "на початку повтору відділення ще стоїть")
+	assert_false(screen._scars.is_painted(squad.pos))
+	_drain(screen)
+	assert_true(screen._scars.has_squad_scorch(squad.pos), "після повтору — пляма на місці")
+
+
+## Відкладене тіло (лягає після перекидання) не лягає, якщо за цей час змінився показ — гейт, повтор: тіло,
+## показане попередньому гравцеві, не сміє з'явитись на дошці наступного.
+func test_a_pending_body_does_not_land_after_the_show_changed() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var m: MapData = _map(20, 6)
+	m.spawns = [
+		{"type_id": 5, "owner": 0, "pos": Vector2i(1, 1), "facing": 0},
+		{"type_id": 0, "owner": 1, "pos": Vector2i(2, 1), "facing": 0},
+	] as Array[Dictionary]
+	var screen: Node3D = _screen()
+	screen.setup(m, 2, 1, service)
+	var state: BattleState = service.state
+	var layer: WreckLayer = screen.get_node("%WreckLayer")
+	var near: Unit = state.unit_at(Vector2i(2, 1))
+	near.hp = 40
+	var body: Casualties.Body = (Casualties.record(state, near, 100)[0] as Events.FiguresFell).body
+	screen._on_figures_fell(body)
+	screen._rebuild_wrecks()  # показ змінився (гейт чи повтор), поки фігура перекидалась
+	var before: int = layer.fallen_count()
+	await get_tree().create_timer(UnitView.FALL_TIP_SEC + 0.05).timeout
+	assert_eq(layer.fallen_count(), before, "тіло зі старого показу не лягає вдруге")
+	# і в тому самому показі — лише показане глядачеві
+	var other: Unit = state.unit_at(Vector2i(1, 1))
+	var hidden := Casualties.Body.new(other.id + 50, Vector2i(5, 1), 1, 0, 0, 0, 2)
+	state.bodies.append(hidden)
+	screen._on_figures_fell(hidden)
+	await get_tree().create_timer(UnitView.FALL_TIP_SEC + 0.05).timeout
+	assert_eq(layer.fallen_count(), before, "не показане глядачеві — не лягає")
+
+
+## Наживо: постріл без відповіді — пакет кінчається одразу, але перебудова юнітів після нього чекає, доки боєць
+## перекинеться, тож фігура, що падає, ще жива кадр по тому.
+func test_a_falling_figure_survives_the_end_of_the_batch() -> void:
+	UnitSilhouettes.use_models({0: UnitModelFixture.soldier(), 1: UnitModelFixture.tube_soldier()})
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var m: MapData = _map()
+	m.spawns = [
+		{"type_id": 5, "owner": 0, "pos": Vector2i(2, 2), "facing": 2},
+		{"type_id": 0, "owner": 1, "pos": Vector2i(3, 2), "facing": 6},
+		{"type_id": 5, "owner": 1, "pos": Vector2i(5, 5), "facing": 6},
+	] as Array[Dictionary]
+	var screen: Node3D = _screen()
+	screen.setup(m, 2, 1, service)
+	var squad: Unit = service.state.unit_at(Vector2i(3, 2))
+	squad.hp = 60
+	squad.ap = 0  # без відповіді: пакет кінчається одразу після влучання
+	screen._rebuild_units_for_active_player(true)
+	var view: UnitView = screen._unit_views[squad.id]
+	var base: int = view._silhouette.get_node("Hull").get_child_count()
+	assert_eq(service.submit(FireCommand.create(service.state.unit_at(Vector2i(2, 2)).id, squad.id)), "")
+	var t0: int = Time.get_ticks_msec()
+	while is_instance_valid(view) and view._silhouette.get_node("Hull").get_child_count() <= base and Time.get_ticks_msec() - t0 < 3000:
+		await get_tree().process_frame
+	assert_true(is_instance_valid(view), "передумова: вигляд відділення ще є")
+	if is_instance_valid(view):
+		assert_gt(view._silhouette.get_node("Hull").get_child_count(), base, "передумова: боєць почав перекидатися")
+		# без реального часу: усі живі твіни (пауза пакета й саме перекидання) — на три чверті перекидання
+		for t: Tween in get_tree().get_processed_tweens():
+			t.custom_step(UnitView.FALL_TIP_SEC * 0.75)
+		assert_true(is_instance_valid(view), "три чверті перекидання по тому — вигляд відділення ще є")
+		assert_true(is_instance_valid(view) and view._silhouette.get_node("Hull").get_child_count() > base, "і боєць ще перекидається")
+	UnitSilhouettes.use_models({})
+
+
+func test_surrender_and_end_turn_are_ignored_during_replay() -> void:
+	var service := SpyMatchService.new()
+	add_child_autofree(service)
+	var screen: Node3D = _screen_after_enemy_turn(service)
+	_confirm_gate(screen)
+	assert_true(screen._replay_state != null and not screen._event_player.is_playing(),
+		"передумова: між тактами програвач вільний, повтор іде")
+	var submitted: int = service.submitted.size()
+	screen._on_surrender()
+	screen._on_end_turn_pressed()
+	assert_eq(service.submitted.size(), submitted, "на повторі ні здачі, ні кінця ходу")
+	assert_true(screen._replay_state != null)

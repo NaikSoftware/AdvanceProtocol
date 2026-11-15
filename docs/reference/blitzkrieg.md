@@ -126,6 +126,12 @@ Two rules about using it:
   band is `90..180`, not the flat 120 the plan originally invented; adopted, because a flat number
   would make mines the only damage source in the game that does not roll.
 
+- **A mine detonates under its owner's units too.** `method_105` fires when either the mover's own
+  player's table (`this.method_102`) or the other player's (`method_122().method_102`) holds a
+  mine on the tile, so ownership never spares a unit. Adopted ([§3.11](../rules/vision-and-fog.md)):
+  no unit ever stands on a mine, and since a player knows every mine they laid, their own mines
+  are planning obstacles for them just like the enemy mines they have found.
+
 - **The original has no capturable objectives — the 15-slot `class_1` table is mines only.**
   `field_149` holds positions, `field_150` marks a free slot and `field_151` a slot revealed to the
   opponent; only an engineer sets `field_151` (`class_1:805-815`), and `method_105` detonates on the
@@ -266,3 +272,13 @@ Two rules about using it:
   class. This project departs on purpose: a tank fells the forest it enters, and light vehicles,
   artillery and the engineer may enter only the tiles a tank has broken
   ([§3.2](../rules/movement-and-terrain.md#action-points)).
+
+- **The original has no replay of the opponent's turn; the replay here is a new feature, and the
+  original's live AI turn is a leak it avoids.** Nothing in the original records actions for later
+  playback. Against the AI, the AI's turn plays live, and the camera pans to each acting unit and
+  follows it with no fog check (`class_2.java:494-498`). That tells the player where unseen enemy
+  units stand, even though they are not drawn. The Skip key makes the rest of that turn instant
+  (`class_2.java:794-796`). In hot-seat the turn switch (`GameCanvas.java:2015-2035`) shows only a
+  black "Player N takes turn" screen, with nothing of the opponent's turn. The replay here shows only
+  what the viewer's side could see, and a fogged action takes no time and moves no camera
+  ([vision and fog](../rules/vision-and-fog.md#replay-of-the-opponents-turns)).

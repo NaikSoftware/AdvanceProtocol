@@ -28,8 +28,10 @@ func _spawn(type_id: int, owner: int, pos: Vector2i, facing: int) -> Dictionary:
 	return {"type_id": type_id, "owner": owner, "pos": pos, "facing": facing}
 
 
+## Гейт називає гравця словом і номером («Гравець 3»), 1-based.
 func _gate_player() -> String:
-	return (_e2e.gate().get_node("%PlayerValue") as Label).text
+	var text: String = (_e2e.gate().get_node("%PlayerValue") as Label).text
+	return text.substr(text.rfind(" ") + 1)
 
 
 ## Гравець 1 — один стрілець упритул до важкого танка гравця 0, з 10 HP:

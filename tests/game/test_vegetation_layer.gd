@@ -134,6 +134,31 @@ func test_plants_over_a_unit_fade_and_crushed_ones_fall() -> void:
 	veg.set_crushed([])
 
 
+## Розчинена рослина прозора лише довкола юнітів під нею: матеріал кольору отримує точку юніта (клітинку),
+## і повторний той самий набір юнітів (рання відповідь без перебудови) точок не губить.
+func test_faded_plant_colour_gets_the_unit_point() -> void:
+	var veg: VegetationLayer = _view("river").vegetation()
+	var target: Dictionary = {}
+	for pl: Dictionary in veg.placements:
+		if pl["kind"] == "tree":
+			target = pl
+			break
+	assert_false(target.is_empty(), "на Річці нема дерева")
+	if target.is_empty():
+		return
+	var cell: Vector2i = target["cell"]
+	for round_i in 2:
+		veg.set_reveal_cells([cell, Vector2i(-40, -40)])
+		var colour: Array = veg.get_children().filter(func(n: Node) -> bool: return String(n.name).ends_with("_c_faded"))
+		assert_gt(colour.size(), 0, "передумова: розчинений вузол кольору")
+		for n: GeometryInstance3D in colour:
+			var m := n.material_override as ShaderMaterial
+			assert_eq(m.get_shader_parameter("fade_count"), 1, "лише юніт під рослиною, не той, що далеко (прохід %d)" % round_i)
+			var pt: Vector4 = (m.get_shader_parameter("fade_points") as PackedVector4Array)[0]
+			assert_eq(Vector2i(roundi(pt.x), roundi(pt.z)), cell, "точка — клітинка юніта")
+	veg.set_reveal_cells([])
+
+
 ## Ставок: очерет плямами на 25–40 % довжини урізу (з розмахом куртин), 3–5 плям, не далі 1 м від урізу.
 func test_pond_reeds_patchy_and_hug_the_shore(p = use_parameters(["crossroads", "ridge"])) -> void:
 	var view: BoardView = _view(p)

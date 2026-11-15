@@ -91,7 +91,9 @@ uniform float mud_amount = 0.0;
 // (`seen`) глядача, тексель на тайл: шрам на нерозвіданому був би доносом про бій (§3.5).
 uniform bool has_scars = false;
 uniform sampler2D scar_map : filter_linear, repeat_disable;
-uniform sampler2D scar_seen : filter_linear, repeat_disable;
+// Маска — найближчим текселем, без змішування: лінійна фільтрація розтягувала шрам на пів тайла в нерозвідане
+// (третій гравець бачив би обідок там, де ніколи не був).
+uniform sampler2D scar_seen : filter_nearest, repeat_disable;
 uniform vec2 scar_size = vec2(1.0);
 
 // Шари з GroundSurface.TEX_LAYERS.

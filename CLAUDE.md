@@ -104,9 +104,11 @@ rifle squad and the engineer.
   allows. Nothing tracks "has already moved", and nothing may.
 - **The two movement zones are the primary UI of the game:** gold = reachable with `>= fire_cost`
   AP left, red = reachable but cannot act. Recomputed after every action that changes AP or
-  occupancy.
+  occupancy. **They are how a player reads AP: no AP number is shown anywhere in the UI** — not
+  on a unit, not in a preview, not in a card.
 - **A move is planned from what the player can see, and walked one tile at a time.** Planning and
-  the zones use fog-filtered occupancy plus known enemy mines and, for a vehicle, known wrecks;
+  the zones use fog-filtered occupancy plus known mines — the player's own and the enemy mines
+  found so far — and, for a vehicle, known wrecks;
   the walk checks the truth and **stops on the tile before** anything it could not see or an
   engineer has just found. AP is charged only for tiles actually entered. Planning against the
   true occupancy would leak — the route would detour around an invisible enemy and give away
@@ -188,7 +190,15 @@ product against the target's facing. No trigonometry, no division.
 - Recomputed for the active player from scratch at turn start and after every move step.
   **Never carry another player's visibility into the renderer.**
 - **The handover gate is mandatory.** Not skippable, not animated through, and the camera must not
-  leak the previous player's positions — recentre on the incoming player's first unit.
+  leak the previous player's positions — recentre on the incoming player's first unit. The gate
+  shows each team's remaining HP share, read from `core/` and drawn as lines or a bar: a deliberate
+  exception that reveals aggregate losses the incoming player did not witness
+  ([details](docs/ui/hud.md#handover-gate-and-pause)).
+- **After the gate, the incoming player watches a replay of the opponents' turns, filtered to what
+  their side would have seen live** and to everything that hit their own units or mines. A squad
+  that ends a move hidden in a building shows none of its route. Fogged actions take no time and
+  no camera move. `ReplayFilter` in `core/` decides; the view never re-derives it. See the
+  [linked document](docs/rules/vision-and-fog.md#replay-of-the-opponents-turns).
 
 ### 3.6 Unit classes and roster → [roster table and balance notes](docs/rules/units.md)
 
@@ -213,9 +223,9 @@ mesh may sculpt three or four figures sharing a base, and it should.
 ### 3.8 Engineers → [verb list](docs/rules/units.md)
 
 No gun; a verb list instead. All actions are on an **orthogonally adjacent** tile and cost
-`fire_cost` AP: lay/clear mine, repair/demolish bridge (an enemy on it dies; a friendly unit
-on it forbids the demolition), repair a friendly unit. Repair is the one place where unspent AP
-matters.
+`fire_cost` AP: lay/clear mine (never where no unit can enter; a bridge may be mined),
+repair/demolish bridge (an enemy on it dies, a mine on it goes with the span; a friendly unit on it
+forbids the demolition), repair a friendly unit. Repair is the one place where unspent AP matters.
 
 ### 3.9 Drone strike — assault squad only → [details](docs/rules/units.md)
 
@@ -238,18 +248,21 @@ standing wins.
 
 Laid by engineers, invisible to everyone except the owner, **found only by an engineer** within
 its own vision diamond — searched at the start of its owner's turn and from **every tile it passes
-through**, not only the one it stops on. Driving onto an unrevealed mine detonates it — **on entry,
-not at the destination**, so a minefield cannot be crossed by stopping past it. **A known enemy
-mine is an obstacle** that planning routes around. A tile occupied by a unit is never entered, so
-a blocker standing on a mine keeps it from going off.
+through**, not only the one it stops on. **A mine detonates under whoever drives onto it**, its
+owner's units included, so no unit ever stands on a mine. It goes off **on entry, not at the
+destination**, so a minefield cannot be crossed by stopping past it. **A known mine is an
+obstacle** that planning routes around: every mine of the player's own, and every enemy mine an
+engineer has found. A mine on a bridge brings the bridge down, and the unit on it is lost with the
+bridge, as with a demolition (§3.8).
 
 ### 3.12 Weather, time of day, and ground state → [details](docs/rules/movement-and-terrain.md)
 
 **Weather and time of day are cosmetic and touch no number.** In a hot-seat game with hidden
 information, a rule that silently shrinks your vision feels like cheating when you cannot see it.
 
-**Ground state is a rule and it is explicit.** `dry / mud / frozen`, shown as a labelled HUD icon
-at all times, offsetting off-road penalty. Roads are never affected — that is the point of a road.
+**Ground state is a rule that lives in the numbers, not on screen.** `dry / mud / frozen`, fixed
+per map, offsetting off-road penalty. Roads are never affected — that is the point of a road. No
+label or icon shows it anywhere in the UI: every movement zone and move preview already includes it.
 
 ### 3.13 What the board shows, and when → [details](docs/ui/overlays.md)
 
@@ -385,8 +398,9 @@ texture and effect from real metres.
 
 Budget on a mid-range phone at 60 fps: **under ~100 draw calls and ~150k triangles on screen.**
 Bake static terrain lighting. One directional light: it casts real shadows from units on every
-map and from the board's buildings on sunny maps; units also add a contact shadow on every map,
-centred under the hull when overcast; forest shadows are baked, and under River's overcast the
+map and from the board's buildings on sunny maps; vehicles also add a hull-sized contact shadow on
+every map, centred under the hull when overcast, and each standing soldier a small soft one under
+his feet; forest shadows are baked, and under River's overcast the
 light's shadows are faint and blurred
 ([details](docs/art-direction.md#rendering-and-mobile-budget)). No SSAO, no SSR, no volumetric
 fog. **Persistent battle scars** — wrecks, the scorch under them, lingering smoke, ruts — are the
@@ -409,7 +423,8 @@ must hit (one tile = 1.0 unit, ground at `y = 0`, front along `−Z`).
 - No `get_node("../../Foo")` path strings in gameplay code; wire dependencies explicitly.
 - Rules never run in `_process`. If gameplay logic is in a frame callback, it is in the wrong file.
 - Signals go view-ward only. `core/` returns events; it does not emit Godot signals.
-- UI: tap targets ≥ 48 dp, respect notch/safe areas, every rule-relevant number visible somewhere.
+- UI: tap targets ≥ 48 dp, respect notch/safe areas, every rule-relevant number visible somewhere —
+  except AP and ground state, which the movement zones carry (§3.2, §3.12).
 - Localisation from day one: Ukrainian and English, no hard-coded display strings.
 - Comments explain **why**, not what, and are written in Ukrainian in `core/`.
 - Tests are required for anything in `core/`. The damage table gets golden tests; the roster gets

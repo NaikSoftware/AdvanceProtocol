@@ -614,7 +614,9 @@ func test_an_unknown_enemy_mine_is_not_an_obstacle_for_planning() -> void:
 	assert_false(s.known_blocked_map(0).has(Vector2i(2, 5)),
 		"§3.5: невідома міна не має виказувати себе формою маршруту")
 
-func test_an_own_mine_is_not_an_obstacle() -> void:
+## §3.11: своя міна рве й свого, а свої міни гравець знає всі, тож для планування
+## вона така сама перешкода, як знайдена ворожа.
+func test_an_own_mine_is_routed_around() -> void:
 	var s: BattleState = _two_lane_state_with_mine(0, true)
 	var u: Unit = s.add_unit(3, 0, Vector2i(0, 5), 2)
 	s.start()
@@ -622,9 +624,70 @@ func test_an_own_mine_is_not_an_obstacle() -> void:
 	assert_eq(cmd.validate(s), "")
 	var events: Array = cmd.apply(s)
 	var moved: Events.UnitMoved = events[0]
-	assert_true(Vector2i(2, 5) in moved.path, "своя міна — не перешкода: пряма дорога")
-	assert_eq(u.ap, 28, "68 − 4×10")
-	assert_eq(u.hp, u.max_hp(), "своя міна під власником не вибухає")
+	assert_false(Vector2i(2, 5) in moved.path, "свою міну об'їжджають так само, як ворожу")
+	assert_eq(u.ap, 8, "68 − 6×10: заплачено за гак")
+	assert_eq(u.hp, u.max_hp(), "жодного підриву")
+	assert_not_null(Mines.mine_at(s, Vector2i(2, 5)))
+
+func test_an_own_mine_tile_is_not_a_legal_destination() -> void:
+	var s: BattleState = _two_lane_state_with_mine(0, true)
+	var u: Unit = s.add_unit(3, 0, Vector2i(0, 5), 2)
+	s.start()
+	assert_eq(MoveCommand.create(u.id, Vector2i(2, 5)).validate(s), "ERR_OUT_OF_RANGE")
+
+func test_zones_exclude_an_own_mine() -> void:
+	var s: BattleState = _two_lane_state_with_mine(0, true)
+	var u: Unit = s.add_unit(3, 0, Vector2i(0, 5), 2)
+	s.start()
+	var blocked: Dictionary = s.known_blocked_map(0)
+	blocked.erase(u.pos)
+	var zones: Pathing.Zones = Pathing.compute_zones(s.board, u, blocked)
+	assert_false(zones.can_reach(Vector2i(2, 5)), "контур зони обгинає й свою міну")
+
+func test_an_own_mine_stays_unknown_to_the_enemy_planner() -> void:
+	var s: BattleState = _two_lane_state_with_mine(0, true)
+	assert_false(s.known_blocked_map(1).has(Vector2i(2, 5)),
+		"§3.5: чужу нерозкриту міну форма маршруту не виказує")
+
+## Відома міна на єдиному мосту закриває переправу так само, як на звичайному тайлі:
+## дальній берег недосяжний, і зона туди не тягнеться.
+func test_a_known_mine_on_the_only_bridge_closes_the_crossing() -> void:
+	for owner in [0, 1]:
+		var s: BattleState = _two_lane_state_with_mine(owner, true)
+		s.board.set_kind(Vector2i(2, 5), Terrain.Kind.BRIDGE)
+		for y in 10:
+			if y != 5:
+				s.board.set_kind(Vector2i(2, y), Terrain.Kind.WATER)
+		var u: Unit = s.add_unit(3, 0, Vector2i(0, 5), 2)
+		s.start()
+		assert_eq(MoveCommand.create(u.id, Vector2i(4, 5)).validate(s), "ERR_OUT_OF_RANGE",
+			"міна гравця %d на мосту" % owner)
+
+## Міст із міною, якої гравець не знає: маршрут іде через міст, бо план бачить
+## звичайну дорогу, а вхід підриває і міст, і техніку.
+func test_driving_onto_an_unknown_mined_bridge_drops_the_unit_into_the_river() -> void:
+	var s: BattleState = _two_lane_state_with_mine(1, false)
+	s.board.set_kind(Vector2i(2, 5), Terrain.Kind.BRIDGE)
+	for y in 10:
+		if y != 5:
+			s.board.set_kind(Vector2i(2, y), Terrain.Kind.WATER)
+	var u: Unit = s.add_unit(3, 0, Vector2i(0, 5), 2)
+	s.add_unit(0, 0, Vector2i(0, 9), 2)
+	s.add_unit(0, 1, Vector2i(9, 9), 2)
+	s.start()
+	var cmd: MoveCommand = MoveCommand.create(u.id, Vector2i(4, 5))
+	assert_eq(cmd.validate(s), "", "невідома міна не виказує себе плануванням")
+	var events: Array = cmd.apply(s)
+	assert_false(u.is_alive())
+	assert_eq(u.pos, Vector2i(2, 5), "вибух — на вході, а не в кінці шляху")
+	assert_eq(s.board.kind_at(Vector2i(2, 5)), Terrain.Kind.BRIDGE_DESTROYED)
+	var kinds: Array = []
+	for e in events:
+		kinds.append(e.get_script())
+	assert_true(Events.MineTriggered in kinds)
+	assert_true(Events.BridgeChanged in kinds)
+	assert_false(Events.WreckLeft in kinds)
+	assert_eq(u.ap, 48, "68 − 2×10: заплачено лише за тайли, у які юніт увійшов")
 
 func test_an_engineer_that_finds_a_mine_mid_walk_stops_in_front_of_it() -> void:
 	# Інженер (огляд 3, 15 AP за тайл дороги) з (0,5) до (4,5); ворожа міна на (4,5)

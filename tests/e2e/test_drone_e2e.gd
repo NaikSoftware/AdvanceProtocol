@@ -48,8 +48,9 @@ func _button() -> DroneButton:
 	return _e2e.hud().get_node("%DroneButton")
 
 
+## Причина відмови — тост (текст ERR_*), а не окремий рядок.
 func _reason() -> Label:
-	return _e2e.hud().get_node("%DroneReasonLabel")
+	return _e2e.hud().get_node("%ToastLabel")
 
 
 func _board_view() -> BoardView:
@@ -70,7 +71,7 @@ func test_drone_strike_through_button() -> void:
 	_e2e.tap(SQUAD)
 	await _e2e.settle()
 	assert_true(_button().is_visible_in_tree())
-	assert_eq(_button().text, tr("hud_drone_strike") % 2)
+	assert_eq(_button().text, tr("hud_drone_strike"))
 	_e2e.press(_button())
 	await _e2e.settle()
 	assert_eq(_board_view().circles(BoardView.LAYER_TARGETS),
@@ -83,7 +84,7 @@ func test_drone_strike_through_button() -> void:
 	assert_eq((_e2e.hud().get_node("%PreviewDroneDamageValue") as Label).text, "120–180")
 	await _e2e.confirm()
 	assert_eq(squad.drones_left, 1)
-	assert_eq(_button().text, tr("hud_drone_strike") % 1)
+	assert_eq(_button().text, tr("hud_drone_strike"))
 	assert_eq(_e2e.screen.unit_view_for(squad.id)._drones_left, 1, "значок на юніті")
 	# Golden, seed 7: перший кидок матчу — roll(60) = 1 → 120 + 1 = 121; 400 − 121.
 	assert_eq(tank.hp, 279)
@@ -96,10 +97,11 @@ func test_drone_on_infantry_shows_reason_and_does_nothing() -> void:
 	await _boot()
 	var squad: Unit = _state().unit_at(SQUAD)
 	await _arm()
+	# Без settle(): він гасить усі твіни, а тост живе 2 с.
 	_e2e.tap(INF)
-	await _e2e.settle()
-	assert_true(_reason().is_visible_in_tree())
+	assert_true((_e2e.hud().get_node("%Toast") as Control).visible)
 	assert_eq(_reason().text, tr("ERR_DRONE_CANNOT_TARGET_INFANTRY"))
+	assert_true((_e2e.hud().get_node("%DroneStrip") as Control).visible, "режим дрона лишається, смужка на місці")
 	assert_true((_e2e.hud().get_node("%ConfirmButton") as Button).disabled, "прев'ю немає")
 	assert_eq(squad.drones_left, 2)
 	assert_eq(squad.ap, 30)
@@ -109,7 +111,7 @@ func test_drone_button_hidden_for_rifle_squad() -> void:
 	await _boot(RIFLE)
 	_e2e.tap(SQUAD)
 	await _e2e.settle()
-	assert_true((_e2e.hud().get_node("%SelectionRow") as Control).is_visible_in_tree(), "вибрано")
+	assert_eq(_e2e.screen.input_controller()._selected_unit, _state().unit_at(SQUAD), "вибрано")
 	assert_false(_button().is_visible_in_tree())
 
 
@@ -139,10 +141,9 @@ func test_arming_drone_clears_a_pending_move_preview() -> void:
 	_e2e.tap(Vector2i(0, 0))
 	await _e2e.settle()
 	var hud: Hud = _e2e.hud()
-	assert_true((hud.get_node("%PreviewMoveBox") as Control).visible, "передумова: прев'ю руху")
+	assert_false((hud.get_node("%ConfirmButton") as Button).disabled, "передумова: прев'ю руху")
 	_e2e.press(_button())
 	await _e2e.settle()
-	assert_false((hud.get_node("%PreviewMoveBox") as Control).visible)
 	assert_true((hud.get_node("%ConfirmButton") as Button).disabled)
 
 
@@ -155,7 +156,7 @@ func test_armed_drone_does_not_survive_the_handover_gate() -> void:
 	await _e2e.end_turn()
 	assert_true(_e2e.gate().is_visible_in_tree(), "гейт показано")
 	assert_eq(_board_view().circles(BoardView.LAYER_TARGETS), [])
-	assert_false((_e2e.hud().get_node("%DroneRangeLabel") as Control).is_visible_in_tree())
+	assert_false((_e2e.hud().get_node("%DroneStrip") as Control).is_visible_in_tree(), "смужка озброєння знята")
 	await _e2e.confirm_gate()
 	assert_eq(_board_view().circles(BoardView.LAYER_TARGETS), [])
 	var inf_view: UnitView = _e2e.screen.unit_view_for(inf_id)

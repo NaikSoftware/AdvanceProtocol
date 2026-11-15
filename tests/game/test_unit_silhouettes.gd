@@ -93,19 +93,140 @@ func test_merged_body_is_one_neutral_colour_for_everyone() -> void:
 	b_body.free()
 
 
-## Фігури відділення — у тій самій сітці: стоячі в нейтральному кольорі тіла, загиблі темні. Сітка на
-## кількість стоячих окрема й кешується, тож падіння фігури — підміна сітки, а не нова.
+## Стоячі фігури відділення — у тій самій сітці, що й плита, у нейтральному кольорі тіла; загиблих у ній
+## немає: вони лежать там, де впали (шар тіл). Сітка на кількість стоячих окрема й кешується.
 func test_squad_figures_live_in_the_merged_mesh_by_standing_count() -> void:
 	for standing in range(0, UnitView.SQUAD_FIGURES + 1):
 		var body: Node3D = UnitSilhouettes.build_merged(0, standing)
 		var colors: PackedColorArray = (body.get_node("Hull") as MeshInstance3D).mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
 		var box_verts: int = 24
-		var fallen: int = colors.count(UnitSilhouettes.FALLEN_COLOR)
-		assert_eq(fallen, (UnitView.SQUAD_FIGURES - standing) * box_verts, "лежачих при %d стоячих" % standing)
+		assert_eq(colors.count(UnitSilhouettes.FALLEN_COLOR), 0, "лежачих у відділенні при %d стоячих" % standing)
 		# Корпус (плита) — теж BODY_COLOR, тож стоячі + плита.
 		assert_eq(colors.count(UnitSilhouettes.BODY_COLOR), (standing + 1) * box_verts, "стоячих при %d" % standing)
+		assert_eq(colors.size(), (standing + 1) * box_verts)
 		body.free()
 	assert_same(UnitSilhouettes.build_merged(0, 2).get_node("Hull").mesh, UnitSilhouettes.build_merged(0, 2).get_node("Hull").mesh)
+
+
+## Кожне місце має свій сталий поворот, щоб четверо не стояли клонами, а в середньому відділення
+## дивиться туди ж, куди його напрям; без випадковості — те саме щоразу.
+func test_each_slot_has_its_own_fixed_yaw_and_the_squad_keeps_its_facing() -> void:
+	var yaws: Array[float] = []
+	var sum: float = 0.0
+	for i in UnitView.SQUAD_FIGURES:
+		var b: Basis = UnitSilhouettes.figure_transform(i, true).basis
+		var m: Basis = UnitSilhouettes.model_figure_transform(i).basis
+		var yaw: float = b.get_euler().y
+		assert_almost_eq(m.get_euler().y, yaw, 0.0001, "коробка й модель на місці %d повернуті однаково" % i)
+		assert_almost_eq(b.y.y, 1.0, 0.0001, "стоїть рівно")
+		assert_between(absf(yaw), deg_to_rad(5.0), deg_to_rad(25.0), "місце %d повернуте, але не боком" % i)
+		for other: float in yaws:
+			assert_gt(absf(yaw - other), deg_to_rad(5.0), "жодні два не однакові")
+		yaws.append(yaw)
+		sum += yaw
+	assert_lt(absf(sum / UnitView.SQUAD_FIGURES), deg_to_rad(5.0), "середній поворот — напрям відділення")
+	assert_eq(UnitSilhouettes.figure_transform(2, true), UnitSilhouettes.figure_transform(2, true))
+
+
+## Розкладки місць — у світових осях: місця поперек погляду через ~0,76 м, перестановка між бійцями й сталі
+## зсуви; бійці лишаються в межах сліду відділення, і різні відділення — різні розкладки.
+func test_squads_take_seeded_layouts_that_keep_standing_figures_apart_on_screen() -> void:
+	for k in UnitSilhouettes.LAYOUT_COUNT:
+		for i in UnitView.SQUAD_FIGURES:
+			var lay: Transform3D = UnitSilhouettes.model_figure_transform(i, k)
+			assert_lte(Vector2(lay.origin.x, lay.origin.z).length(), 0.2, "у межах сліду відділення")
+			assert_lte(absf(wrapf(lay.basis.get_euler().y, -PI, PI)), 0.3 + 0.35 + 0.0001, "поворот фігури до ±37°")
+			assert_eq(lay, UnitSilhouettes.model_figure_transform(i, k), "стала розкладка")
+	# Місця стоять у світі, тож проміжок поперек погляду — властивість розкладки, а не напряму: кожна з
+	# розкладок, яку може взяти відділення, тримає його для будь-якої кількості стоячих (коли фігура падає,
+	# решта не скаче). Повороти фігур на 8 напрямах перевіряє test_unit_view (екранний проміжок фігур).
+	for k in range(1, UnitSilhouettes.LAYOUT_COUNT):
+		for up in range(2, UnitView.SQUAD_FIGURES + 1):
+			assert_gte(UnitSilhouettes.screen_gap(k, up), UnitSilhouettes.MIN_SCREEN_GAP,
+				"розкладка %d, стоїть %d: двоє не стоять один за одним" % [k, up])
+	var picked: Dictionary = {}
+	for unit_id in 12:
+		var k: int = UnitSilhouettes.pick_layout(unit_id)
+		assert_between(k, 1, UnitSilhouettes.LAYOUT_COUNT - 1)
+		picked[k] = true
+	assert_gt(picked.size(), 3, "різні відділення — різні розкладки")
+	UnitSilhouettes.use_models({0: UnitModelFixture.soldier()})
+	assert_ne(UnitSilhouettes.merged_mesh(0, 4, 0, 0, 1), UnitSilhouettes.merged_mesh(0, 4, 0, 0, 2), "сітка на розкладку")
+
+
+## Труб дрона на штурмовому відділенні стільки, скільки дронів лишилось (§3.9), і несуть їх перші стоячі
+## місця; решта — простий боєць стрілецького. Без дронів відділення таке саме, як стрілецьке.
+func test_assault_squad_carries_one_tube_per_drone_left() -> void:
+	var plain: ArrayMesh = UnitModelFixture.soldier()
+	var tube: ArrayMesh = UnitModelFixture.tube_soldier()
+	UnitSilhouettes.use_models({0: plain, 1: tube})
+	var v: int = plain.surface_get_arrays(0)[Mesh.ARRAY_VERTEX].size()
+	var top_plain: float = 0.05 + UnitSilhouettes.FIGURE_SIZE.y
+	var top_tube: float = 0.05 + 0.3
+	for standing in range(1, UnitView.SQUAD_FIGURES + 1):
+		for drones in 3:
+			var m: ArrayMesh = UnitSilhouettes.merged_mesh(1, standing, 0, drones)
+			var p: PackedVector3Array = m.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+			assert_eq(p.size(), standing * v, "%d стоячих, %d дронів" % [standing, drones])
+			var tall: int = 0
+			for i in range(0, p.size(), v):
+				var hi: float = -INF
+				for k in v:
+					hi = maxf(hi, p[i + k].y)
+				if hi > top_plain + 0.01:
+					tall += 1
+			assert_eq(tall, mini(drones, standing), "труб при %d стоячих і %d дронах" % [standing, drones])
+	assert_almost_eq(UnitSilhouettes.merged_mesh(1, 4, 0, 2).get_aabb().end.y, top_tube, 0.0001)
+	assert_ne(UnitSilhouettes.merged_mesh(1, 4, 0, 1), UnitSilhouettes.merged_mesh(1, 4, 0, 2), "сітка на число труб")
+	assert_same(UnitSilhouettes.merged_mesh(1, 4, 0, 1), UnitSilhouettes.merged_mesh(1, 4, 0, 1), "і кешується")
+	# Відділення з трубами й без — один матеріал штурмовика: обидві моделі на одному атласі.
+	var body := UnitSilhouettes.build_merged(1, 4, 0, 2)
+	assert_same((body.get_node("Hull") as MeshInstance3D).material_override, UnitSilhouettes.model_material(1))
+	body.free()
+	assert_almost_eq(UnitSilhouettes.merged_mesh(0, 4, 0, 2).get_aabb().end.y, top_plain, 0.0001, "стрілецьке труб не несе")
+
+
+## Друга поза: прості бійці на непарних місцях пригнулись (своя сітка того самого атласу), труби дрона
+## несуть стоячі; без файлу пози всі стоять.
+func test_odd_plain_slots_crouch_and_tube_carriers_stand() -> void:
+	var plain: ArrayMesh = UnitModelFixture.soldier()
+	var crouch: ArrayMesh = UnitModelFixture.mesh(Vector3(0.0625, 0.18, 0.05))
+	UnitSilhouettes.use_models({0: plain, 1: UnitModelFixture.tube_soldier(), UnitSilhouettes.CROUCH_KEY: crouch})
+	var v: int = plain.surface_get_arrays(0)[Mesh.ARRAY_VERTEX].size()
+	var heights := func(m: ArrayMesh) -> Array:
+		var p: PackedVector3Array = m.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+		var out: Array = []
+		for i in range(0, p.size(), v):
+			var hi: float = -INF
+			for k in v:
+				hi = maxf(hi, p[i + k].y)
+			out.append(snappedf(hi - 0.05, 0.001))
+		out.sort()
+		return out
+	assert_eq(heights.call(UnitSilhouettes.merged_mesh(0, 4)), [0.18, 0.18, 0.225, 0.225], "двоє пригнулись, двоє стоять")
+	assert_eq(heights.call(UnitSilhouettes.merged_mesh(1, 4, 0, 2)), [0.18, 0.225, 0.3, 0.3], "труби — на стоячих")
+	assert_eq(heights.call(UnitSilhouettes.merged_mesh(0, 1)), [0.225], "останній — стоячий перший")
+	UnitSilhouettes.use_models({0: plain})
+	assert_eq(heights.call(UnitSilhouettes.merged_mesh(0, 4)), [0.225, 0.225, 0.225, 0.225], "без пози — усі стоять")
+
+
+## Загиблий — своя сітка й матеріал простого бійця з `fallen`, один на набір; без моделі — коробка плазом
+## у темному кольорі загиблих.
+func test_fallen_use_the_body_mesh_and_a_fallen_copy_of_the_plain_material() -> void:
+	var body: ArrayMesh = UnitModelFixture.mesh(Vector3(0.06, 0.05, 0.225))
+	UnitSilhouettes.use_models({0: UnitModelFixture.soldier(), UnitSilhouettes.BODY_KEY: body})
+	assert_same(UnitSilhouettes.body_or_box(0), body)
+	assert_eq(UnitSilhouettes.body_pose(0), Transform3D(), "модель лежить як є")
+	var m := UnitSilhouettes.fallen_material(0) as ShaderMaterial
+	assert_true(m.get_shader_parameter("fallen"))
+	assert_ne(m, UnitSilhouettes.model_material(0))
+	assert_same(m, UnitSilhouettes.fallen_material(0), "один на набір")
+	UnitSilhouettes.use_models({})
+	assert_true(UnitSilhouettes.body_or_box(0) is BoxMesh)
+	assert_eq((UnitSilhouettes.fallen_material(0) as StandardMaterial3D).albedo_color, UnitSilhouettes.FALLEN_COLOR)
+	var pose: Transform3D = UnitSilhouettes.body_pose(0)
+	assert_almost_eq(absf(pose.basis.y.normalized().y), 0.0, 0.0001, "коробка плазом")
+	assert_almost_eq(pose.origin.y, UnitSilhouettes.FIGURE_SIZE.z * 0.5, 0.0001, "на землі, не в ній")
 
 
 ## Модель береться, коли файл є, і коробки — коли нема: без асету гра не ламається.
@@ -143,23 +264,25 @@ func test_model_bodies_share_mesh_and_material_and_carry_no_owner_colour() -> vo
 	blue.get_parent().free()
 
 
-## Відділення — четверо бійців в одній сітці; стоять перші `standing` ступнями на основі,
-## загиблі лежать. Сітка на кількість стоячих кешується.
-func test_model_squad_is_four_soldiers_by_standing_count() -> void:
+## Відділення — стоячі бійці в одній сітці, ступнями на основі; загиблих у ній немає. Сітка на
+## кількість стоячих кешується, а без жодного стоячого — порожня.
+func test_model_squad_is_its_standing_soldiers() -> void:
 	var soldier: ArrayMesh = UnitModelFixture.soldier()
 	UnitSilhouettes.use_models({0: soldier})
 	var verts: int = soldier.surface_get_arrays(0)[Mesh.ARRAY_VERTEX].size()
 	var meshes: Array[Mesh] = []
 	for standing in range(0, UnitView.SQUAD_FIGURES + 1):
 		var m: Mesh = UnitSilhouettes.merged_mesh(0, standing)
-		assert_eq(m.surface_get_arrays(0)[Mesh.ARRAY_VERTEX].size(), 4 * verts, "4 бійці при %d" % standing)
+		if standing == 0:
+			assert_eq(m.get_surface_count(), 0, "знищене відділення нічого не малює")
+		else:
+			assert_eq(m.surface_get_arrays(0)[Mesh.ARRAY_VERTEX].size(), standing * verts, "%d бійці" % standing)
 		assert_false(meshes.has(m), "інша сітка при %d" % standing)
 		meshes.append(m)
 	assert_same(UnitSilhouettes.merged_mesh(0, 2), meshes[2], "сітка кешується")
 	var full: AABB = meshes[4].get_aabb()
 	assert_almost_eq(full.position.y, 0.05, 0.0001, "ступні на основі")
 	assert_almost_eq(full.end.y, 0.05 + UnitSilhouettes.FIGURE_SIZE.y, 0.0001, "1,8 м заввишки")
-	assert_lt(meshes[0].get_aabb().end.y, 0.05 + UnitSilhouettes.FIGURE_SIZE.y * 0.5, "загиблі лежать")
 
 
 ## Перетворення вузла GLB впікається в сітку, а вісь колеса в UV2 їде разом із ним.

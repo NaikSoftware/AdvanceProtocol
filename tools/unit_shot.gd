@@ -49,6 +49,36 @@ func _ready() -> void:
 	if a.size() > 5 and a[5] == "sets":
 		await _sets(screen, map, out, tag, a.size() > 6 and a[6] == "forest", a.size() > 6 and a[6] == "sel")
 		return
+	if a.size() > 5 and a[5] == "squads":
+		await _squads(screen, map, out, tag)
+		return
+	if a.size() > 5 and a[5] == "facings":
+		await _facings(screen, map, out, tag)
+		return
+	if a.size() > 5 and a[5] == "walk":
+		await _walk(screen, map, out, tag)
+		return
+	if a.size() > 5 and a[5] == "squads_forest":
+		await _squads_forest(screen, map, out, tag)
+		return
+	if a.size() > 5 and a[5] == "forest_n2":
+		await _forest_n2(screen, map, out, tag)
+		return
+	if a.size() > 5 and a[5] == "forest_deep":
+		await _forest_deep(screen, map, out, tag)
+		return
+	if a.size() > 5 and a[5] == "fall":
+		await _fall(screen, map, out, tag)
+		return
+	if a.size() > 5 and a[5] == "squad_bridge":
+		await _squad_bridge(screen, map, out, tag, int(a[6].substr(9)) if a.size() > 6 and a[6].begins_with("standing=") else 0)
+		return
+	if a.size() > 5 and a[5] == "bridge_seq":
+		await _bridge_seq(screen, map, out, tag)
+		return
+	if a.size() > 5 and a[5] == "shore":
+		await _shore(screen, map, out, tag)
+		return
 	if a.size() > 5 and a[5] == "spots":
 		await _spots(screen, map, out, tag)
 		return
@@ -64,7 +94,9 @@ func _ready() -> void:
 		return
 	if a.size() > 5 and a[5] == "gate":
 		var gset: int = int(a[6].substr(4)) if a.size() > 6 and a[6].begins_with("set=") else 0
-		await _gate(screen, map, out, tag, type_id, gset)
+		# zoom=<z>: відділення міряються на найближчому, бо на найдальшому боєць — 2 × 6 пікселів
+		var gzoom: float = float(a[7].substr(5)) if a.size() > 7 and a[7].begins_with("zoom=") else IsoCameraRig.MAX_ZOOM
+		await _gate(screen, map, out, tag, type_id, gset, gzoom)
 		return
 	screen.setup(map, 2, 1)
 	var cell := _field_near_centre(map)
@@ -158,35 +190,48 @@ func _ground(p: Vector3) -> float:
 
 
 ## Найближча до центру клітинка поля, у якої поле й три сусіди праворуч, ліворуч і нижче.
-func _field_near_centre(map: MapData, near_forest: bool = false, need: Array[Vector2i] = [Vector2i.ZERO, Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, 2), Vector2i(1, 1)], clear: Array[Vector2i] = []) -> Vector2i:
+## `field_only`: без щабля з дорогою; не знайшовши, повертає (−1, −1).
+func _field_near_centre(map: MapData, near_forest: bool = false, need: Array[Vector2i] = [Vector2i.ZERO, Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, 2), Vector2i(1, 1)], clear: Array[Vector2i] = [], field_only: bool = false) -> Vector2i:
 	var c := Vector2i(map.width / 2, map.height / 2)
-	var best := c
-	var best_d: int = 1 << 30
-	for y in range(1, map.height - 3):
-		for x in range(1, map.width - 1):
-			var ok: bool = true
-			for d: Vector2i in need:
-				var q := Vector2i(x, y) + d
-				if q.x < 0 or q.y < 0 or q.x >= map.width or q.y >= map.height or map.tiles[q.y * map.width + q.x] != Terrain.Kind.FIELD:
+	var no_water: Array[int] = [Terrain.Kind.WATER, Terrain.Kind.BRIDGE, Terrain.Kind.BRIDGE_DESTROYED]
+	# Щаблі від суворого до м'якого: юніти — на полі, довкола (`clear`) ні лісу, ні забудови, ні води (крони й стіни
+	# налазять на сусідню клітинку, а вода біля відділення — це вже не поле, і кадр міряв би тон на річці); далі
+	# дозволено ліс і забудову довкола; далі юніти й на дорозі. Вода довкола не дозволена ніколи.
+	var stages: Array = [[[Terrain.Kind.FIELD], no_water + [Terrain.Kind.FOREST, Terrain.Kind.BUILDING]],
+		[[Terrain.Kind.FIELD], no_water], [[Terrain.Kind.FIELD, Terrain.Kind.ROAD], no_water]]
+	if field_only:
+		stages.pop_back()
+	for stage: Array in stages:
+		var best := Vector2i(-1, -1)
+		var best_d: int = 1 << 30
+		for y in map.height:
+			for x in map.width:
+				var ok: bool = true
+				for d: Vector2i in need:
+					var q := Vector2i(x, y) + d
+					if q.x < 0 or q.y < 0 or q.x >= map.width or q.y >= map.height or not (map.tiles[q.y * map.width + q.x] in stage[0]):
+						ok = false
+				for d: Vector2i in clear:
+					var q := Vector2i(x, y) + d
+					if q.x >= 0 and q.y >= 0 and q.x < map.width and q.y < map.height and map.tiles[q.y * map.width + q.x] in stage[1]:
+						ok = false
+				if ok and near_forest:
+					# Поле з лісом за 3-4 клітинки: край лісу в кадрі разом із юнітами.
 					ok = false
-			# `clear`: клітинки без лісу й забудови (крони й стіни налазять на сусідню клітинку)
-			for d: Vector2i in clear:
-				var q := Vector2i(x, y) + d
-				if q.x >= 0 and q.y >= 0 and q.x < map.width and q.y < map.height \
-						and map.tiles[q.y * map.width + q.x] in [Terrain.Kind.FOREST, Terrain.Kind.BUILDING]:
-					ok = false
-			if ok and near_forest:
-				# Поле з лісом за 3-4 клітинки: край лісу в кадрі разом із юнітами.
-				ok = false
-				for fy in range(maxi(0, y - 4), mini(map.height, y + 5)):
-					for fx in range(maxi(0, x - 4), mini(map.width, x + 5)):
-						if map.tiles[fy * map.width + fx] == Terrain.Kind.FOREST and maxi(absi(fx - x), absi(fy - y)) >= 3:
-							ok = true
-			var dd: int = (x - c.x) * (x - c.x) + (y - c.y) * (y - c.y)
-			if ok and dd < best_d:
-				best_d = dd
-				best = Vector2i(x, y)
-	return best
+					for fy in range(maxi(0, y - 4), mini(map.height, y + 5)):
+						for fx in range(maxi(0, x - 4), mini(map.width, x + 5)):
+							if map.tiles[fy * map.width + fx] == Terrain.Kind.FOREST and maxi(absi(fx - x), absi(fy - y)) >= 3:
+								ok = true
+				var dd: int = (x - c.x) * (x - c.x) + (y - c.y) * (y - c.y)
+				if ok and dd < best_d:
+					best_d = dd
+					best = Vector2i(x, y)
+		if best.x >= 0:
+			return best
+	if field_only:
+		return Vector2i(-1, -1)
+	push_error("unit_shot: на карті нема поля під потрібні клітинки, беру середину")
+	return c
 
 
 ## Найближча до центру клітинка поля, праворуч і ліворуч від якої є ще по `half` клітинок поля (рядок завширшки 2*half + 1).
@@ -353,7 +398,7 @@ func _spots(screen: BattleScreen, map: MapData, out: String, tag: String) -> voi
 ## Місця для виміру контрасту (їх читає tools/unit_contrast_gate.py): до чотирьох клітинок на вид поверхні поля
 ## (дев'ять сусідів того самого виду; назви field0a.. — луг, field1a.. — рілля) і клітинки поля за два-три кроки від лісу
 ## з кожного боку (forestE2, forestN3 ...). Модель дивиться на північ; камера однакова в обох кадрах, хмарні тіні вимкнені.
-func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id: int, set_id: int) -> void:
+func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id: int, set_id: int, zoom: float = IsoCameraRig.MAX_ZOOM) -> void:
 	screen.setup(map, 2, 1)
 	var c := Vector2i(map.width / 2, map.height / 2)
 	var picks: Dictionary = {}
@@ -439,14 +484,23 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 		await get_tree().process_frame
 	# Хмарні тіні рухаються з часом: без заморозки кадри пари «з моделлю / без» різняться, а числа не повторюються.
 	RenderingServer.global_shader_parameter_set(&"cloud_shadow_strength", 0.0)
-	rig.zoom_by(IsoCameraRig.MAX_ZOOM / rig.zoom_level)
+	rig.zoom_by(zoom / rig.zoom_level)
 	for f in SETTLE_FRAMES * 3:
 		await get_tree().process_frame
 	print("UNIT gate zoom %.2f" % rig.zoom_level)
 	for cl: Array in cells:
 		var cell: Vector2i = cl[1]
-		var m: Node3D = UnitSilhouettes.build_merged(type_id, -1, set_id)
+		# Відділення таким, яким воно стоїть на початку матчу: штурмове — зі своїми трубами дрона.
+		var drones: int = int(UnitTypes.get_type(type_id).get("drones", 0))
+		var m: Node3D = UnitSilhouettes.build_merged(type_id, -1, set_id, drones)
 		_place(m, cell, 0)
+		# Крона над ним гасне так само, як над юнітом у грі: гейт міряє те, що бачить гравець.
+		# _shown_cells теж: екран сам пересилає їх дошці після перебудови юнітів, і перезаписав би наше.
+		screen._shown_cells.assign([cell])
+		screen._board_view.set_reveal_cells([cell] as Array[Vector2i], true)
+		if (UnitSilhouettes.spec(type_id, set_id).extras as Array).has(&"figures"):
+			# Відділення стоїть ступнями на основі 0,05 над своїм початком, а гра опускає його на `SQUAD_SINK`.
+			m.position.y -= UnitView.SQUAD_SINK
 		rig.center_on(cell)
 		for f in SETTLE_FRAMES * 2:
 			await get_tree().process_frame
@@ -459,10 +513,23 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 		flat.albedo_color = Color(1.0, 0.0, 1.0)
 		for mi: MeshInstance3D in m.find_children("*", "MeshInstance3D", true, false):
 			mi.material_override = flat
+		# Крізь розчинену крону (35 %) пурпур уже не чистий: на масці її не малюємо — маска позначає все,
+		# що гравець бачить крізь неї, а виміри однаково на кадрах із кроною.
+		var soft: Array[Node] = screen._board_view._forest._soft_nodes
+		for nd: Node in soft:
+			(nd as Node3D).visible = false
 		for f in 4:
 			await get_tree().process_frame
 		await RenderingServer.frame_post_draw
 		var mask: Image = get_viewport().get_texture().get_image()
+		for nd: Node in soft:
+			(nd as Node3D).visible = true
+		if cl == cells[0]:
+			var tris: int = 0
+			for mi: MeshInstance3D in m.find_children("*", "MeshInstance3D", true, false):
+				for si in mi.mesh.get_surface_count():
+					tris += (mi.mesh.surface_get_arrays(si)[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3
+			print("UNIT gate model type %d set %d drones %d: %d tris" % [type_id, set_id, drones, tris])
 		m.queue_free()
 		for f in 10:
 			await get_tree().process_frame
@@ -499,6 +566,445 @@ func _spin(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 	for s: Array in shots:
 		(s[1] as Image).save_png(s[0])
 	print("UNIT spin %s type %d at %s: %d frames" % [tag, type_id, cell, shots.size()])
+	get_tree().quit()
+
+
+## Шостий аргумент squads: справжні відділення. Верхній ряд — стрілецьке, штурмове з двома дронами, стрілецьке й штурмове
+## з одним (чи розрізняються формою на найдальшому зумі); середній — стрілецьке з 3, 2 і 1 стоячою фігурою та знищене;
+## нижній — відділення, у яке влучили тричі, поки воно двічі йшло на тайл праворуч: тіла на трьох тайлах. Кадри _z6, _z8, _z20.
+func _squads(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
+	var m: MapData = map.duplicate(true)
+	m.take_over_path(map.resource_path)
+	# Ряди через один; карта без такої ділянки поля (River) — ряди впритул, але теж на полі, не на дорозі.
+	var c := Vector2i(-1, -1)
+	var step: int = 2
+	for st: int in [2, 1]:
+		var cells: Array[Vector2i] = []
+		var around: Array[Vector2i] = []
+		for col in 4:
+			for row in 3:
+				cells.append(Vector2i(col - 1, row * st))
+		cells.append(Vector2i(-2, 0))
+		for dx in range(-3, 4):
+			for dy in range(-2, 2 * st + 2):
+				around.append(Vector2i(dx, dy))
+		c = _field_near_centre(m, false, cells, around, true)
+		step = st
+		if c.x >= 0:
+			break
+	if c.x < 0:
+		push_error("unit_shot: на карті нема поля під відділення, беру середину")
+		c = Vector2i(m.width / 2, m.height / 2)
+	m.spawns = []
+	for col in 4:
+		m.spawns.append({"type_id": col % 2, "owner": 0, "pos": c + Vector2i(col - 1, 0), "facing": [0, 0, 6, 6][col]})
+	for col in 4:
+		m.spawns.append({"type_id": 0, "owner": 0, "pos": c + Vector2i(col - 1, step), "facing": 1})
+	m.spawns.append({"type_id": 1, "owner": 0, "pos": c + Vector2i(-1, 2 * step), "facing": 2})
+	# середній танк набору 0 поруч зі стрілецьким: нація читається тоном, тож тон бійця й техніки порівнюють поруч
+	m.spawns.append({"type_id": 5, "owner": 0, "pos": c + Vector2i(-2, 0), "facing": 0})
+	for sp: Dictionary in m.spawns:
+		var q: Vector2i = sp["pos"]
+		print("UNIT spawn type %d at %s on %s" % [sp["type_id"], q, Terrain.Kind.keys()[m.tiles[q.y * m.width + q.x]]])
+	screen.setup(m, 2, 1)
+	var state: BattleState = MatchService.state
+	for u: Unit in state.alive_units():
+		var col: int = u.pos.x - c.x + 1
+		if u.pos.y == c.y and col == 3:
+			u.drones_left = 1
+		elif u.pos.y == c.y + step:
+			# 3, 2, 1 стоячі й знищене: HP на межі чверті, як рахує правило фігур
+			u.hp = [u.max_hp() * 3 / 4, u.max_hp() / 2, u.max_hp() / 4, 0][col]
+			Casualties.record(state, u, u.max_hp())
+		elif u.pos.y == c.y + 2 * step:
+			# той самий шлях, що й у грі: влучання записує тіла на тайлі, де відділення стоїть у цю мить
+			for hit in 3:
+				var before: int = u.hp
+				u.hp = u.max_hp() * (3 - hit) / 4
+				Casualties.record(state, u, before)
+				if hit < 2:
+					u.pos += Vector2i(1, 0)
+	state.refresh_vision_all()
+	screen._rebuild_units_for_active_player(true)
+	screen._rebuild_wrecks()
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	for f in SETTLE_FRAMES:
+		await get_tree().process_frame
+	rig.center_on(c + Vector2i(0, step / 2))
+	var shots: Dictionary = {}
+	for z: float in [IsoCameraRig.MIN_ZOOM, 8.0, IsoCameraRig.MAX_ZOOM]:
+		rig.zoom_by(z / rig.zoom_level)
+		for f in SETTLE_FRAMES * 2:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		shots["%s/%s_z%d.png" % [out, tag, int(z)]] = get_viewport().get_texture().get_image()
+		# Екранні точки для вимірювання тонів (tools поза грою): тип, HP-ряд, тайл і проєкція його середини.
+		var cam: Camera3D = get_viewport().get_camera_3d()
+		for u: Unit in state.units.values():
+			var sp: Vector2 = cam.unproject_position(Vector3(u.pos.x, 0.08, u.pos.y))
+			print("MEAS z%d type %d hp %d pos %s px %d %d" % [int(z), u.type_id, u.hp, u.pos, sp.x, sp.y])
+		for b: Casualties.Body in state.bodies:
+			var bp: Vector2 = cam.unproject_position(Vector3(b.pos.x, 0.03, b.pos.y))
+			print("MEAS z%d body %d pos %s px %d %d" % [int(z), b.count, b.pos, bp.x, bp.y])
+		# Пари для маски вимірювання: той самий кадр без юнітів і без тіл — різниця є рівно фігури й тіла.
+		if z != 8.0:
+			for v: UnitView in screen._unit_views.values():
+				for n: Node3D in [v._hp_bar, v._hp_label, v._drone_icon]:
+					n.visible = false
+			await RenderingServer.frame_post_draw
+			await RenderingServer.frame_post_draw
+			shots["%s/%s_z%d_noui.png" % [out, tag, int(z)]] = get_viewport().get_texture().get_image()
+			for v: Node3D in screen._unit_views.values():
+				v.visible = false
+			screen._contacts.visible = false
+			await RenderingServer.frame_post_draw
+			await RenderingServer.frame_post_draw
+			shots["%s/%s_z%d_nounits.png" % [out, tag, int(z)]] = get_viewport().get_texture().get_image()
+			for v: UnitView in screen._unit_views.values():
+				v.visible = true
+				v._hp_bar.visible = true
+				v._hp_label.visible = true
+				v._drone_icon.visible = v._drones_left > 0
+			screen._contacts.visible = true
+			for mi: MultiMeshInstance3D in screen._wreck_layer.fallen_meshes():
+				mi.visible = false
+			await RenderingServer.frame_post_draw
+			await RenderingServer.frame_post_draw
+			shots["%s/%s_z%d_nobodies.png" % [out, tag, int(z)]] = get_viewport().get_texture().get_image()
+			# Силует тіл суцільним пурпуром без світла: вимірюється лише тканина, а не тінь і пляма під тілом.
+			var flat := StandardMaterial3D.new()
+			flat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			flat.albedo_color = Color(1.0, 0.0, 1.0)
+			var mats: Array[Material] = []
+			for mi: MultiMeshInstance3D in screen._wreck_layer.fallen_meshes():
+				mats.append(mi.material_override)
+				mi.material_override = flat
+				mi.visible = true
+			await RenderingServer.frame_post_draw
+			await RenderingServer.frame_post_draw
+			shots["%s/%s_z%d_bodymask.png" % [out, tag, int(z)]] = get_viewport().get_texture().get_image()
+			var k: int = 0
+			for mi: MultiMeshInstance3D in screen._wreck_layer.fallen_meshes():
+				mi.material_override = mats[k]
+				k += 1
+			await RenderingServer.frame_post_draw
+		if z == IsoCameraRig.MIN_ZOOM:
+			# Той самий кадр без тіні-контакту: різниця пари — рівно те, на скільки пляма темнить ґрунт.
+			var strength: float = WeatherRig.unit_contact
+			RenderingServer.global_shader_parameter_set(&"unit_contact_shadow", 0.0)
+			for f in 6:
+				await get_tree().process_frame
+			await RenderingServer.frame_post_draw
+			shots["%s/%s_z%d_nocontact.png" % [out, tag, int(z)]] = get_viewport().get_texture().get_image()
+			RenderingServer.global_shader_parameter_set(&"unit_contact_shadow", strength)
+	# Слід відділення окремо: тіла на трьох тайлах нижнього ряду.
+	rig.center_on(c + Vector2i(0, 2 * step))
+	for z: float in [IsoCameraRig.MIN_ZOOM, IsoCameraRig.MAX_ZOOM]:
+		rig.zoom_by(z / rig.zoom_level)
+		for f in SETTLE_FRAMES:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		shots["%s/%s_trail_z%d.png" % [out, tag, int(z)]] = get_viewport().get_texture().get_image()
+	for path: String in shots:
+		(shots[path] as Image).save_png(path)
+	print("UNIT squads at %s" % c)
+	get_tree().quit()
+
+
+## Шостий аргумент squads_forest: стрілецьке відділення на тайлі лісу (крона над ним гасне) і штурмове на полі поруч,
+## з того боку лісу, куди падає тінь від сонця (у тіні крон). Кадри _forest_z6 і _forest_z20.
+## Шостий аргумент walk: стрілецьке відділення йде на схід два тайли, тоді на південь три (вигляд, move_along
+## як у грі), на зумі 8. Кадри _walk_start (стоїть на схід) і _walk_mid (посеред південної ділянки: бійці
+## мусять дивитись на південь, а не тримати схід до кінця шляху).
+func _walk(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
+	var m: MapData = map.duplicate(true)
+	m.take_over_path(map.resource_path)
+	var need: Array[Vector2i] = [Vector2i.ZERO, Vector2i(1, 0), Vector2i(2, 0), Vector2i(2, 1), Vector2i(2, 2), Vector2i(2, 3)]
+	var c: Vector2i = _field_near_centre(m, false, need)
+	m.spawns = [{"type_id": 0, "owner": 0, "pos": c, "facing": 2}]
+	screen.setup(m, 2, 1)
+	var view: UnitView = screen._unit_views[MatchService.state.unit_at(c).id]
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	rig.center_on(c + Vector2i(1, 1))
+	rig.zoom_by(8.0 / rig.zoom_level)
+	for f in SETTLE_FRAMES * 2:
+		await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	var start: Image = get_viewport().get_texture().get_image()
+	var path: Array[Vector2i] = [c + Vector2i(1, 0), c + Vector2i(2, 0), c + Vector2i(2, 1), c + Vector2i(2, 2), c + Vector2i(2, 3)]
+	view.move_along(path, 0.6)
+	var mid: Image = null
+	var t0: int = Time.get_ticks_msec()
+	while mid == null and Time.get_ticks_msec() - t0 < 8000:
+		await RenderingServer.frame_post_draw
+		if IsoCameraRig.world_to_cell(view.position) == c + Vector2i(2, 2):
+			mid = get_viewport().get_texture().get_image()
+			print("UNIT walk mid: rotation %.1f°, figures built for bucket %d" % [view.rotation_degrees.y, view._built_face])
+	start.save_png("%s/%s_walk_start.png" % [out, tag])
+	if mid != null:
+		mid.save_png("%s/%s_walk_mid.png" % [out, tag])
+	print("UNIT walk at %s" % c)
+	get_tree().quit()
+
+
+## Вісім відділень на полі, кожне на своєму з 8 напрямів (стрілецьке й штурмове з двома дронами через одне):
+## жодні двоє бійців не стоять один за одним уздовж погляду на жодному напрямі. Наближення й віддалення.
+func _facings(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
+	var m: MapData = map.duplicate(true)
+	m.take_over_path(map.resource_path)
+	var cells: Array[Vector2i] = []
+	var around: Array[Vector2i] = []
+	for col in 4:
+		for row in 2:
+			cells.append(Vector2i(col - 1, row))
+	for dx in range(-2, 4):
+		for dy in range(-1, 3):
+			around.append(Vector2i(dx, dy))
+	var c: Vector2i = _field_near_centre(m, false, cells, around, true)
+	if c.x < 0:
+		c = _field_near_centre(m, false, cells)
+	m.spawns = []
+	for f in 8:
+		m.spawns.append({"type_id": f % 2, "owner": 0, "pos": c + Vector2i(f % 4 - 1, f / 4), "facing": f})
+	screen.setup(m, 2, 1)
+	for u: Unit in MatchService.state.alive_units():
+		if u.type_id == 1:
+			u.drones_left = 2
+	MatchService.state.refresh_vision_all()
+	screen._rebuild_units_for_active_player(true)
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	for f in SETTLE_FRAMES:
+		await get_tree().process_frame
+	rig.center_on(c + Vector2i(0, 0))
+	var shots: Dictionary = {}
+	for z: float in [IsoCameraRig.MIN_ZOOM, IsoCameraRig.MAX_ZOOM]:
+		rig.zoom_by(z / rig.zoom_level)
+		for f in SETTLE_FRAMES * 2:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		shots["%s/%s_facings_z%d.png" % [out, tag, int(z)]] = get_viewport().get_texture().get_image()
+		var cam: Camera3D = get_viewport().get_camera_3d()
+		for u: Unit in MatchService.state.units.values():
+			var sp: Vector2 = cam.unproject_position(Vector3(u.pos.x, 0.08, u.pos.y))
+			print("UNIT z%d facing %d type %d at %s px %d,%d" % [int(z), u.facing, u.type_id, u.pos, int(sp.x), int(sp.y)])
+	for path: String in shots:
+		(shots[path] as Image).save_png(path)
+	get_tree().quit(0)
+
+
+func _squads_forest(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
+	var m: MapData = map.duplicate(true)
+	m.take_over_path(map.resource_path)
+	var c := Vector2i(m.width / 2, m.height / 2)
+	# Напрям сонця відомий лише після setup(): відділення ставляться спершу будь-де, потім переставляються.
+	var spots: Array[Vector2i] = []
+	for y in range(2, m.height - 2):
+		for x in range(2, m.width - 2):
+			if m.tiles[y * m.width + x] == Terrain.Kind.FIELD and spots.size() < 2:
+				spots.append(Vector2i(x, y))
+	m.spawns = [
+		{"type_id": 0, "owner": 0, "pos": spots[0], "facing": 0},
+		{"type_id": 1, "owner": 0, "pos": spots[1], "facing": 2},
+	]
+	screen.setup(m, 2, 1)
+	var shade := Vector2i(1, 0)
+	var best_dot: float = -INF
+	for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		if Vector2(d).dot(WeatherRig.sun_ground) > best_dot:
+			best_dot = Vector2(d).dot(WeatherRig.sun_ground)
+			shade = d
+	var forest := Vector2i(-1, -1)
+	for y in range(2, m.height - 2):
+		for x in range(2, m.width - 2):
+			var f := Vector2i(x, y)
+			var n: Vector2i = f + shade
+			if m.tiles[y * m.width + x] == Terrain.Kind.FOREST and m.tiles[n.y * m.width + n.x] == Terrain.Kind.FIELD:
+				if forest.x < 0 or (f - c).length_squared() < (forest - c).length_squared():
+					forest = f
+	var state: BattleState = MatchService.state
+	state.unit_at(spots[0]).pos = forest
+	state.unit_at(spots[1]).pos = forest + shade
+	state.refresh_vision_all()
+	screen._rebuild_units_for_active_player(true)
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	for f in SETTLE_FRAMES:
+		await get_tree().process_frame
+	rig.center_on(forest)
+	var shots: Dictionary = {}
+	for z: float in [IsoCameraRig.MIN_ZOOM, IsoCameraRig.MAX_ZOOM]:
+		rig.zoom_by(z / rig.zoom_level)
+		for f in SETTLE_FRAMES * 2:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		shots["%s/%s_forest_z%d.png" % [out, tag, int(z)]] = get_viewport().get_texture().get_image()
+	for path: String in shots:
+		(shots[path] as Image).save_png(path)
+	print("UNIT squads_forest at %s, shade side %s" % [forest, shade])
+	get_tree().quit()
+
+
+## Шостий аргумент squad_bridge [standing=N]: стрілецьке відділення на мосту, у якого лишилось N стоячих (типово
+## знищене), і живе поруч на березі. Кадри _bridge_z6 і _bridge_z20 (з N > 0 — _bridge_sN_z6 і _bridge_sN_z20).
+func _squad_bridge(screen: BattleScreen, map: MapData, out: String, tag: String, standing: int = 0) -> void:
+	var m: MapData = map.duplicate(true)
+	m.take_over_path(map.resource_path)
+	var bridge := Vector2i(-1, -1)
+	var c := Vector2i(m.width / 2, m.height / 2)
+	for y in m.height:
+		for x in m.width:
+			var p := Vector2i(x, y)
+			if m.tiles[y * m.width + x] == Terrain.Kind.BRIDGE and (bridge.x < 0 or (p - c).length_squared() < (bridge - c).length_squared()):
+				bridge = p
+	# живе відділення — на найближчому до мосту полі, не на ньому самому
+	var bank := Vector2i(-1, -1)
+	for y in m.height:
+		for x in m.width:
+			var q := Vector2i(x, y)
+			if m.tiles[y * m.width + x] == Terrain.Kind.FIELD and (bank.x < 0 or (q - bridge).length_squared() < (bank - bridge).length_squared()):
+				bank = q
+	m.spawns = [
+		{"type_id": 0, "owner": 0, "pos": bridge, "facing": 0},
+		{"type_id": 1, "owner": 0, "pos": bank, "facing": 2},
+	]
+	screen.setup(m, 2, 1)
+	var state: BattleState = MatchService.state
+	var dead: Unit = state.unit_at(bridge)
+	var before: int = dead.hp
+	dead.hp = dead.max_hp() * standing / 4
+	Casualties.record(state, dead, before)
+	state.refresh_vision_all()
+	screen._rebuild_units_for_active_player(true)
+	screen._rebuild_wrecks()
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	for f in SETTLE_FRAMES:
+		await get_tree().process_frame
+	rig.center_on(bridge)
+	var shots: Dictionary = {}
+	for z: float in [IsoCameraRig.MIN_ZOOM, IsoCameraRig.MAX_ZOOM]:
+		rig.zoom_by(z / rig.zoom_level)
+		for f in SETTLE_FRAMES * 2:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		var name: String = "bridge" if standing == 0 else "bridge_s%d" % standing
+		shots["%s/%s_%s_z%d.png" % [out, tag, name, int(z)]] = get_viewport().get_texture().get_image()
+	for path: String in shots:
+		(shots[path] as Image).save_png(path)
+	_print_deck(screen, m.to_board(), bridge)
+	print("UNIT squad_bridge at %s" % bridge)
+	get_tree().quit()
+
+
+## Видимі середини тіл на мосту `bridge`: убік — частка чистої ширини настилу (0 — один поручень, 1 — другий),
+## уздовж — тайли від середини клітинки.
+func _print_deck(screen: BattleScreen, board: Board, bridge: Vector2i) -> void:
+	var along_z: bool = WreckLayer._is_water(board, bridge + Vector2i(1, 0)) or WreckLayer._is_water(board, bridge + Vector2i(-1, 0))
+	var along := Vector3(0.0, 0.0, 1.0) if along_z else Vector3(1.0, 0.0, 0.0)
+	var across := Vector3(along.z, 0.0, along.x)
+	var half: float = WreckLayer.BODY_DECK_HALF_ROAD
+	var rows: Array = []
+	for xf: Transform3D in screen._wreck_layer.body_transforms():
+		var rel: Vector3 = WreckLayer.body_centre(xf) - Vector3(bridge.x, 0.0, bridge.y)
+		if absf(rel.dot(along)) > 0.5 or absf(rel.dot(across)) > 0.5:
+			continue
+		rows.append([rel.dot(along), (rel.dot(across) + half) / (half * 2.0)])
+	rows.sort_custom(func(p: Array, q: Array) -> bool: return p[0] < q[0])
+	for r: Array in rows:
+		print("UNIT deck body along %.3f across %.2f of clear width" % [r[0], r[1]])
+
+
+## Шостий аргумент bridge_seq: стрілецьке відділення на мосту падає 100 → 75 → 50 → 25 трьома влучаннями; кадр на
+## зумі 6 після кожного (_seq_75, _seq_50, _seq_25) — раніші тіла мусять лишатися на місці.
+func _bridge_seq(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
+	var m: MapData = map.duplicate(true)
+	m.take_over_path(map.resource_path)
+	var bridge := Vector2i(-1, -1)
+	var c := Vector2i(m.width / 2, m.height / 2)
+	for y in m.height:
+		for x in m.width:
+			var p := Vector2i(x, y)
+			if m.tiles[y * m.width + x] == Terrain.Kind.BRIDGE and (bridge.x < 0 or (p - c).length_squared() < (bridge - c).length_squared()):
+				bridge = p
+	m.spawns = [{"type_id": 0, "owner": 0, "pos": bridge, "facing": 0}]
+	screen.setup(m, 2, 1)
+	var state: BattleState = MatchService.state
+	var u: Unit = state.unit_at(bridge)
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	rig.center_on(bridge)
+	rig.zoom_by(IsoCameraRig.MIN_ZOOM / rig.zoom_level)
+	var shots: Dictionary = {}
+	for left in [3, 2, 1]:
+		var before: int = u.hp
+		u.hp = u.max_hp() * left / 4
+		Casualties.record(state, u, before)
+		state.refresh_vision_all()
+		screen._rebuild_units_for_active_player(true)
+		screen._rebuild_wrecks()
+		for f in SETTLE_FRAMES * 2:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		shots["%s/%s_seq_%d.png" % [out, tag, left * 25]] = get_viewport().get_texture().get_image()
+		print("UNIT seq hp %d" % u.hp)
+		_print_deck(screen, m.to_board(), bridge)
+	for path: String in shots:
+		(shots[path] as Image).save_png(path)
+	print("UNIT bridge_seq at %s" % bridge)
+	get_tree().quit()
+
+
+## Шостий аргумент shore: два стрілецькі відділення на полі над водою (сусід по ребру — вода), одне з трьома стоячими,
+## друге з одним; тіла тих, хто впав, — поруч. Кадри _shore_z6 і _shore_z20: жодне тіло не заходить у воду й не
+## лягає під ноги стоячому.
+func _shore(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
+	var m: MapData = map.duplicate(true)
+	m.take_over_path(map.resource_path)
+	var c := Vector2i(m.width / 2, m.height / 2)
+	var shores: Array[Vector2i] = []
+	for y in range(1, m.height - 1):
+		for x in range(1, m.width - 1):
+			var p := Vector2i(x, y)
+			if m.tiles[y * m.width + x] != Terrain.Kind.FIELD:
+				continue
+			for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+				if m.tiles[(p + d).y * m.width + (p + d).x] == Terrain.Kind.WATER:
+					shores.append(p)
+					break
+	shores.sort_custom(func(p: Vector2i, q: Vector2i) -> bool: return (p - c).length_squared() < (q - c).length_squared())
+	var first: Vector2i = shores[0]
+	var second := Vector2i(-1, -1)
+	for q: Vector2i in shores:
+		var d: Vector2i = q - first
+		if maxi(absi(d.x), absi(d.y)) == 2:
+			second = q
+			break
+	m.spawns = [{"type_id": 0, "owner": 0, "pos": first, "facing": 2}]
+	if second.x >= 0:
+		m.spawns.append({"type_id": 0, "owner": 0, "pos": second, "facing": 6})
+	screen.setup(m, 2, 1)
+	var state: BattleState = MatchService.state
+	var left: Array[int] = [3, 1]
+	var k: int = 0
+	for u: Unit in state.alive_units():
+		var before: int = u.hp
+		u.hp = u.max_hp() * left[k % 2] / 4
+		Casualties.record(state, u, before)
+		k += 1
+	state.refresh_vision_all()
+	screen._rebuild_units_for_active_player(true)
+	screen._rebuild_wrecks()
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	for f in SETTLE_FRAMES:
+		await get_tree().process_frame
+	rig.center_on(first)
+	var shots: Dictionary = {}
+	for z: float in [IsoCameraRig.MIN_ZOOM, IsoCameraRig.MAX_ZOOM]:
+		rig.zoom_by(z / rig.zoom_level)
+		for f in SETTLE_FRAMES * 2:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		shots["%s/%s_shore_z%d.png" % [out, tag, int(z)]] = get_viewport().get_texture().get_image()
+	for path: String in shots:
+		(shots[path] as Image).save_png(path)
+	print("UNIT shore at %s and %s" % [first, second])
 	get_tree().quit()
 
 
@@ -550,4 +1056,218 @@ func _rear(screen: BattleScreen, map: MapData, out: String, tag: String, set_id:
 		for f in 6:
 			await get_tree().process_frame
 	print("UNIT rear set %d at %s" % [set_id, c])
+	get_tree().quit()
+
+
+## Шостий аргумент forest_n2: справжнє стрілецьке відділення на клітинці гейту forestN2 (поле, ліс за два кроки
+## на північ; на Ridge між ним і камерою — ліс на сусідній клітинці, і його крони гаснуть, як у грі) і виділене штурмове з двома
+## дронами (значок біля золотого контуру зони). Кадри _n2_z6, _n2_z20. Далі — ворожий бік: живе відділення
+## в лісі й тіла знищеного на полі поруч, обидва поза розвіданим глядача: крона над ворогом не гасне, тіл нема.
+## Кадри _hidden_z6, _hidden_z20.
+func _forest_n2(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
+	var m: MapData = map.duplicate(true)
+	m.take_over_path(map.resource_path)
+	var c := Vector2i(m.width / 2, m.height / 2)
+	var kind := func(q: Vector2i) -> int:
+		return m.tiles[q.y * m.width + q.x] if q.x >= 0 and q.y >= 0 and q.x < m.width and q.y < m.height else -1
+	var n2 := Vector2i(-1, -1)
+	for y in range(4, m.height - 4):
+		for x in range(4, m.width - 4):
+			var p := Vector2i(x, y)
+			if kind.call(p) == Terrain.Kind.FIELD and kind.call(p + Vector2i(0, -1)) == Terrain.Kind.FIELD \
+					and kind.call(p + Vector2i(0, -2)) == Terrain.Kind.FOREST and kind.call(p + Vector2i(0, 1)) == Terrain.Kind.FIELD:
+				if n2.x < 0 or (p - c).length_squared() < (n2 - c).length_squared():
+					n2 = p
+	# ворог: лісова клітинка з полем поруч, щонайменше за 12 клітинок від відділень глядача (поза їхнім оглядом)
+	var hide := Vector2i(-1, -1)
+	var field := Vector2i(-1, -1)
+	for y in range(3, m.height - 3):
+		for x in range(3, m.width - 3):
+			var p := Vector2i(x, y)
+			if kind.call(p) != Terrain.Kind.FOREST or absi(p.x - n2.x) + absi(p.y - n2.y) < 12:
+				continue
+			for d: Vector2i in [Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(0, -1)]:
+				if kind.call(p + d) == Terrain.Kind.FIELD and hide.x < 0:
+					hide = p
+					field = p + d
+	var side := Vector2i(0, 1)
+	for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0)]:
+		if kind.call(n2 + d) == Terrain.Kind.FIELD:
+			side = d
+			break
+	m.spawns = [
+		{"type_id": 0, "owner": 0, "pos": n2, "facing": 0},
+		{"type_id": 1, "owner": 0, "pos": n2 + side, "facing": 2},
+		{"type_id": 0, "owner": 1, "pos": hide, "facing": 4},
+		{"type_id": 0, "owner": 1, "pos": field, "facing": 4},
+	]
+	screen.setup(m, 2, 1)
+	var state: BattleState = MatchService.state
+	var dead: Unit = state.unit_at(field)
+	var before: int = dead.hp
+	dead.hp = 0
+	Casualties.record(state, dead, before)
+	state.refresh_vision_all()
+	screen._rebuild_units_for_active_player(true)
+	screen._rebuild_wrecks()
+	var assault: Unit = state.unit_at(n2 + side)
+	(screen.get("_controller") as InputController).select_unit(assault)
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	for f in SETTLE_FRAMES:
+		await get_tree().process_frame
+	var shots: Dictionary = {}
+	for place: Array in [["n2", n2], ["hidden", hide]]:
+		rig.center_on(place[1])
+		for z: float in [IsoCameraRig.MIN_ZOOM, 8.0, IsoCameraRig.MAX_ZOOM]:
+			rig.zoom_by(z / rig.zoom_level)
+			for f in SETTLE_FRAMES * 2:
+				await get_tree().process_frame
+			await RenderingServer.frame_post_draw
+			shots["%s/%s_%s_z%d.png" % [out, tag, place[0], int(z)]] = get_viewport().get_texture().get_image()
+			if place[0] == "n2" and z == IsoCameraRig.MIN_ZOOM:
+				# пара для виміру прозорості: крон нема, запечена тінь лісу на ґрунті лишається
+				var fl: ForestLayer = screen._board_view._forest
+				var hidden: Array[Node3D] = []
+				for ch: Node in fl.get_children():
+					if ch is Node3D and (ch as Node3D).visible and ch.name != &"Forest_Shadow":
+						(ch as Node3D).visible = false
+						hidden.append(ch)
+				await RenderingServer.frame_post_draw
+				await RenderingServer.frame_post_draw
+				shots["%s/%s_n2_z6_nocrowns.png" % [out, tag]] = get_viewport().get_texture().get_image()
+				for ch: Node3D in hidden:
+					ch.visible = true
+				await RenderingServer.frame_post_draw
+			if place[0] == "n2" and z < 9.0:
+				await _ab_pair(screen, shots, "%s/%s_n2_z%d" % [out, tag, int(z)])
+	for path: String in shots:
+		(shots[path] as Image).save_png(path)
+	print("UNIT forest_n2 at %s, enemy hidden at %s (seen %s), bodies at %s (seen %s, shown %s)" % [n2, hide,
+			state.vision[0].is_seen(hide), field, state.vision[0].is_seen(field), state.bodies[0].shown_to(0)])
+	get_tree().quit()
+
+
+## Шостий аргумент fall: танк стріляє в сусіднє стрілецьке відділення справжньою командою (програвач подій як у грі),
+## кадри кожні 0,1 с упродовж 2 с на зумі 8 — бійці падають з реальною швидкістю. Кадри _fall_00.._fall_19.
+func _fall(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
+	var m: MapData = map.duplicate(true)
+	m.take_over_path(map.resource_path)
+	var need: Array[Vector2i] = [Vector2i.ZERO, Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1), Vector2i(2, 0)]
+	var c := _field_near_centre(m, false, need, [Vector2i(-1, -1), Vector2i(0, -1), Vector2i(1, -1), Vector2i(-1, -2), Vector2i(0, -2)])
+	m.spawns = [
+		{"type_id": 5, "owner": 0, "pos": c + Vector2i(-1, 0), "facing": 2},
+		{"type_id": 0, "owner": 1, "pos": c, "facing": 6},
+	]
+	screen.setup(m, 2, 1)
+	var state: BattleState = MatchService.state
+	var tank: Unit = state.unit_at(c + Vector2i(-1, 0))
+	var squad: Unit = state.unit_at(c)
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	rig.center_on(c)
+	rig.zoom_by(8.0 / rig.zoom_level)
+	for f in SETTLE_FRAMES * 2:
+		await get_tree().process_frame
+	# дві фігури стоять (30 HP), тож постріл танка валить щонайменше одну
+	squad.hp = 30
+	screen._rebuild_units_for_active_player(true)
+	for f in SETTLE_FRAMES:
+		await get_tree().process_frame
+	var hp0: int = squad.hp
+	print("UNIT fall submit '%s'" % MatchService.submit(FireCommand.create(tank.id, squad.id)))
+	var t0: int = Time.get_ticks_msec()
+	# кожен кадр першої секунди: перекидання триває 0,2 с, і лише так воно видне на справжній швидкості
+	var frames: Array[Image] = []
+	var stamps: Array[int] = []
+	while Time.get_ticks_msec() - t0 < 1000:
+		await RenderingServer.frame_post_draw
+		frames.append(get_viewport().get_texture().get_image())
+		stamps.append(Time.get_ticks_msec() - t0)
+	# між перекиданням і тим, як пил улігся: тіло має лишатися там, де скінчилось перекидання
+	var later: Dictionary = {}
+	for ms: int in [1500, 2000, 2500, 3000]:
+		while Time.get_ticks_msec() - t0 < ms:
+			await RenderingServer.frame_post_draw
+		later[ms] = get_viewport().get_texture().get_image()
+	# пил улігся: кадр через 3,5 с після пострілу
+	while Time.get_ticks_msec() - t0 < 3500:
+		await RenderingServer.frame_post_draw
+	var settled: Image = get_viewport().get_texture().get_image()
+	for ms: int in later:
+		(later[ms] as Image).save_png("%s/%s_fall_t%02d.png" % [out, tag, ms / 100])
+	for i in frames.size():
+		frames[i].save_png("%s/%s_fall_%03d.png" % [out, tag, i])
+	print("UNIT fall frame times ms %s" % [stamps])
+	settled.save_png("%s/%s_fall_35.png" % [out, tag])
+	print("UNIT fall at %s: hp %d -> %d, figures %d -> %d" % [c, hp0, squad.hp, Casualties.figures(hp0, squad.max_hp()), Casualties.figures(squad.hp, squad.max_hp())])
+	get_tree().quit()
+
+
+## Пара для порівняння на поточному зумі: `<base>_nofade` (крони не гаснуть) і `<base>_noforest` (лісу нема);
+## потім усе як було.
+func _ab_pair(screen: BattleScreen, shots: Dictionary, base: String) -> void:
+	var bv: BoardView = screen._board_view
+	var keep: Array[Vector2i] = bv._forest._reveal.duplicate()
+	bv.set_reveal_cells([] as Array[Vector2i], true)
+	for f in 6:
+		await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	shots[base + "_nofade.png"] = get_viewport().get_texture().get_image()
+	bv._forest.visible = false
+	await RenderingServer.frame_post_draw
+	await RenderingServer.frame_post_draw
+	shots[base + "_noforest.png"] = get_viewport().get_texture().get_image()
+	bv._forest.visible = true
+	bv.set_reveal_cells(keep, true)
+	for f in 6:
+		await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+
+
+## Шостий аргумент forest_deep: штурмове відділення (значок дронів) на клітинці лісу, довкола якої на дві
+## клітинки ліс (якщо такої нема — на одну). Кадри _deep_z6, _deep_z8, _deep_z20 і на зумах 6 і 8 пари для порівняння:
+## _nofade (крона не гасне) і _noforest (лісу нема).
+func _forest_deep(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
+	var m: MapData = map.duplicate(true)
+	m.take_over_path(map.resource_path)
+	var c := Vector2i(m.width / 2, m.height / 2)
+	var deep := Vector2i(-1, -1)
+	# ліс на дві клітинки довкола, а якщо такого нема — хоч на одну
+	for ring in [2, 1]:
+		for y in range(ring, m.height - ring):
+			for x in range(ring, m.width - ring):
+				var ok: bool = true
+				for dy in range(-ring, ring + 1):
+					for dx in range(-ring, ring + 1):
+						if m.tiles[(y + dy) * m.width + x + dx] != Terrain.Kind.FOREST:
+							ok = false
+				var p := Vector2i(x, y)
+				if ok and (deep.x < 0 or (p - c).length_squared() < (deep - c).length_squared()):
+					deep = p
+		if deep.x >= 0:
+			break
+	if deep.x < 0:
+		push_error("unit_shot: на карті нема клітинки глибоко в лісі")
+		get_tree().quit()
+		return
+	m.spawns = [{"type_id": 1, "owner": 0, "pos": deep, "facing": 2}]
+	screen.setup(m, 2, 1)
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	for f in SETTLE_FRAMES:
+		await get_tree().process_frame
+	rig.center_on(deep)
+	var shots: Dictionary = {}
+	for z: float in [IsoCameraRig.MIN_ZOOM, 8.0, IsoCameraRig.MAX_ZOOM]:
+		rig.zoom_by(z / rig.zoom_level)
+		for f in SETTLE_FRAMES * 2:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		shots["%s/%s_deep_z%d.png" % [out, tag, int(z)]] = get_viewport().get_texture().get_image()
+	for z: float in [IsoCameraRig.MIN_ZOOM, 8.0]:
+		rig.zoom_by(z / rig.zoom_level)
+		for f in SETTLE_FRAMES * 2:
+			await get_tree().process_frame
+		await _ab_pair(screen, shots, "%s/%s_deep_z%d" % [out, tag, int(z)])
+	for path: String in shots:
+		(shots[path] as Image).save_png(path)
+	print("UNIT forest_deep at %s" % deep)
 	get_tree().quit()

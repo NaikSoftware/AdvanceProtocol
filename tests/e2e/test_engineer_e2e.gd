@@ -77,7 +77,6 @@ func test_demolish_bridge_with_enemy_on_it() -> void:
 	await _e2e.engineer_act(ENG, A.DEMOLISH_BRIDGE, TARGET)
 	assert_eq(_state().board.kind_at(TARGET), Terrain.Kind.BRIDGE_DESTROYED)
 	assert_false(victim.is_alive())
-	assert_eq(_state().damage_dealt[0], 100)
 	assert_eq(_board_view().kind_at(TARGET), Terrain.Kind.BRIDGE_DESTROYED, "дошку перебудовано на BridgeChanged")
 	assert_eq(_e2e.events_of(Events.BridgeChanged).size(), 1)
 
@@ -93,8 +92,8 @@ func test_demolish_refused_with_own_unit_on_bridge() -> void:
 	var eng: Unit = _state().unit_at(eng_pos)
 	_e2e.tap(eng_pos)
 	_e2e.press(_e2e.engineer_panel().button_for(A.DEMOLISH_BRIDGE))
+	assert_eq(_toast_text(), tr("ERR_TILE_OCCUPIED"))
 	await _e2e.settle()
-	assert_eq((_e2e.engineer_panel().get_node("%ReasonLabel") as Label).text, tr("ERR_TILE_OCCUPIED"))
 	assert_eq(_board_view().contour_segments(BoardView.LAYER_TARGETS), [], "нічого не озброєно")
 	assert_eq(_state().board.kind_at(bridge), Terrain.Kind.BRIDGE)
 	assert_eq(eng.ap, 76)
@@ -152,7 +151,7 @@ func test_armed_targets_are_tappable_on_small_phone() -> void:
 	_e2e.tap(eng_pos)
 	_e2e.press(_e2e.engineer_panel().button_for(A.REPAIR_BRIDGE))
 	await _e2e.settle()
-	assert_true((_e2e.engineer_panel().get_node("%HintLabel") as Control).is_visible_in_tree(), "підказка теж на екрані")
+	assert_true(_e2e.engineer_panel().strip().hint_label.is_visible_in_tree(), "підказка теж на екрані")
 	var previews: Array[Dictionary] = []
 	_e2e.screen.input_controller().action_preview.connect(func(pv: Dictionary) -> void: previews.append(pv))
 	var tiles: Array[Vector2i] = EngineerCommand.action_status(_state(), eng.id, A.REPAIR_BRIDGE)["tiles"]
@@ -185,24 +184,30 @@ func test_strip_cancel_and_completed_action_restore_the_panel() -> void:
 	_e2e.tap(ENG)
 	_e2e.press(panel.button_for(A.LAY_MINE))
 	await _e2e.settle()
-	assert_true((panel.get_node("%Strip") as Control).visible, "озброєно — смужка")
+	assert_true(panel.strip().visible, "озброєно — смужка")
 	_e2e.tap(Vector2i(7, 1))  # не сусід
+	assert_eq(_toast_text(), tr("ERR_NOT_ADJACENT"))
 	await _e2e.settle()
-	assert_eq((panel.get_node("%ReasonLabel") as Label).text, tr("ERR_NOT_ADJACENT"))
-	_e2e.press(panel.get_node("%StripCancel"))
+	_e2e.press(panel.strip().cancel_button)
 	await _e2e.settle()
-	assert_false((panel.get_node("%Strip") as Control).visible)
-	assert_true((panel.get_node("%Scroll") as Control).visible)
+	assert_false(panel.strip().visible)
+	assert_true(panel.plate().visible)
 	assert_eq(_board_view().contour_segments(BoardView.LAYER_TARGETS), [])
 	# інженер досі вибраний — повторний тап по ньому зняв би вибір
 	_e2e.press(panel.button_for(A.LAY_MINE))
 	_e2e.tap(TARGET)
 	await _e2e.settle()
 	assert_eq(_state().mines.size(), 1)
-	assert_false((panel.get_node("%Strip") as Control).visible, "дію виконано — смужку знято")
+	assert_false(panel.strip().visible, "дію виконано — смужку знято")
 
 
 # --- Task 9: межі ремонту до підтвердження ---
+
+## Читається ДО settle(): він гасить усі твіни, а тост живе 2 с.
+func _toast_text() -> String:
+	assert_true((_e2e.hud().get_node("%Toast") as Control).visible, "тост видно")
+	return (_e2e.hud().get_node("%ToastLabel") as Label).text
+
 
 func _heal_text() -> String:
 	return (_e2e.hud().get_node("%PreviewHealValue") as Label).text
@@ -262,10 +267,9 @@ func test_arming_a_verb_clears_a_pending_move_preview() -> void:
 	_e2e.tap(Vector2i(1, 1))
 	await _e2e.settle()
 	var hud: Hud = _e2e.hud()
-	assert_true((hud.get_node("%PreviewMoveBox") as Control).visible, "передумова: прев'ю руху")
+	assert_false((hud.get_node("%ConfirmButton") as Button).disabled, "передумова: прев'ю руху")
 	_e2e.press(_e2e.engineer_panel().button_for(A.LAY_MINE))
 	await _e2e.settle()
-	assert_false((hud.get_node("%PreviewMoveBox") as Control).visible)
 	assert_true((hud.get_node("%ConfirmButton") as Button).disabled)
 
 
@@ -276,14 +280,14 @@ func test_armed_verb_does_not_survive_the_handover_gate() -> void:
 	_e2e.tap(ENG)
 	_e2e.press(panel.button_for(A.LAY_MINE))
 	await _e2e.settle()
-	assert_true((panel.get_node("%Strip") as Control).visible, "передумова: озброєно")
+	assert_true(panel.strip().visible, "передумова: озброєно")
 	await _e2e.end_turn()
 	assert_true(_e2e.gate().is_visible_in_tree(), "гейт показано")
 	assert_eq(_board_view().contour_segments(BoardView.LAYER_TARGETS), [])
-	assert_false((panel.get_node("%Strip") as Control).is_visible_in_tree())
+	assert_false(panel.strip().is_visible_in_tree())
 	await _e2e.confirm_gate()
 	assert_eq(_board_view().contour_segments(BoardView.LAYER_TARGETS), [])
-	assert_false((panel.get_node("%Strip") as Control).is_visible_in_tree())
+	assert_false(panel.strip().is_visible_in_tree())
 
 
 # --- Власник: UX міни й підказки ---
@@ -297,12 +301,12 @@ func test_lay_mine_on_tap_without_confirm() -> void:
 	_e2e.tap(ENG)
 	_e2e.press(panel.button_for(A.LAY_MINE))
 	await _e2e.settle()
-	var hint: Label = panel.get_node("%HintLabel")
+	var hint: Label = panel.strip().hint_label
 	assert_true(hint.is_visible_in_tree())
-	assert_eq(hint.text, tr("eng_hint_lay_mine"))
+	assert_eq(hint.text, tr("eng_hint_tap_tile"))
 	_e2e.tap(Vector2i(7, 1))  # не сусід — відмова, як і раніше
+	assert_eq(_toast_text(), tr("ERR_NOT_ADJACENT"))
 	await _e2e.settle()
-	assert_eq((panel.get_node("%ReasonLabel") as Label).text, tr("ERR_NOT_ADJACENT"))
 	assert_eq(_state().mines.size(), 0)
 	_e2e.tap(TARGET)
 	await _e2e.settle()
@@ -313,10 +317,12 @@ func test_lay_mine_on_tap_without_confirm() -> void:
 	assert_false((hud.get_node("%CancelButton") as Control).visible, "скасовувати нічого")
 	assert_false(hint.is_visible_in_tree(), "режим знято — підказку теж")
 	assert_eq(_board_view().contour_segments(BoardView.LAYER_TARGETS), [])
-	assert_true((panel.get_node("%Scroll") as Control).visible, "панель розгорнулась")
+	assert_true(panel.plate().visible, "панель розгорнулась")
 	assert_eq(panel.button_for(A.CLEAR_MINE).theme_type_variation, EngineerPanel.UNAVAILABLE_VARIATION,
 		"доступність верб перечитано: AP 0")
-	assert_eq((hud.get_node("%ApValue") as Label).text, "0")
+	assert_true(hud.unit_tag().visible, "HUD перечитав вибір: тег інженера на місці")
+	for l: Label in hud.unit_tag().find_children("*", "Label", true, false):
+		assert_ne(l.text, "0", "AP не показується навіть нульовий")
 
 
 ## Кожна верба має свою підказку, що тапнути.
@@ -327,18 +333,31 @@ func test_every_armed_verb_has_its_hint() -> void:
 			st.unit_at(Vector2i(1, 1)).hp = 300
 			Mines.place(st, TARGET, 0)})
 	var panel: EngineerPanel = _e2e.engineer_panel()
-	var hint: Label = panel.get_node("%HintLabel")
+	var hint: Label = panel.strip().hint_label
 	_e2e.tap(ENG)
 	await _e2e.settle()
-	var keys: Dictionary = {A.LAY_MINE: "eng_hint_lay_mine", A.CLEAR_MINE: "eng_hint_clear_mine",
-		A.REPAIR_BRIDGE: "eng_hint_repair_bridge", A.DEMOLISH_BRIDGE: "eng_hint_demolish_bridge",
-		A.REPAIR_UNIT: "eng_hint_repair_unit"}
-	for a: int in keys:
+	for a: int in EngineerPanel.LABEL_KEYS:
 		_e2e.press(panel.button_for(a))
 		await _e2e.settle()
-		assert_true(hint.is_visible_in_tree(), keys[a])
-		assert_eq(hint.text, tr(keys[a]))
-		assert_ne(hint.text, keys[a], "переклад є")
-		_e2e.press(panel.get_node("%StripCancel"))
+		assert_true(hint.is_visible_in_tree(), EngineerPanel.LABEL_KEYS[a])
+		assert_eq(hint.text, tr("eng_hint_tap_tile"), "одна підказка на всі верби")
+		assert_eq(panel.strip().title_label.text, tr(EngineerPanel.LABEL_KEYS[a]), "у смужці — назва озброєної верби")
+		assert_ne(hint.text, "eng_hint_tap_tile", "переклад є")
+		_e2e.press(panel.strip().cancel_button)
 		await _e2e.settle()
 		assert_false(hint.is_visible_in_tree())
+
+
+## Відмова — лише тост: тег не перевибирає місця й не зсувається.
+func test_a_refusal_toast_does_not_move_the_unit_tag() -> void:
+	await _boot()
+	var panel: EngineerPanel = _e2e.engineer_panel()
+	_e2e.tap(ENG)
+	_e2e.press(panel.button_for(A.LAY_MINE))
+	await _e2e.settle()
+	var tag: UnitTag = _e2e.hud().unit_tag()
+	var before: Vector2 = tag.position
+	_e2e.tap(Vector2i(7, 1))
+	assert_eq(_toast_text(), tr("ERR_NOT_ADJACENT"))
+	await _e2e.settle()
+	assert_eq(tag.position, before)

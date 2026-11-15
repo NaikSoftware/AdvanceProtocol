@@ -39,6 +39,13 @@ happens, the transport cannot broadcast this list as-is; it needs a per-observer
 place to build it is here in `core/`, not in the view. Keep that in mind when adding event types:
 an event that only the acting player may see should be recognisable as such.
 
+`ReplayFilter` (`core/replay_filter.gd`) filters events per viewer, but only for the replay of the
+opponents' turns ([vision and fog](rules/vision-and-fog.md#replay-of-the-opponents-turns)). It
+re-runs a whole span of logged commands and looks ahead: a squad that ends hidden in a building
+hides its earlier moves. A live filter cannot look ahead, so the replay filter is not the online
+one, and the per-observer filter for live events still does not exist. What the two can share is
+the visibility tests per event type.
+
 **Facing is a second leak, and a per-observer event filter will not close it.** An attack now turns
 a unit whose owner is not playing, and the turn is still on the board afterwards — the leak is in
 the state, not in the event. Three-player case: A fires on B's tank from ground C has never scouted;
@@ -71,7 +78,7 @@ core/                    # pure rules — no Node, no scene tree, no rendering
 game/                    # Godot scenes and nodes
   battle/                # board view, unit views, selection, zone overlay, effects (fire,
                          # smoke, explosions, scar map); look/ holds weather and light
-  ui/                    # HUD, unit inspector, handover gate
+  ui/                    # HUD (tag, hold card, previews, docking), handover gate, pause menu
   camera/                # fixed-angle rig: pan, clamped zoom
   audio/
 maps/

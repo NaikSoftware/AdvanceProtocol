@@ -73,13 +73,17 @@ a balance discussion.
 The engineer is the only unit with a verb list instead of a gun. All actions are on an
 **orthogonally adjacent** tile and require `fire_cost` AP:
 
-- **Lay mine** / **clear mine**
+- **Lay mine** / **clear mine** — a mine may be laid on a bridge but never on a tile no unit can
+  enter (`ERR_MINE_CANNOT_BE_LAID_HERE`); a mined bridge goes down under the first unit that drives
+  onto it, exactly as if demolished ([§3.11](vision-and-fog.md#mines)). Your own mines may be
+  cleared too.
 - **Repair or demolish a bridge** — a demolished crossing reshapes the whole map, and this is the
   single highest-impact action in the game
   - **An enemy unit on the bridge goes down with it**: it is destroyed outright,
-    with the same events as a lethal hit, and its remaining HP is credited to the engineer's owner
-    as damage dealt. Elimination is checked at once.
+    with the same events as a lethal hit. Elimination is checked at once.
   - **A friendly unit on the bridge forbids the demolition** (`ERR_TILE_OCCUPIED`).
+  - **A mine on the span goes into the river** with the bridge, so a repaired bridge is never
+    mined.
   - **A wreck on the span goes into the river** with the bridge, and does not forbid the
     demolition; a unit lost with the bridge leaves no wreck
     ([§3.14](movement-and-terrain.md#wrecks)).
@@ -130,7 +134,9 @@ it from breaking the game, and **none of them may be removed without replacing i
   not merely a UI one: the counter-play to a drone squad is to screen it with infantry or to rush
   it, and both are decisions about whether the threat is still live. A hidden counter would also
   be unknowable rather than bluffable in a three-player match, since a drone spent on the third
-  player happens behind the handover gate where nobody else can count it.
+  player happens behind the handover gate, and the others see it in their replay only where their
+  side could see the squad or the target
+  ([§3.5](vision-and-fog.md#replay-of-the-opponents-turns)).
 - **It cannot touch infantry.** A drone squad screened by rifle squads is a hard problem, and that
   is the intended counter-play.
 - **The squad is still infantry.** 100 HP, no armour, 3 tiles of movement, and it is fully exposed
