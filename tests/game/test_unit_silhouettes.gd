@@ -2,6 +2,7 @@ extends GutTest
 ## Заступники юнітів мають реальні розміри (1 тайл = 8 м): ширина × висота × довжина корпусу.
 
 const UnitModelFixture := preload("res://tests/fixtures/unit_model_fixture.gd")
+const CrewLegal := preload("res://tools/crew_body_legal.gd")
 
 const _METRES := {
 	2: Vector3(2.7, 2.4, 6.6), 3: Vector3(2.7, 2.6, 7.6), 4: Vector3(2.2, 2.0, 4.9),
@@ -567,3 +568,46 @@ func test_travel_pose_gun_and_crew_fit_between_the_rails_of_every_bridge() -> vo
 			for v in (UnitSilhouettes.crew_mesh(id, 0, false).surface_get_arrays(0) as Array)[Mesh.ARRAY_VERTEX]:
 				assert_lte(absf(v.x), 0.5, "розрахунок на землі в тайлі")
 				assert_lte(absf(v.z), 0.5, "розрахунок на землі в тайлі")
+
+
+## Розрахунок у похідному положенні видно з камери: за напрямів 0 і 4 (вздовж настилу) гармата
+## закриває не більше 30 % вершин жодної з двох фігур, на найближчому й найдальшому нахилі камери.
+func test_travel_pose_crew_is_visible_from_the_camera() -> void:
+	UnitSilhouettes.reset_models()
+	var figures: Array = [UnitSilhouettes.model_mesh(UnitSilhouettes.PLAIN_FIGURE, 0), UnitSilhouettes.crouch_mesh(0)]
+	for id: int in [9, 10]:
+		var gun: ArrayMesh = UnitSilhouettes.travel_mesh(id, 0)
+		var a: Array = gun.surface_get_arrays(0)
+		var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+		var idx: PackedInt32Array = a[Mesh.ARRAY_INDEX]
+		var rows: Array = UnitSilhouettes.crew_rows(id, 0, true)
+		for facing: int in [0, 4]:
+			var basis := Basis(Vector3.UP, deg_to_rad(UnitView._degrees_for_facing(facing)))
+			var tris := PackedVector3Array()
+			for i in idx:
+				tris.append(basis * v[i])
+			for pitch: float in [IsoCameraRig.PITCH_NEAR_DEG, IsoCameraRig.PITCH_FAR_DEG]:
+				var buf: PackedFloat32Array = CrewLegal.silhouette(tris, pitch)
+				for fig in 2:
+					var mesh: ArrayMesh = figures[fig] if figures[fig] != null else figures[0]
+					var pts: PackedVector3Array = (mesh.surface_get_arrays(0) as Array)[Mesh.ARRAY_VERTEX]
+					var at := Vector2((rows[fig] as Vector3).x, (rows[fig] as Vector3).y)
+					assert_lte(CrewLegal.figure_cover(pts, at, facing, buf, pitch), 0.30,
+							"гармата %d не закриває бійця %d, напрям %d, нахил %d" % [id, fig, facing, int(pitch)])
+
+
+## Польова гармата в похідному положенні стоїть у сусідньому з гаубицею тайлі (станини гаубиці виступають за її
+## тайл): розрахунок польової не ближче 0,3 м до них.
+func test_field_gun_travel_crew_clears_the_spades_of_a_howitzer_ahead() -> void:
+	UnitSilhouettes.reset_models()
+	var how: PackedVector3Array = (UnitSilhouettes.travel_mesh(10, 0).surface_get_arrays(0) as Array)[Mesh.ARRAY_VERTEX]
+	var crew: PackedVector3Array = (UnitSilhouettes.crew_mesh(9, 0, true).surface_get_arrays(0) as Array)[Mesh.ARRAY_VERTEX]
+	var low: Array[Vector2] = []
+	for v in how:
+		if v.y < UnitSilhouettes.FIGURE_SIZE.y:
+			low.append(Vector2(v.x, v.z - 1.0))
+	var best: float = INF
+	for c in crew:
+		for p in low:
+			best = minf(best, Vector2(c.x, c.z).distance_to(p))
+	assert_gte(best, 0.0375, "розрахунок польової гармати не ближче 0,3 м до станин гаубиці")

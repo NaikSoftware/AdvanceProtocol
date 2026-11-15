@@ -1,8 +1,10 @@
-// Тіла загиблих (UnitSilhouettes.fallen_material()): та сама модель бійця, але темніша й брудніша, а підсвітка
-// тіньового боку — у власному світлі, а не у випромінюванні: випромінювання додається після освітлення, і тінь
-// його не гасила б, тож тіло в тіні будівлі чи уламка світилось би на темній землі. Тут підсвітка йде крізь
-// ATTENUATION сонця, як і саме світло. Дифузне світло — те саме, що за замовчуванням (Ламберт, ділене на PI);
-// блиск у світлі не відтворюється: F0 діелектрика при `specular` 0,1 — 0,0016.
+// Тіла загиблих (UnitSilhouettes.fallen_material()): та сама модель бійця, але темніша й
+// брудніша. Підсвітка тіньового боку — у власному світлі, а не у випромінюванні:
+// випромінювання додається після освітлення, і тінь його не гасила б, тож тіло в тіні будівлі
+// чи уламка світилось би на темній землі. Тут підсвітка йде крізь ATTENUATION сонця, як і саме
+// світло. Дифузне світло — те саме, що за замовчуванням (Ламберт, ділене на PI), і блиск GGX
+// відтворено як у рушія (F0 з `specular`, F90 = F0 * 49,5): при шорсткості 1 він дає лише
+// 0,1–0,2 L*.
 shader_type spatial;
 
 uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable, hint_default_white;
@@ -55,8 +57,11 @@ void fragment() {
 	col = max(mix(vec3(y), col, sat), vec3(0.0)) * mud * dark * mix(1.0, top, sky);
 	ALBEDO = col;
 #if CURRENT_RENDERER == RENDERER_COMPATIBILITY
-	// gl_compatibility: власне світло (light()) там не підключено, бо воно виходило вдвічі темнішим за стандартне, а SPECULAR,
-	// відмінний від 0,5, чорнить поверхню. Лишається стандартне світло й рівна підсвітка у випромінюванні, без затінення.
+	// gl_compatibility: власне світло (light()) там не підключено. Дифузне світло темного
+	// альбедо там набагато темніше, ніж на Mobile (Y 0,0074 проти 0,1485 при альбедо 0,05), і
+	// це ховає лише типовий блиск SPECULAR 0,5, а будь-яке інше значення чорнить поверхню. Тож
+	// лишається стандартне світло з типовим SPECULAR й рівна підсвітка у випромінюванні, без
+	// затінення. Підсвітку крізь ATTENUATION на GL не міряли.
 	EMISSION = col * FALLEN_FILL * sun + vec3(FALLEN_FLOOR * sun);
 #else
 	EMISSION = vec3(FALLEN_FLOOR * sun);
@@ -75,19 +80,22 @@ void fragment() {
 void light() {
 	float n_l = clamp(dot(NORMAL, LIGHT), 0.0, 1.0);
 	DIFFUSE_LIGHT += LIGHT_COLOR * ATTENUATION * (n_l / PI);
-	// Блиск за замовчуванням (GGX, F0 з `specular`): при шорсткості 1 і низькому сонці дає помітну частку.
+	// Блиск рушія (GGX): при шорсткості 1 дає лише 0,1–0,2 L*.
 	float n_v = clamp(dot(NORMAL, VIEW), 0.0001, 1.0);
 	vec3 h = normalize(VIEW + LIGHT);
 	float n_h = clamp(dot(NORMAL, h), 0.0, 1.0);
 	float v_h = clamp(dot(VIEW, h), 0.0, 1.0);
 	float a2 = pow(max(ROUGHNESS, 0.045), 4.0);
 	float d = a2 / (PI * pow(n_h * n_h * (a2 - 1.0) + 1.0, 2.0));
-	float vis = 0.5 / (n_l * sqrt(n_v * n_v * (1.0 - a2) + a2) + n_v * sqrt(n_l * n_l * (1.0 - a2) + a2) + 0.0001);
+	float g_v = n_l * sqrt(n_v * n_v * (1.0 - a2) + a2);
+	float g_l = n_v * sqrt(n_l * n_l * (1.0 - a2) + a2);
+	float vis = 0.5 / (g_v + g_l + 0.0001);
 	float f0 = 0.16 * specular * specular;
-	float f = f0 + (1.0 - f0) * pow(1.0 - v_h, 5.0);
+	float f90 = clamp(f0 * 49.5, 0.0, 1.0);
+	float f = f0 + (f90 - f0) * pow(1.0 - v_h, 5.0);
 	SPECULAR_LIGHT += LIGHT_COLOR * ATTENUATION * (n_l * d * vis * f);
 	if (LIGHT_IS_DIRECTIONAL) {
-		// Рівна підсвітка без кольору й сили сонця (не LIGHT_COLOR); тінь гасить її так само, як саме сонце.
+		// Рівна підсвітка без кольору й сили сонця (не LIGHT_COLOR); тінь гасить її, як і сонце.
 		float sun = smoothstep(0.3, 0.7, sky_clear);
 		DIFFUSE_LIGHT += vec3(FALLEN_FILL * sun) * ATTENUATION;
 	}

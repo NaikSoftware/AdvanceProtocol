@@ -192,6 +192,24 @@ static func covered(mid: Vector2, long: Vector2, buf: PackedFloat32Array, pitch_
 	return float(hit) / float(n * n)
 
 
+## Яку частку вершин фігури (вище землі) у точці `at` (x, z у системі гармати) закриває гармата
+## `buf` (див. silhouette) з камери: гармата повернута на `facing`, фігура — разом із нею.
+static func figure_cover(pts: PackedVector3Array, at: Vector2, facing: int, buf: PackedFloat32Array, pitch_deg: float) -> float:
+	var b := Basis(Vector3.UP, deg_to_rad(UnitView._degrees_for_facing(facing)))
+	var hit: int = 0
+	var n: int = 0
+	for p in pts:
+		if p.y < 0.01:
+			continue
+		var s: Vector3 = screen_of(b * (p + Vector3(at.x, 0.0, at.y)), pitch_deg)
+		var gx: int = floori((s.x - SCREEN_ORIGIN) / SCREEN_RES)
+		var gy: int = floori((s.y - SCREEN_ORIGIN) / SCREEN_RES)
+		n += 1
+		if gx >= 0 and gy >= 0 and gx < SCREEN_N and gy < SCREEN_N and buf[gy * SCREEN_N + gx] < s.z - 0.002:
+			hit += 1
+	return float(hit) / float(maxi(n, 1))
+
+
 ## Тіло на місці: (середина, довга вісь) у системі тайла. Те саме перетворення, що й на дошці (crew_spot_xf).
 static func spot_rect(spot: Vector3, facing: int) -> Array:
 	var xf: Transform3D = WreckLayer.crew_spot_xf(spot, facing)
