@@ -17,7 +17,7 @@ extends Node
 ## належать гравцеві з набором N (без нього — власники 0, 1, 2), а відділення гравця 0 розвідує
 ## для них ґрунт. Змінні середовища:
 ##   SHOT_GROUND=meadow|plough — луг чи рілля під гарматою й гаубицею (помилка, якщо такого
-##     місця нема); без неї — будь-яке поле. Група завжди стоїть далі за клітинку від води й лісу.
+##     місця нема); без неї — будь-яке поле. Група завжди стоїть далі за клітинку від води.
 ##   SHOT_GROUND_CELLS=1 — вимога до поверхні лише для клітинки гармати (типово для гармати й
 ##     гаубиці; на River двох таких поруч нема).
 ##   SHOT_ENGINEERS=1 — замість гармат і танка інженерні машини наборів 0, 1, 2 поруч із
@@ -250,9 +250,10 @@ func _lineup(screen: BattleScreen, map: MapData, out: String, tag: String) -> vo
 
 
 ## Найближче до центру карти місце `p`, де кожна клітинка групи (`p + rel`) — поле, дорога чи
-## узвишшя, у радіусі клітинки довкола неї немає води й лісу, а в радіусі двох (з `surface >= 0` —
-## однієї) — будівель. З `surface >= 0` перші `ground_cells` клітинок групи (гармата, гаубиця) ще
-## й цієї поверхні, а чотири їхні сусіди — поле. `Vector2i(-1, -1)` — місця нема.
+## узвишшя, а в радіусі клітинки довкола неї немає води. Без `surface` ще й немає лісу в радіусі
+## клітинки та будівель у радіусі двох. З `surface >= 0` перші `ground_cells` клітинок групи
+## (гармата, гаубиця) ще й цієї поверхні, а чотири їхні сусіди — поле.
+## `Vector2i(-1, -1)` — місця нема.
 func _group_origin(m: MapData, rel: Array[Vector2i], surface: int, ground_cells: int = 2) -> Vector2i:
 	var best := Vector2i(-1, -1)
 	var best_d: int = 1 << 30
@@ -276,9 +277,11 @@ func _group_origin(m: MapData, rel: Array[Vector2i], surface: int, ground_cells:
 							continue
 						var kind: int = m.tiles[nb.y * m.width + nb.x]
 						var near: bool = absi(dx) <= 1 and absi(dy) <= 1
-						if kind in [Terrain.Kind.BUILDING, Terrain.Kind.RUBBLE] and (near or surface < 0):
+						if near and kind == Terrain.Kind.WATER:
 							ok = false
-						elif near and kind in [Terrain.Kind.WATER, Terrain.Kind.FOREST]:
+						elif surface < 0 and near and kind == Terrain.Kind.FOREST:
+							ok = false
+						elif surface < 0 and kind in [Terrain.Kind.BUILDING, Terrain.Kind.RUBBLE]:
 							ok = false
 			if ok and surface >= 0:
 				# перші дві клітинки групи — гармата й гаубиця — стоять на цій поверхні
