@@ -252,14 +252,16 @@ guns separate by footprint and barrel. What every model must keep:
 - **Hawthorn's shield** is two thin vertical plates beside the cradle, the left one taller, and
   does not read from above. The role rests on its size and short barrel.
 - **The engineer vehicles carry no barrel.**
-  - Sycamore is 9.32 m overall: a 6.8 m hull, the blade 0.26 m ahead of the bow, and the boom
-    stowed. The boom is a 0.5 m beam lying along the centreline at deck level, below the cab top,
-    from the turret ring to a flat, open claw that overhangs the rear by about 2 m. It never
-    rises above the deck, so it does not read as a barrel.
-  - Sycamore's cab stands beside the boom, off the centreline: at most 1.2 m wide and 0.6 m above
-    the deck, with a stepped front, a dark window strip and a hatch. It takes the hull's roof
-    tone, so it stays within a few L* of the deck. The blade is one solid plate on solid push
-    beams, with no daylight under it, in the set paint with mud wear.
+  - Sycamore is 9.32 m long and 3.43 m high overall: a 6.8 m hull, the blade 0.26 m ahead of the
+    bow, and the boom stowed. The boom is a 0.5 m beam lying along the centreline at deck level,
+    below the cab top, from the turret ring to a flat, open claw that overhangs the rear by about
+    2 m. It never rises above the deck, so it does not read as a barrel.
+  - Sycamore's cab stands beside the boom, off the centreline: 1.1 m wide, with its roof about
+    1.65 m above the deck (3.1 m above the ground) and the hatch reaching 3.4 m. It has a stepped
+    front and a dark window strip. Narrow and off the centreline is what keeps it from reading
+    as a turret. It takes the hull's roof tone, so it stays within a few L* of the deck. The
+    blade is one solid plate on solid push beams, with no daylight under it, in the set paint
+    with mud wear.
   - Coulee's plough stands about 0.5 m beyond each track on push arms at their real reach, and
     ends in a continuous dark tine bar across its full width. Its launcher superstructure stays
     low and flat-topped, with no cupola.
