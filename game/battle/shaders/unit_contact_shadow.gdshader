@@ -24,9 +24,12 @@ const float WATER_K = 0.5;
 
 varying float road;
 varying float water;
+// Сила плями відносно техніки (`UnitView.contact_strength()`): під кожним бійцем вона слабка й мала.
+varying float strength;
 
 void vertex() {
 	road = INSTANCE_CUSTOM.r;
+	strength = INSTANCE_CUSTOM.g;
 	// Квад рівний, а пагорб під ним — ні: вершина, що пішла б у ґрунт, лягає на нього. Над ґрунтом
 	// (настил мосту, нахилений корпус над западиною) лишається площина юніта.
 	if (use_height) {
@@ -44,5 +47,5 @@ void fragment() {
 	// Еліпс по сліду корпусу: найтемніше під серединою, до краю квада гасне до нуля.
 	float r = length((UV - 0.5) * 2.0);
 	ALBEDO = vec3(0.0);
-	ALPHA = clamp(unit_contact_shadow, 0.0, 1.0) * mix(1.0, ROAD_K, road) * mix(1.0, WATER_K, water * (1.0 - road)) * (1.0 - smoothstep(0.45, 1.0, r));
+	ALPHA = clamp(unit_contact_shadow, 0.0, 1.0) * strength * mix(1.0, ROAD_K, road) * mix(1.0, WATER_K, water * (1.0 - road)) * (1.0 - smoothstep(0.45, 1.0, r));
 }

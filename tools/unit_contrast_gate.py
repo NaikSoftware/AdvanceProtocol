@@ -9,6 +9,7 @@ One command, any set and type (set = national set 0/1/2, type = unit type id: 2 
     python3 tools/unit_contrast_gate.py --set 2 --type 8                       # shoot all three maps, print the table
     python3 tools/unit_contrast_gate.py --set 1 --type 5 6 7 8 --maps river    # several types, one map
     python3 tools/unit_contrast_gate.py --set 2 --type 8 --analyse-only --out DIR   # re-read frames already shot
+    python3 tools/unit_contrast_gate.py --set 0 --type 0 1 --zoom 6            # soldier squads, at the closest zoom
 
 Needs $GODOT (default ~/.local/bin/godot) and a window; every Godot launch goes through tools/godot_run.sh. Frames land in a
 fresh directory per run (--out DIR, default ~/.cache/ap-scratch/units/gate/<timestamp>/set<N>_t<ID>/; an existing non-empty
@@ -117,7 +118,7 @@ def check_request(set_id, type_id):
     return None
 
 
-def shoot(set_id, type_id, maps, out):
+def shoot(set_id, type_id, maps, out, zoom=None):
     """Run the Godot gate mode per map; returns a list of failure strings."""
     env = dict(os.environ)
     env.setdefault("GODOT", os.path.expanduser("~/.local/bin/godot"))
@@ -126,12 +127,14 @@ def shoot(set_id, type_id, maps, out):
         t0 = time.time()
         try:
             r = subprocess.run([os.path.join(REPO, "tools", "godot_run.sh"), "--path", REPO, "res://tools/unit_shot.tscn", "--",
-                                out, mp, str(type_id), mp, "x", "gate", "set=%d" % set_id], cwd=REPO, env=env,
+                                out, mp, str(type_id), mp, "x", "gate", "set=%d" % set_id] + (["zoom=%g" % zoom] if zoom else []), cwd=REPO, env=env,
                                capture_output=True, text=True, timeout=GODOT_TIMEOUT)
         except subprocess.TimeoutExpired:
             fails.append("%s: Godot run timed out after %d s" % (mp, GODOT_TIMEOUT))
             continue
         announced = re.findall(r"UNIT gate (\S+) cell", r.stdout)
+        for line in re.findall(r"UNIT gate model .*", r.stdout):
+            print("%s: %s" % (mp, line))  # which model was measured: its triangles and drone tubes
         if r.returncode != 0 or "UNIT gate zoom" not in r.stdout:
             tail = " | ".join(l for l in (r.stdout + r.stderr).splitlines() if "rror" in l or "SCRIPT" in l)[:300]
             fails.append("%s: Godot run failed (exit %d)%s" % (mp, r.returncode, (": " + tail) if tail else ""))
@@ -231,6 +234,8 @@ def main():
     ap.add_argument("--type", type=int, nargs="+", required=True, help="unit type ids (2 armoured car, 3 troop carrier, 4 scout car, 5 medium, 6 tank destroyer, 7 light, 8 heavy)")
     ap.add_argument("--maps", nargs="+", default=["crossroads", "river", "ridge"])
     ap.add_argument("--out", help="output directory; with several types a set<N>_t<ID> subdirectory is added")
+    ap.add_argument("--zoom", type=float, help="camera zoom to shoot at instead of the farthest (soldier figures are gated at the closest, 6: under"
+                    " 30 body pixels far)")
     ap.add_argument("--analyse-only", action="store_true", help="do not shoot, read the frames already in --out")
     a = ap.parse_args()
     for t in a.type:
@@ -247,7 +252,7 @@ def main():
             sys.exit(2)
         os.makedirs(out, exist_ok=True)
         print("== set %d type %d  (%s)" % (a.set, t, out))
-        fails = [] if a.analyse_only else shoot(a.set, t, a.maps, out)
+        fails = [] if a.analyse_only else shoot(a.set, t, a.maps, out, a.zoom)
         for fl in fails:
             print("  FAIL", fl)
         ok = (report(out, "set %d type %d" % (a.set, t), a.maps) and not fails) and ok

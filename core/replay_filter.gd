@@ -184,6 +184,14 @@ class _Pass extends RefCounted:
 			appeared[id] = true
 		return true
 
+	## Тіло — з копії стану після команди за (unit_id, seq): об'єкт події вказує в живий стан перегону, і його
+	## біти показу — уже кінця проміжку.
+	func _body_shown(body: Casualties.Body) -> bool:
+		for b: Casualties.Body in after.bodies:
+			if b.unit_id == body.unit_id and b.seq == body.seq:
+				return b.shown_to(viewer)
+		return false
+
 	func _mine_owner(pos: Vector2i) -> int:
 		var m: Mines.Mine = Mines.mine_at(before, pos)
 		return m.owner if m != null else -1
@@ -230,6 +238,8 @@ class _Pass extends RefCounted:
 				keep = after.vision[viewer].is_seen(e.pos)
 			elif e is Events.TileRevealed or e is Events.UnitFound:
 				keep = e.player == viewer
+			elif e is Events.FiguresFell:
+				keep = _body_shown(e.body)
 			if keep:
 				out.append(e)
 		return out
@@ -339,6 +349,8 @@ class _Pass extends RefCounted:
 			return e if wreck_kept[0] else null
 		if e is Events.TileRevealed:
 			return e if e.player == viewer else null
+		if e is Events.FiguresFell:
+			return e if _body_shown(e.body) else null
 		return null
 
 	## MoveBlocked несе тайл, у який не вдалося в'їхати. Якщо глядач не знає, що там, обрив

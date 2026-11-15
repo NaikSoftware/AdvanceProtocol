@@ -10,8 +10,11 @@ extends RefCounted
 ## коли подія вже зіграна; додавання — максимумом, тож пляма, поставлена двічі, не
 ## темнішає.
 ##
-## §3.5: шрам переживає юніт, тож має власний туман — маска `seen` глядача (тексель
-## на тайл, лінійна фільтрація розмиває межу) множить його в шейдері.
+## §3.5: шрам переживає юніт, тож має власний туман — маска `seen` глядача (тексель на тайл,
+## найближчим текселем) множить його в шейдері. Пляма ширша за тайл, тож маска сама не досить: пляма
+## малюється, лише коли розвідане її джерело (тайл уламків чи відділення), інакше її край на розвіданому
+## сусідові видав би бій на нерозвіданому. Тому плями й сліди поваленого зберігаються як відбитки з тайлом-
+## джерелом, а текстура складається з них на `show_for`.
 ##
 ## shortcut: шрами живуть лише у вигляді — збереження бою їх не пише, і після
 ## завантаження лишаються тільки плями під уламками, що ще горять; коли шрами стануть
@@ -21,6 +24,11 @@ const PX_PER_TILE: int = 32
 ## Пляма уламків 10–14 м: темне ядро ~10 м, м'який край до 7 м від центру.
 const SCORCH_RADIUS_M: float = 7.0
 const SCORCH_CORE_M: float = 5.0
+## Знищене відділення: стримана пляма, ~5 м, ядро ~2 м і лише половина темряви уламків — ні вогню, ні
+## палива там не було.
+const SQUAD_SCORCH_RADIUS_M: float = 2.6
+const SQUAD_SCORCH_CORE_M: float = 1.0
+const SQUAD_SCORCH_DARK: float = 0.5
 ## Слід поваленого на мокрій землі (`stamp_scuff`): півширина смуги й найбільша темрява.
 const SCUFF_HALF_M: float = 0.5
 const SCUFF_DARK: float = 0.35
@@ -31,8 +39,16 @@ var _tex: ImageTexture
 var _dirty: bool = false
 var _mask: Image
 var _mask_tex: ImageTexture
-## Тайли, під якими пляма вже стоїть: перебудова на гейті не малює її вдруге.
-var _stamped: Dictionary[Vector2i, bool] = {}
+## Сліди поваленого: [тайл-джерело, a, b]; як і плями, малюються, лише коли джерело розвідане.
+var _scuffs: Array = []
+var _scuffs_painted: Dictionary[int, bool] = {}
+## Плями за тайлом-джерелом: біти WRECK і SQUAD.
+var _scorch: Dictionary[Vector2i, int] = {}
+## Плями, що зараз намальовані (джерело розвідане глядачем).
+var _painted: Dictionary[Vector2i, int] = {}
+var _vision: Vision = null
+const WRECK: int = 1
+const SQUAD: int = 2
 
 
 func _init(board_size: Vector2i) -> void:
@@ -71,21 +87,95 @@ func show_for(vision: Vision) -> void:
 		for x in _size.x:
 			_mask.set_pixel(x, y, Color(1, 1, 1) if vision.is_seen(Vector2i(x, y)) else Color(0, 0, 0))
 	_mask_tex.update(_mask)
+	_vision = vision
+	var shown: Dictionary[Vector2i, int] = {}
+	for cell: Vector2i in _scorch:
+		if vision.is_seen(cell):
+			shown[cell] = _scorch[cell]
+	var scuffs: Dictionary[int, bool] = {}
+	for i in _scuffs.size():
+		if vision.is_seen(_scuffs[i][0]):
+			scuffs[i] = true
+	# Відбитки накладаються максимумом: поки показане лише росте, домальовуємо нове; з нуля — лише коли
+	# щось мусить зникнути (інший глядач, повтор).
+	var grows: bool = true
+	for cell: Vector2i in _painted:
+		if shown.get(cell, 0) & _painted[cell] != _painted[cell]:
+			grows = false
+	for i: int in _scuffs_painted:
+		if not scuffs.has(i):
+			grows = false
+	if not grows:
+		_img.fill(Color(0, 0, 0, 0))
+		_painted.clear()
+		_scuffs_painted.clear()
+	for cell: Vector2i in shown:
+		_paint(cell, shown[cell])
+	for i: int in scuffs:
+		if not _scuffs_painted.has(i):
+			_scuffs_painted[i] = true
+			_paint_scuff(_scuffs[i][1], _scuffs[i][2])
+	_mark_dirty()
+
+
+## Плями з нуля — перебудова на гейті й на повторі ставить їх за станом, який показує.
+func reset_scorches() -> void:
+	_scorch.clear()
 
 
 ## Нерівна пляма з променями різної довжини (не зірка й не коло) і цятками попелу.
 ## Форма — з хешу тайла: усі гравці бачать ту саму, і кидки правил не зсуваються.
 func stamp_scorch(cell: Vector2i) -> void:
-	if _stamped.has(cell):
+	_add(cell, WRECK)
+
+
+## Слід знищеного відділення (art-direction, «a scorch, restrained»): менший і світліший за пляму уламків.
+## Ставиться раз на тайл; уламки на тому самому тайлі однаково накривають його своєю.
+func stamp_squad_scorch(cell: Vector2i) -> void:
+	_add(cell, SQUAD)
+
+
+func has_squad_scorch(cell: Vector2i) -> bool:
+	return _scorch.get(cell, 0) & SQUAD != 0
+
+
+## Чи намальована пляма з цього тайла (джерело розвідане глядачем).
+func is_painted(cell: Vector2i) -> bool:
+	return _painted.has(cell)
+
+
+## Записати відбиток і, якщо джерело вже розвідане (або глядача ще нема), одразу намалювати.
+func _add(cell: Vector2i, kind: int) -> void:
+	_scorch[cell] = _scorch.get(cell, 0) | kind
+	if _vision == null or _vision.is_seen(cell):
+		_paint(cell, kind)
+
+
+func _paint(cell: Vector2i, kinds: int) -> void:
+	var fresh: int = kinds & ~_painted.get(cell, 0)
+	if fresh == 0:
 		return
-	_stamped[cell] = true
-	_stamp(cell, SCORCH_RADIUS_M, SCORCH_CORE_M)
+	_painted[cell] = _painted.get(cell, 0) | fresh
+	if fresh & WRECK:
+		_stamp(cell, SCORCH_RADIUS_M, SCORCH_CORE_M)
+	if fresh & SQUAD:
+		_stamp(cell, SQUAD_SCORCH_RADIUS_M, SQUAD_SCORCH_CORE_M, SQUAD_SCORCH_DARK, 0.0)
 
 
 ## Слід, який повалена опора чи паркан лишає на розмоклій землі: темна смуга ~1 м завширшки вздовж
 ## a→b (світові точки, тайли) з рваним краєм; та сама темрява R, що в плями, але слабка (до SCUFF_DARK),
 ## щоб читалась як мокра прим'ята земля, а не як згарище. Той самий туман `seen`, що в плями.
-func stamp_scuff(a: Vector3, b: Vector3) -> void:
+## `source` — клітинка, з якої пропс повалено: слід видно лише тому, хто її розвідав (крайній пропс стоїть
+## на межі, і клітинка точки падіння могла б бути сусідньою, вже розвіданою).
+func stamp_scuff(a: Vector3, b: Vector3, source: Vector2i = Vector2i(-9999, -9999)) -> void:
+	var cell: Vector2i = source if source.x != -9999 else Vector2i(roundi(a.x), roundi(a.z))
+	_scuffs.append([cell, a, b])
+	if _vision == null or _vision.is_seen(cell):
+		_scuffs_painted[_scuffs.size() - 1] = true
+		_paint_scuff(a, b)
+
+
+func _paint_scuff(a: Vector3, b: Vector3) -> void:
 	var noise := FastNoiseLite.new()
 	noise.seed = hash(Vector4(a.x, a.z, b.x, b.z))
 	noise.frequency = 0.3
@@ -121,7 +211,8 @@ func _flush_upload() -> void:
 	_tex.update(_img)
 
 
-func _stamp(cell: Vector2i, radius_m: float, core_m: float) -> void:
+## `ash_k` — частка цяток попелу: у плями відділення їх нема (світлі цятки посеред неї читались камінцем).
+func _stamp(cell: Vector2i, radius_m: float, core_m: float, dark: float = 1.0, ash_k: float = 1.0) -> void:
 	var noise := FastNoiseLite.new()
 	noise.seed = hash(cell)
 	noise.frequency = 1.0
@@ -148,7 +239,8 @@ func _stamp(cell: Vector2i, radius_m: float, core_m: float) -> void:
 			var v: float = 1.0 - smoothstep(core_px, r_px, d_eff)
 			var f: float = 0.5 + 0.5 * fine.get_noise_2d(float(p.x), float(p.y))
 			v = clampf(v * (0.85 + 0.3 * f), 0.0, 1.0) if dist > 1.5 else v
-			var ash: float = smoothstep(0.72, 0.85, f) * v
+			v *= dark
+			var ash: float = smoothstep(0.72, 0.85, f) * v * ash_k
 			var old: Color = _img.get_pixelv(p)
 			_img.set_pixelv(p, Color(maxf(old.r, v), old.g, old.b, maxf(old.a, ash)))
 	_mark_dirty()

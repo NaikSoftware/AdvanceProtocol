@@ -267,6 +267,41 @@ def src_edit():
     bm.to_mesh(me); bm.free(); me.update()
 
 
+if cfg.get("trail_close"):
+    # A towed gun's travel pose (units.json trail_close): each split-trail leg turns about its hinge, in plan, until the tips
+    # are `tip_lat` from the centreline, so both trails lie together behind the carriage. The leg is what lies behind the
+    # hinge, outboard of `lat_min`, below `h_max` (and, when `reach` is given, within it of the leg's axis): the carriage,
+    # wheels and cradle stand ahead of the hinge or inboard of `lat_min` and stay.
+    tc = cfg["trail_close"]
+    co = verts(me)
+    if cfg["fwd"] == "x":
+        Lc, Ac = co[:, 0].copy(), co[:, 1].copy()
+    else:
+        Lc, Ac = co[:, 1].copy(), -co[:, 0].copy()
+    Hc = co[:, 2] - zmin
+    hl_, ha_ = tc["hinge"]
+    tl_, ta_ = tc["tip"]
+    ax_ = np.array([tl_ - hl_, ta_ - ha_])
+    R_ = float(np.linalg.norm(ax_))
+    ax_ = ax_ / R_
+    beta = math.atan2(ta_ - ha_, tl_ - hl_)
+    phi = math.pi - math.asin((tc["tip_lat"] - ha_) / R_) - beta
+    for sgn in (1.0, -1.0):
+        dl = Lc - hl_
+        da = sgn * Ac - ha_
+        along = dl * ax_[0] + da * ax_[1]
+        perp = np.abs(dl * ax_[1] - da * ax_[0])
+        sel = (np.sign(Ac) == sgn) & (along > 0) & (perp < tc.get("reach", 9.0)) & (np.abs(Ac) > tc.get("lat_min", 0.0)) & (Hc < tc["h_max"])
+        nl = hl_ + dl[sel] * math.cos(phi) - da[sel] * math.sin(phi)
+        na = ha_ + dl[sel] * math.sin(phi) + da[sel] * math.cos(phi)
+        Lc[sel] = nl
+        Ac[sel] = sgn * na
+        print(f"PREP trail_close side {int(sgn)}: {int(sel.sum())} verts turned {math.degrees(phi):.1f} deg")
+    if cfg["fwd"] == "x":
+        co[:, 0], co[:, 1] = Lc, Ac
+    else:
+        co[:, 1], co[:, 0] = Lc, -Ac
+    me.vertices.foreach_set("co", co.ravel()); me.update()
 if cfg.get("plough"):
     # a plough wider than the hull (units.json plough [from_long, lateral factor]): what stands
     # ahead of `from_long` is stretched across about the centreline, so it overhangs the tracks as

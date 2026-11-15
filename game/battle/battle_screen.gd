@@ -111,6 +111,8 @@ var _replay_board: Board = null
 var _drawn_tiles: PackedInt32Array = PackedInt32Array()
 ## Клітинки, над якими зараз розчинено дахи (юніти на дошці).
 var _shown_cells: Array[Vector2i] = []
+## Лічильник показів (гейт, початок і кінець повтору): відкладене тіло зі старого показу не лягає.
+var _fall_run: int = 0
 ## Шрами бою на землі; маска — розвідане того, хто дивиться.
 var _scars: ScarMap = null
 ## Шейдери ефектів уже розігріто: на старті нового бою, а в бою зі збереження — на першому
@@ -237,7 +239,7 @@ func _ready() -> void:
 	_pause.settings_requested.connect(_open_settings)
 	_pause.save_quit_requested.connect(_on_save_quit)
 	_pause.surrender_requested.connect(_on_surrender)
-	_hud.pause_pressed.connect(_pause.show)
+	_hud.pause_pressed.connect(_open_pause)
 	_replay_overlay.skip_pressed.connect(_on_replay_skip)
 	_replay_overlay.environment = _weather.environment
 	_camera_rig.view_changed.connect(_follow_weather)
@@ -288,7 +290,7 @@ func launch(match_service: Node) -> void:
 	# §3.5: «Почати» міг натиснути будь-хто з гравців, тож перший хід — теж за
 	# гейтом, як «Продовжити»; юніти з'являться на confirmed.
 	_clear_unit_views()
-	_gate.show_for(_match_service.state.active_player)
+	_gate.show_for(_match_service.state.active_player, _match_service.state.turn_number, _match_service.state)
 	_warm_board()
 
 
@@ -317,6 +319,7 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 	_mine_layer.surface = map_data.surface
 	_board_view.relief_seed = map_data.name_key.hash()
 	_board_view.ring_map = map_data
+	_set_overlay_context(map_data)
 	_contacts.map = map_data
 	# Шлях самої карти, а не `map_path` сервісу: прямий запуск і резервний матч його не ставлять.
 	var look: BattleLook = BattleLook.for_map_path(map_data.resource_path)
@@ -359,12 +362,19 @@ func resume(match_service: Node = null) -> void:
 	_match_service = match_service if match_service != null else MatchService
 	# Підтипи поверхні живуть у MapData, не в збереженні: беремо їх з карти збереженої гри.
 	var mp: String = _match_service.map_path
+	var saved_map: MapData = null
 	if mp != "" and ResourceLoader.exists(mp):
-		var saved_map: MapData = load(mp) as MapData
+		saved_map = load(mp) as MapData
 		_board_view.surface = saved_map.surface
 		_mine_layer.surface = saved_map.surface
 		_board_view.relief_seed = saved_map.name_key.hash()
 		_board_view.ring_map = saved_map
+	if saved_map != null:
+		_set_overlay_context(saved_map)
+	else:
+		# Карти немає: гейт і пауза показують типову плиту й «-», а не чужу Річку.
+		_gate.set_context("", "")
+		_pause.set_context("", "")
 	var look: BattleLook = BattleLook.for_map_path(mp)
 	_board_view.season = look.season
 	_board_view.structure_shadows = look.sky_clear >= STRUCTURE_SHADOW_MIN_SKY_CLEAR
@@ -373,7 +383,7 @@ func resume(match_service: Node = null) -> void:
 	_weather.apply(look)
 	BattleFx.wetness = look.wetness
 	_wire_view(_state().board)
-	_gate.show_for(_match_service.state.active_player)
+	_gate.show_for(_match_service.state.active_player, _match_service.state.turn_number, _match_service.state)
 	_warm_board()
 	_match_service.events_ready.connect(_on_events_ready)
 	_match_service.launch_mode = MatchService.Launch.NONE
@@ -406,6 +416,7 @@ func _wire_view(board: Board) -> void:
 		_on_bridge_changed,
 		_on_wreck_left, _on_wreck_removed, _on_unit_found, _on_cell_entered, _on_unit_appeared, _on_unit_vanished)
 	_event_player.forest_changed.connect(forest_changed)
+	_event_player.figures_fell.connect(_on_figures_fell)
 	_controller = InputController.new(_match_service, _zone_overlay, Callable(_event_player, "is_playing"))
 	# Шлях — та сама система контурів, що й зони (game/battle/path_overlay.gd),
 	# але власний шар і власний сигнал: action_preview малює його для прев'ю
@@ -437,6 +448,7 @@ func _wire_view(board: Board) -> void:
 	# це до того, як HUD узагалі знає стан, означало б рахувати позицію без
 	# вибору й без дошки.
 	_hud.attach_camera(_camera_rig)
+	_hud.attach_unit_views(func() -> Dictionary: return _unit_views)
 	_hud.end_turn_pressed.connect(_on_end_turn_pressed)
 
 	_gate.confirmed.connect(_on_gate_confirmed)
@@ -474,10 +486,20 @@ func _notification(what: int) -> void:
 			elif _pause.visible:
 				_pause.hide()
 			else:
-				_pause.show()
+				_open_pause()
 		NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_WM_CLOSE_REQUEST:
 			if _match_service != null and _match_service.state != null:
 				_match_service.save_current(save_path)
+
+
+## Гейт і пауза показують карту; вона незмінні протягом матчу.
+func _set_overlay_context(map_data: MapData) -> void:
+	_gate.set_context(map_data.resource_path, map_data.name_key)
+	_pause.set_context(map_data.resource_path, map_data.name_key)
+
+
+func _open_pause() -> void:
+	_pause.open(_match_service.state.turn_number)
 
 
 ## Налаштування з паузи відкриваються поверх бою, а не заміною сцени: бій
@@ -872,6 +894,8 @@ func _process(delta: float) -> void:
 	if _press_held_sec >= LONG_PRESS_SEC:
 		_long_pressed = true
 		set_process(false)
+		# Картка утримання обходить палець: їй потрібна точка натиску, а не лише клітинка.
+		_hud.note_press(_press_screen_pos)
 		_controller.peek_cell(_camera_rig.screen_point_to_cell(_press_screen_pos))
 
 
@@ -1129,7 +1153,10 @@ func _on_events_ready() -> void:
 	if events.is_empty():
 		return
 	_record_crushes(events)
+	_hud.hold_tag(true)
 	await _event_player.play(events)
+	_hud.hold_tag(false)
+	_hud.units_changed()
 
 	var turn_started: bool = false
 	var match_ended: bool = false
@@ -1162,7 +1189,7 @@ func _on_events_ready() -> void:
 		# Те, що ламається, обривається разом з миттями: інакше падіння, що доходить під гейтом, показало б
 		# наступному гравцеві пил над клітинкою, яку він не розвідав.
 		_cancel_falls()
-		_gate.show_for(_match_service.state.active_player)
+		_gate.show_for(_match_service.state.active_player, _match_service.state.turn_number, _match_service.state)
 	elif not events.all(func(e: Events.BattleEvent) -> bool: return e is Events.UnitTurned):
 		# Поворот на місці не міняє ні позицій, ні огляду (ромб без фейсингу), а
 		# перебудова поставила б вузли миттєво й з'їла б анімацію повороту.
@@ -1240,6 +1267,8 @@ func _rebuild_units_for_active_player(instant: bool = false, drawn: Dictionary =
 		_shown_cells.append(unit.pos)
 	# Міна під дахом чи кроною теж мусить бути видна, як юніт.
 	_shown_cells.append_array(_mine_layer.cells())
+	# HUD ставить плити за екранними прямокутниками саме цих вузлів (§3.5: лише видимі гравцеві).
+	_hud.units_changed()
 	_board_view.set_reveal_cells(_shown_cells, instant)
 	var crushed: Array[Vector2i] = []
 	for pos: Vector2i in _crushed_truth:
@@ -1280,11 +1309,23 @@ func _on_unit_found(unit_id: int) -> void:
 ## Не в _rebuild_units_for_active_player(): та йде після кожного пакета подій і
 ## щоразу народжувала б щойно поставлені уламки наново, з новою фазою диму.
 func _rebuild_wrecks() -> void:
+	_fall_run += 1
 	_shown_viewer = _viewer()
 	_event_player.viewer = _shown_viewer
 	_wreck_layer.rebuild(_state(), _shown_viewer)
+	# Плями — за загиблими показаного стану (на повторі — його початку): відділення, що на повторі ще
+	# стоїть, плями під собою не має, а пляма вигорілих уламків лишається.
+	_scars.reset_scorches()
 	for w in _state().wrecks:
-		_scars.stamp_scorch(w.pos)
+		if not _no_scorch(w.pos):
+			_scars.stamp_scorch(w.pos)
+	for u: Unit in _state().units.values():
+		if u.is_alive() or _no_scorch(u.pos):
+			continue
+		if u.unit_class() == UnitTypes.UnitClass.INFANTRY:
+			_scars.stamp_squad_scorch(u.pos)
+		else:
+			_scars.stamp_scorch(u.pos)
 	_scars.show_for(_state().vision[_shown_viewer])
 
 
@@ -1293,9 +1334,47 @@ func _rebuild_wrecks() -> void:
 ## WreckLeft приходить для всієї техніки того, хто здався.
 func _on_wreck_left(pos: Vector2i, type_id: int, facing: int, owner: int) -> void:
 	# Пляма ставиться завжди: на нерозвіданому її ховає маска, а розвідка згодом покаже.
-	_scars.stamp_scorch(pos)
+	if not _no_scorch(pos):
+		_scars.stamp_scorch(pos)
 	if _state().vision[_shown_viewer].is_seen(pos):
 		_wreck_layer.add(pos, type_id, 1.0, facing, UnitSilhouettes.set_of(owner))
+
+
+## Бійці лягають там, де відділення стояло, у мить влучання; події не фільтровані за гравцем (§6),
+## тож показується лише тіло, вже показане глядачеві в `core/` (`Casualties.Body.shown_to()`).
+## Тіло береться з показаного стану за (unit_id, seq): об'єкт події на повторі — живий стан перегону, і
+## його біти показу вже кінця проміжку.
+func _on_figures_fell(body: Casualties.Body) -> void:
+	# Фігури, що перекидаються, сповзають туди, де ляже тіло.
+	var view: UnitView = _unit_views.get(body.unit_id)
+	# Розрахунок гармати не перекидається: його ніхто не малює стоячим на гарматі, він просто лягає біля уламка.
+	if view != null and is_instance_valid(view) and not Casualties.has_crew(body.type_id):
+		var targets: Dictionary = {}
+		for slot in range(body.first, body.first + body.count):
+			targets[slot] = WreckLayer.body_transform(body, slot, _state().board, WreckLayer.earlier_on_tile(_state().bodies, body))
+		view.aim_tips(targets)
+	# Тіло лягає, коли фігура вже перекинулась (UnitView._tip_over).
+	get_tree().create_timer(UnitView.FALL_TIP_SEC).timeout.connect(_land_body.bind(body.unit_id, body.seq, _fall_run))
+	# Ніхто не лишився стояти — відділення знищене: стримана пляма (на нерозвіданому її ховає маска).
+	if body.first == 0 and not Casualties.has_crew(body.type_id) and _scars != null and not _no_scorch(body.pos):
+		_scars.stamp_squad_scorch(body.pos)
+
+
+## Відкладене тіло: за цей час міг змінитися гравець за гейтом, початися чи скінчитися повтор
+## (`_fall_run`) — тоді тіло вже не цього показу. Інакше — з показаного стану й лише показане глядачеві.
+func _land_body(unit_id: int, seq: int, run: int) -> void:
+	if run != _fall_run:
+		return
+	for b: Casualties.Body in _state().bodies:
+		if b.unit_id == unit_id and b.seq == seq and b.shown_to(_shown_viewer):
+			_wreck_layer.add_body(b)
+
+
+## Тайл без плями: вода й підірваний міст (загиблі в річці) і міст — карта шрамів лежить на ґрунті, а
+## під настилом це русло; пляма там зринула б, щойно міст підірвуть, і не відновилась би на перебудові.
+func _no_scorch(pos: Vector2i) -> bool:
+	var k: int = _state().board.kind_at(pos)
+	return k == Terrain.Kind.WATER or k == Terrain.Kind.BRIDGE_DESTROYED or k == Terrain.Kind.BRIDGE
 
 
 ## Прибрати показане — нічого не розкриває. Решту на гейті перемалює _rebuild_wrecks().
@@ -1514,10 +1593,10 @@ func _on_secondary_broke(origin: Vector3) -> void:
 		_crush_marks.append(origin)
 
 
-func _on_topple_landed(a: Vector3, b: Vector3, debris: int, live_wire: bool, is_pole: bool) -> void:
+func _on_topple_landed(a: Vector3, b: Vector3, debris: int, live_wire: bool, is_pole: bool, cell: Vector2i) -> void:
 	# Падіння бачимо лише на розвіданому (_on_cell_entered), тож слід на мокрій землі — теж лише там.
 	if _board_view.wet and _scars != null:
-		_scars.stamp_scuff(a, b)
+		_scars.stamp_scuff(a, b, cell)
 	if is_pole:
 		BattleFx.spawn_topple_land(_units, _units_point(a), _units_point(b), debris as BattleFx.Debris, live_wire, true)
 		return

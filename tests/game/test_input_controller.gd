@@ -162,9 +162,9 @@ func test_tap_on_another_tile_with_pending_move_only_repreviews() -> void:
 	assert_eq(_previews.size(), 2)
 
 
-## «Скасувати» HUD щось робить рівно тоді, коли є прев'ю або озброєно дрон; на час
-## верби інженера скасування одне — у його панелі.
-func test_has_cancelable_follows_pending_and_armed_modes() -> void:
+## Ряд «Скасувати/Підтвердити» — лише з прев'ю; смужка озброєння — лише поки озброєно
+## і прев'ю ще нема. Разом на екрані рівно одне «Скасувати».
+func test_has_cancelable_and_is_armed_waiting_split_pending_from_armed() -> void:
 	_start()
 	var u: Unit = service.state.add_unit(5, 0, Vector2i(5, 5), 0)
 	var eng: Unit = service.state.add_unit(ENGINEER_TYPE, 0, Vector2i(10, 10), 0)
@@ -172,22 +172,43 @@ func test_has_cancelable_follows_pending_and_armed_modes() -> void:
 	service.state.add_unit(5, 1, Vector2i(15, 18), 0)
 	_begin_and_drain()
 	assert_false(controller.has_cancelable(), "нічого не вибрано")
+	assert_false(controller.is_armed_waiting())
 	controller.tap_cell(u.pos)
 	assert_false(controller.has_cancelable(), "лише вибір — скасовувати нічого")
+	assert_false(controller.is_armed_waiting())
 	controller.tap_cell(Vector2i(6, 5))
 	assert_true(controller.has_cancelable(), "прев'ю руху")
+	assert_false(controller.is_armed_waiting())
 	controller.cancel_pending()
 	assert_false(controller.has_cancelable())
 	controller.tap_cell(eng.pos)
 	controller.arm_engineer(LAY)
-	assert_false(controller.has_cancelable(), "озброєна верба — у панелі інженера своє «Скасувати»")
+	assert_false(controller.has_cancelable(), "верба озброєна, прев'ю нема")
+	assert_true(controller.is_armed_waiting(), "смужка озброєння зі своїм «Скасувати»")
 	controller.cancel_pending()
-	assert_false(controller.has_cancelable())
+	assert_false(controller.is_armed_waiting())
 	controller.tap_cell(sq.pos)
 	controller.arm_drone()
-	assert_true(controller.has_cancelable(), "озброєний дрон")
+	assert_false(controller.has_cancelable(), "дрон озброєно, цілі ще нема")
+	assert_true(controller.is_armed_waiting())
 	controller.cancel_pending()
-	assert_false(controller.has_cancelable())
+	assert_false(controller.is_armed_waiting())
+
+
+## Верба озброєна І прев'ю вже є: смужку змінює ряд — «Скасувати» одне, ряду.
+func test_engineer_pending_preview_moves_cancel_from_strip_to_row() -> void:
+	_start()
+	var eng: Unit = service.state.add_unit(ENGINEER_TYPE, 0, Vector2i(10, 10), 0)
+	var friend: Unit = service.state.add_unit(5, 0, Vector2i(10, 11), 0)
+	service.state.add_unit(5, 1, Vector2i(15, 18), 0)
+	friend.hp = 100
+	_begin_and_drain()
+	controller.tap_cell(eng.pos)
+	controller.arm_engineer(EngineerCommand.Action.REPAIR_UNIT)
+	assert_true(controller.is_armed_waiting())
+	controller.tap_cell(friend.pos)
+	assert_true(controller.has_cancelable(), "ціль торкнуто — ряд з прев'ю")
+	assert_false(controller.is_armed_waiting(), "смужку замінив ряд")
 
 
 func test_cancel_pending_clears_pending_and_submits_nothing() -> void:
@@ -566,7 +587,19 @@ func test_arm_engineer_without_tiles_refuses_with_reason() -> void:
 		InputController.ActionType.ENGINEER, "без озброєння тап по сусідньому тайлі — не прев'ю верби")
 
 
-## Власник: міна ставиться одразу на тап по допустимому тайлі — без прев'ю й Confirm.
+## Плита верб стояла над клітинками: другий тап подвійного по «Поставити міну» не ставить міну.
+func test_tap_guard_ignores_the_second_tap_of_a_double_tap_on_lay_mine() -> void:
+	_engineer_at(Vector2i(5, 5))
+	controller.tap_guard_ms = 60000
+	controller.arm_engineer(LAY)
+	controller.tap_cell(Vector2i(6, 5))
+	assert_eq(service.state.mines.size(), 0, "тап у вікні захисту ігноровано")
+	controller.tap_guard_ms = 0
+	controller.tap_cell(Vector2i(6, 5))
+	assert_eq(service.state.mines.size(), 1, "поза вікном — міна ставиться")
+
+
+## Міна ставиться одразу на тап по допустимому тайлі — без прев'ю й Confirm.
 func test_lay_mine_tap_on_valid_tile_lays_it_at_once() -> void:
 	var e: Unit = _engineer_at(Vector2i(5, 5))
 	controller.arm_engineer(LAY)
@@ -783,7 +816,7 @@ func test_peek_on_enemy_shows_its_inspection_and_end_clears() -> void:
 
 	assert_eq(_inspections.size(), 1)
 	var i: Dictionary = _inspections[0]
-	assert_eq(i, Targeting.inspection(service.state, tank.id, 0))
+	assert_eq(i, _expected_inspection(tank.id))
 	assert_eq(i["center"], Vector2i(10, 10))
 	assert_eq(i["radius"], 4)
 	assert_eq(i["drone_radius"], 0)
@@ -807,7 +840,7 @@ func test_peek_on_empty_ground_shows_selected_unit_ring() -> void:
 
 	controller.peek_cell(Vector2i(3, 3))
 
-	assert_eq(_inspections, [Targeting.inspection(service.state, car.id, 0)] as Array[Dictionary])
+	assert_eq(_inspections, [_expected_inspection(car.id)] as Array[Dictionary])
 	assert_eq(_inspections[0]["radius"], 3)
 
 
@@ -877,7 +910,7 @@ func test_peek_on_unseen_enemy_is_empty_ground() -> void:
 
 	controller.peek_cell(enemy.pos)
 
-	assert_eq(_inspections, [Targeting.inspection(service.state, car.id, 0)] as Array[Dictionary],
+	assert_eq(_inspections, [_expected_inspection(car.id)] as Array[Dictionary],
 		"невидимий ворог — як порожня земля: кільце вибраного")
 
 
@@ -974,6 +1007,8 @@ func test_tap_on_enemy_turns_and_previews_shot_with_unchanged_numbers() -> void:
 	assert_eq(_previews[0]["sector"], want["sector"])
 	assert_eq(_previews[0]["min"], want["min"])
 	assert_eq(_previews[0]["max"], want["max"])
+	assert_eq(_previews[0].get("armour_ignored"), want["armour_ignored"])
+	assert_eq(_previews[0].get("in_cover"), want["in_cover"])
 
 
 func test_tap_on_own_tile_or_other_own_unit_does_not_turn() -> void:
@@ -1098,3 +1133,8 @@ func test_with_nothing_selected_a_unit_tile_selects_and_a_mine_tile_captions() -
 	controller.tap_cell(Vector2i(8, 8))
 	assert_eq(log, [[-1, Vector2i(8, 8)], [0, Vector2i(8, 8)]])
 	assert_eq(_selections.size(), 0)
+## Огляд — рівно те, що вирішив core/, плюс id юніта для картки утримання.
+func _expected_inspection(unit_id: int) -> Dictionary:
+	var out: Dictionary = Targeting.inspection(service.state, unit_id, 0)
+	out["unit_id"] = unit_id
+	return out

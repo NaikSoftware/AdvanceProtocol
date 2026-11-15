@@ -53,9 +53,12 @@ const _DESTROY_DURATION: float = 0.6
 ## HP-бар і підпис — поверх усіх ефектів (вогонь уламків має пріоритет 1) і без перевірки
 ## глибини: інакше полум'я перекривало б одні підписи, а інші лишались зверху.
 const OVERLAY_PRIORITY: int = 10
-## Фігур у відділенні; стоїть одна на кожну чверть HP, що лишилась.
-const SQUAD_FIGURES: int = 4
+## Фігур у відділенні; стоїть одна на кожну чверть HP, що лишилась (правило — Casualties у core).
+const SQUAD_FIGURES: int = Casualties.SQUAD_FIGURES
 const _FALL_SEC: float = 0.5
+## Перекидання бійця, що впав: 0,2 с — помітно на справжній швидкості й не затримує хід.
+const FALL_TIP_SEC: float = 0.2
+const FALL_TIP_ANGLE: float = -1.45
 ## Знищена техніка зникає під спалахом, і саме тим кроком анімація закінчується:
 ## програвач одразу грає WreckLeft, тож уламки стають на тайл у тому самому кадрі, ще
 ## під кулею, а не після того, як дим розійшовся.
@@ -114,13 +117,8 @@ const _DEBUG_ARROW_COLOR: Color = Color("ff26d6")
 const _DEBUG_ARROW_Y_OFFSET: float = 0.02
 ## --- ЧАСОВИЙ ІНСТРУМЕНТ РОЗРОБНИКА (Task 2), кінець блоку констант -------------------
 
-## Колір прицілу — рівно UnitInspector.MODULATE_HIT (game/ui/unit_inspector.gd:40),
-## і не випадково: коментар там уже називає цей зв'язок («той самий сигнал
-## “сюди прилетить”, що й у прицілі») — колір був зарезервований під цей приціл
-## ще до того, як приціл з'явився. Два різні кольори про одне влучання читались
-## би як два різні повідомлення: панель каже «сюди», дошка каже щось інше.
-## Константа продубльована, а не імпортована з game/ui/: вигляд дошки не
-## залежить від HUD — тест звіряє обидва значення й упаде, якщо вони розійдуться.
+## Колір прицілу: тепле «сюди прилетить», яке не плутається ні з золотом і червоним зон руху, ні з
+## холодними кільцями огляду.
 const _CROSSHAIR_COLOR: Color = Color("ff7a4a")
 ## Заборонена ціль дрона (§3.13): хрест, а не приціл, і інший колір — «сюди не можна»
 ## мусить читатись інакше, ніж «сюди прилетить».
@@ -144,6 +142,8 @@ var destroyed: bool = false
 @onready var _drone_icon: Sprite3D = $DroneIcon
 
 var _hull_material: Material
+## Юніт стоїть на мосту: гармата — у похідному положенні (UnitSilhouettes.travel_mesh).
+var _travel_pose: bool = false
 ## Тіло — модель GLB (а не коробки): лише її шейдер крутить колеса й траки за пройденим шляхом.
 var _has_model: bool = false
 ## Пройдений шлях в одиницях світу: від нього колеса й траки моделі крутяться в такт руху.
@@ -155,6 +155,8 @@ var _unit_id: int = -1
 var _type_id: int = 0
 var _owner: int = 0
 var _standing: int = 0
+## Розкладка місць відділення (`UnitSilhouettes.pick_layout()`); її ж бере тінь-контакт під ногами.
+var _layout: int = 0
 var _drones_left: int = 0
 ## Останнє показане співвідношення HP. Джерело правди замість колишнього
 ## _hp_bar.scale.x — заливка тепер намальована ВСЕРЕДИНІ текстури, тож
@@ -163,6 +165,12 @@ var _hp_ratio: float = 1.0
 ## Живий твін останнього face(); тримаємо посилання, щоб наступний виклик
 ## міг убити цей замість того, щоб два твіни змагались за rotation_degrees.y.
 var _face_tween: Tween
+## Напрям (кроки по 45°), з яким збудований меш відділення: поворот фігур у ній.
+var _built_face: int = 0
+## Фігури, що зараз перекидаються, за місцем: їх веде aim_tips().
+var _tipping: Dictionary = {}
+## Скільки разів bind запланував прогрів мешів напрямів (тести: повторний bind складу, що вже в кеші, — не планує).
+var _warm_scheduled: int = 0
 ## Половини основи корпусу (x — ширина, y — довжина): по її кутах юніт ставиться на схил.
 var _half_base: Vector2 = Vector2.ZERO
 ## Кут повороту, для якого востаннє рахувався нахил; NAN — ще не ставився.
@@ -179,11 +187,19 @@ func _ready() -> void:
 	# входить — її текстуру повністю володіє set_hp(), який і так кличеться
 	# з кожного bind().
 	_hp_bar.pixel_size = HP_BAR_PIXEL_SIZE
-	_drone_icon.texture = _flat_texture(Color("d9b23a"))
+	_drone_icon.texture = drone_texture(_MAX_DRONES)
+	# Росте й меншає разом зі смугою HP і стоїть над числом HP (`DRONE_ICON_OFFSET`): число дронів читається
+	# як число саме цього відділення, а не сусіда.
+	_drone_icon.fixed_size = false
+	_drone_icon.pixel_size = DRONE_ICON_PIXEL
+	_drone_icon.position.y = _hp_label.position.y
+	_drone_icon.offset = DRONE_ICON_OFFSET
+	_drone_icon.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
 	# Значки й смуга — інтерфейс, не тіло: у проході тіней кожен з них був би ще одним викликом.
 	for n: GeometryInstance3D in [_crosshair, _forbidden, _threatened, _drone_threatened, _hp_bar, _hp_label, _drone_icon]:
 		n.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	for n: Node in [_hp_bar, _hp_label]:
+	# Розчинена крона пише глибину (проходить лише найближча поверхня) — значок дронів поверх неї, як смуга.
+	for n: Node in [_hp_bar, _hp_label, _drone_icon]:
 		n.set("no_depth_test", true)
 		n.set("render_priority", OVERLAY_PRIORITY)
 	_hp_label.outline_render_priority = OVERLAY_PRIORITY - 1
@@ -204,6 +220,8 @@ func bind(unit: Unit) -> void:
 	_type_id = unit.type_id
 	_unit_id = unit.id
 	_travel = _travel_by_unit.get(unit.id, 0.0)
+	_owner = unit.owner
+	_travel_pose = _travel_pose_at(unit.pos)
 	_build_silhouette(unit.type_id, unit.owner)
 	_tilts = UnitTypes.is_vehicle(UnitTypes.get_type(unit.type_id)["unit_class"])
 	# Свіжий вузол (чи перебудований battle_screen._rebuild_units_for_active_player)
@@ -214,6 +232,11 @@ func bind(unit: Unit) -> void:
 	_pose(position)
 	set_hp(unit.hp, unit.max_hp())
 	set_drones(unit.drones_left)
+	# Лише коли меші цього складу (стоячі, труби, розкладка) ще не злиті, і кадром пізніше: перебудова
+	# виглядів іде після кожного пакета, і злиття восьми сіток просто в мить падіння бійця — зайвий ривок.
+	if _has_figures() and not UnitSilhouettes.merged_cached(_type_id, _standing, _set_id(), _drones_left, _layout, posmod(_built_face + 4, 8)):
+		_warm_scheduled += 1
+		_warm_faces.call_deferred()
 	# Свіжий (чи перебудований) вузол не є ціллю жодного прев'ю: прев'ю живе в
 	# InputController і перебудову не переживає — лишити приціл увімкненим
 	# означало б показувати намір, якого вже немає.
@@ -361,14 +384,22 @@ func move_along(path: Array[Vector2i], duration_per_step: float, final_facing: i
 
 	var follow: Callable = _follow.bind(line, acc, tangents)
 	var from_s: float = 0.0
+	var posed: bool = _travel_pose
 	for i in path.size():
 		# Корпус торкається опор клітинки, щойно ніс входить у неї: на кривій — за PropLayer.BAND_NOSE (ніс корпусу) до першої точки
 		# всередині квадрата клітинки, а не в рівномірний момент кроку.
 		var enter_s: float = clampf(_enter_station(line, acc, pts[i + 1]) - PropLayer.BAND_NOSE, from_s, stations[i])
-		if on_enter.is_valid():
+		# Гармата міняє положення на межі тайла: на міст — зі зведеними станинами, з мосту — з розведеними.
+		var deck: bool = _travel_pose_at(path[i])
+		var switch: bool = deck != posed
+		if on_enter.is_valid() or switch:
 			if enter_s > from_s:
 				tween.tween_method(follow, from_s, enter_s, duration_per_step * (enter_s - from_s))
-			tween.tween_callback(on_enter.bind(path[i - 1] if i > 0 else start_cell, path[i]))
+			if switch:
+				tween.tween_callback(_set_travel_pose.bind(deck))
+				posed = deck
+			if on_enter.is_valid():
+				tween.tween_callback(on_enter.bind(path[i - 1] if i > 0 else start_cell, path[i]))
 			from_s = enter_s
 		# Швидкість — тайл за duration_per_step: дуга коротша за ламану, і крок через неї теж.
 		tween.tween_method(follow, from_s, stations[i], duration_per_step * (stations[i] - from_s))
@@ -454,8 +485,27 @@ func _follow(s: float, line: PackedVector2Array, acc: PackedFloat32Array, tangen
 func _process(_delta: float) -> void:
 	if rotation.y != _posed_yaw:
 		_pose(position)
+	# Фігури повертаються разом із вузлом — і посеред руху (move_along веде той самий твін), а не
+	# ривком наприкінці: щойно кут перейшов у сусідні 45°, ставимо меш того напряму (кеш за напрямом).
+	if _has_figures() and posmod(roundi(rad_to_deg(rotation.y) / 45.0), 8) != _built_face:
+		_set_standing(_standing)
+	_hold_slots()
 	if _face_tween == null or not _face_tween.is_running():
 		set_process(false)
+
+
+## Місця бійців стоять у світі, а не повертаються з відділенням: вузол меша крутиться назад на кут вузла.
+func _hold_slots() -> void:
+	if _has_figures():
+		(_silhouette.get_node("Hull") as Node3D).rotation.y = -rotation.y
+
+
+## Індекс напряму (0–7) з кута вузла в градусах, кратних 45°, — той самий, що в UnitView._degrees_for_facing.
+func _face_index_of(step: int) -> int:
+	for f in 8:
+		if posmod(roundi(_degrees_for_facing(f) / 45.0), 8) == step:
+			return f
+	return 0
 
 
 ## Ставить юніт у точці `at` на рельєф усією основою. Нахил — лише в силуеті, тангаж і
@@ -473,8 +523,9 @@ func _pose(at: Vector3) -> void:
 	var cell: Vector2i = IsoCameraRig.world_to_cell(at)
 	var deck: float = th.deck_y(cell)
 	if deck > th.at(float(cell.x), float(cell.y)) + 0.001:
-		# Міст: настил рівний, а рельєф під ним — русло.
-		position = Vector3(at.x, deck, at.z)
+		# Міст: настил рівний, а рельєф під ним — русло. Відділення й тут опущене на `SQUAD_SINK`: ступні
+		# бійців — на 0,05 над його початком, інакше вони висіли б над настилом.
+		position = Vector3(at.x, deck - (0.0 if _tilts else SQUAD_SINK), at.z)
 		_silhouette.rotation = Vector3.ZERO
 		return
 	if not _tilts:
@@ -557,7 +608,7 @@ func set_hp(hp: int, max_hp: int) -> void:
 	# кожен свій), і modulate поверх нього перефарбував би й рамку теж.
 	_hp_bar.modulate = Color.WHITE
 	_hp_label.text = "%d/%d" % [hp, max_hp]
-	_set_standing(_figures_for(hp, max_hp))
+	_set_standing(Casualties.figures(hp, max_hp))
 
 
 ## Єдине джерело правди про показане HP — для UI й тестів. Колишнє
@@ -607,7 +658,9 @@ static func hp_bar_image(fill_width: int, owner: int = 0) -> Image:
 func set_drones(count: int) -> void:
 	_drones_left = clampi(count, 0, _MAX_DRONES)
 	_drone_icon.visible = _drones_left > 0
-	_drone_icon.scale = Vector3.ONE * (0.5 + 0.25 * float(_drones_left))
+	_drone_icon.texture = drone_texture(_drones_left)
+	# Скільки дронів, стільки труб на спинах: пущений дрон знімає трубу з відділення.
+	_set_standing(_standing)
 
 
 ## Ціль прев'ю пострілу, яке гравець ще не підтвердив (§3.13): вузол лише
@@ -647,19 +700,75 @@ func standing_figures() -> int:
 	return _standing
 
 
-## `ceil(SQUAD_FIGURES · hp / max_hp)` цілими: фігура падає, щойно втрачено її чверть.
-static func _figures_for(hp: int, max_hp: int) -> int:
-	if max_hp <= 0 or hp <= 0:
-		return 0
-	return mini(SQUAD_FIGURES, (SQUAD_FIGURES * hp + max_hp - 1) / max_hp)
+func layout() -> int:
+	return _layout
 
 
+## Відділення несе лише стоячих: хто впав, лежить у шарі тіл (`WreckLayer`) там, де впав.
 func _set_standing(count: int) -> void:
 	if not (UnitSilhouettes.spec(_type_id, _set_id()).extras as Array).has(&"figures"):
 		_standing = 0
 		return
+	if count < _standing and is_inside_tree():
+		_tip_over(count, _standing, _layout)
 	_standing = count
-	(_silhouette.get_node("Hull") as MeshInstance3D).mesh = UnitSilhouettes.merged_mesh(_type_id, count, _set_id())
+	# Розкладка — за id юніта: місця стоять у світі, тож від напряму не залежить і посеред руху не скаче.
+	_layout = UnitSilhouettes.pick_layout(_unit_id)
+	_built_face = posmod(roundi(rad_to_deg(rotation.y) / 45.0), 8)
+	var hull := _silhouette.get_node("Hull") as MeshInstance3D
+	hull.mesh = UnitSilhouettes.merged_mesh(_type_id, count, _set_id(), _drones_left, _layout, _face_index_of(_built_face))
+	_hold_slots()
+
+
+## Меші фігур усіх 8 напрямів — у кеш заздалегідь (UnitSilhouettes.merged_mesh кешує за напрямом): інакше перший
+## поворот у новий бік зливав би фігури посеред руху, саме тоді, коли кадр мусить бути рівним.
+func _warm_faces() -> void:
+	if not _has_figures():
+		return
+	for f in 8:
+		UnitSilhouettes.merged_mesh(_type_id, _standing, _set_id(), _drones_left, _layout, f)
+
+
+## Бійці місць `from .. to - 1` перекидаються навзнак довкола ступень за FALL_TIP_SEC; тіло на землі з'являється
+## слідом (BattleScreen._on_figures_fell). Лише вигляд: правила вже вирішили, хто впав.
+func _tip_over(from: int, to: int, layout: int) -> void:
+	var mesh: ArrayMesh = UnitSilhouettes.model_mesh(UnitSilhouettes.PLAIN_FIGURE, _set_id())
+	if mesh == null:
+		return
+	for i in range(from, to):
+		var mi := MeshInstance3D.new()
+		mi.mesh = mesh
+		mi.material_override = UnitSilhouettes.model_material(UnitSilhouettes.PLAIN_FIGURE, _set_id())
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.transform = UnitSilhouettes.model_figure_transform(i, layout, rotation.y)
+		_silhouette.get_node("Hull").add_child(mi)
+		var tween: Tween = mi.create_tween()
+		tween.tween_property(mi, "rotation:x", FALL_TIP_ANGLE, FALL_TIP_SEC).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+		tween.tween_callback(mi.queue_free)
+		_tipping[i] = mi
+
+
+## Де й як лягає тіло місця (світ, `WreckLayer.body_transform`): фігура, що перекидається, за той самий час
+## сповзає туди й повертається вздовж тіла, і тіло з'являється там, де перекидання скінчилось, а не за метр
+## від нього і не впоперек.
+func aim_tips(targets: Dictionary) -> void:
+	var hull := _silhouette.get_node("Hull") as Node3D
+	var hull_yaw: float = atan2(hull.global_basis.z.x, hull.global_basis.z.z)
+	for slot: int in targets:
+		var mi: MeshInstance3D = _tipping.get(slot)
+		if mi == null or not is_instance_valid(mi):
+			continue
+		var xf: Transform3D = targets[slot]
+		var at: Vector3 = hull.global_transform.affine_inverse() * xf.origin
+		at.y = mi.position.y
+		# вісь тіла без напрямку: з двох протилежних кутів — ближчий, щоб фігура не крутилась на півоберта
+		var yaw: float = atan2(xf.basis.z.x, xf.basis.z.z) - hull_yaw
+		var d: float = wrapf(yaw - mi.rotation.y, -PI, PI)
+		if absf(d) > PI * 0.5:
+			d -= signf(d) * PI
+		var tw: Tween = mi.create_tween().set_parallel()
+		tw.tween_property(mi, "position", at, FALL_TIP_SEC)
+		tw.tween_property(mi, "rotation:y", mi.rotation.y + d, FALL_TIP_SEC)
 
 
 ## Твінує _silhouette, а не self: self.scale належить play_destroyed() відділення, і два
@@ -697,6 +806,24 @@ func _set_id() -> int:
 	return UnitSilhouettes.set_of(_owner)
 
 
+## Гармата на мосту стоїть у похідному положенні (станини зведені): розведені стирчали б за поручні.
+## Лише коли така модель є, і лише на настилі; решта юнітів і тайлів — як є.
+func _travel_pose_at(cell: Vector2i) -> bool:
+	var th: TerrainHeight = TerrainHeight.active
+	return th != null and th.is_deck(cell) and UnitSilhouettes.travel_mesh(_type_id, UnitSilhouettes.set_of(_owner)) != null
+
+
+## Міняє положення гармати (меш і розрахунок) на місці: викликається на межі тайла під час руху.
+func _set_travel_pose(on: bool) -> void:
+	if on == _travel_pose:
+		return
+	_travel_pose = on
+	_build_silhouette(_type_id, _owner)
+	_put_on_unit_layer(_silhouette)
+	if contacts != null and _contact_on:
+		contacts.track(self)
+
+
 func _build_silhouette(type_id: int, owner: int) -> void:
 	# free(), не queue_free(): відкладене звільнення лишає щойно відкріплений
 	# вузол «сиротою» до наступного кадру, і headless-тести це фіксують.
@@ -704,7 +831,7 @@ func _build_silhouette(type_id: int, owner: int) -> void:
 		child.free()
 
 	_owner = owner
-	var built := UnitSilhouettes.build_merged(type_id, -1, UnitSilhouettes.set_of(owner))
+	var built := UnitSilhouettes.build_merged(type_id, -1, UnitSilhouettes.set_of(owner), 0, 0, _travel_pose)
 	for part in built.get_children():
 		built.remove_child(part)
 		_silhouette.add_child(part)
@@ -752,6 +879,77 @@ func contact_transform() -> Transform3D:
 	var shift: Vector2 = WeatherRig.sun_ground * CONTACT_SUN_SHIFT * maxf(_hull_size.x, _hull_size.z)
 	xf.origin += Vector3(shift.x, 0.0, shift.y)
 	return xf
+
+
+## Під людиною — не пляма на весь слід відділення (на 5 м вона читалась чорною), а маленька м'яка тінь
+## під ногами кожного стоячого бійця, ~0,6 м видимого ядра, слабша за тінь техніки
+## (`FIGURE_CONTACT_ALPHA`). Лежачий плаский — без тіні. Скільки квадів дає юніт — `contact_slots()`.
+const FIGURE_CONTACT_SIZE: float = 0.11
+## Непрозорість тіні бійця на будь-якій карті: сила карти для техніки різна (0,6–0,78), а під людиною
+## ґрунт має темніти на 5–10 L*, не більше, тож ця — стала, а не частка карти.
+const FIGURE_CONTACT_ALPHA: float = 0.39
+## Під сонцем боєць кидає й справжню тінь, і дві разом темнили ґрунт під ним до ~20 L*: там плями менше.
+const FIGURE_CONTACT_SUNNY: float = 0.65
+
+
+func contact_slots() -> int:
+	return SQUAD_FIGURES if _has_figures() else 1 + _crew_feet().size()
+
+
+## Стопи розрахунку гармати в системі силуету (їх повертає разом із гарматою сам силует); у решти юнітів їх нема.
+func _crew_feet() -> Array[Vector3]:
+	return UnitSilhouettes.crew_feet(_type_id, _set_id(), _travel_pose)
+
+
+## Сила плями слота `i`: квад під гарматою — як у техніки, під розрахунком — як під бійцем відділення.
+func contact_strength_at(i: int) -> float:
+	if _has_figures() or i == 0:
+		return contact_strength()
+	if WeatherRig.unit_contact <= 0.0:
+		return 0.0
+	var alpha: float = FIGURE_CONTACT_ALPHA * (FIGURE_CONTACT_SUNNY if WeatherRig.sun_ground != Vector2.ZERO else 1.0)
+	return clampf(alpha / WeatherRig.unit_contact, 0.0, 1.0)
+
+
+## Сила плями відносно тіні техніки (множник у шейдері через дані екземпляра).
+func contact_strength() -> float:
+	if not _has_figures():
+		return 1.0
+	if WeatherRig.unit_contact <= 0.0:
+		return 0.0
+	var alpha: float = FIGURE_CONTACT_ALPHA * (FIGURE_CONTACT_SUNNY if WeatherRig.sun_ground != Vector2.ZERO else 1.0)
+	return clampf(alpha / WeatherRig.unit_contact, 0.0, 1.0)
+
+
+func contact_transforms() -> Array[Transform3D]:
+	if not _has_figures():
+		var out_gun: Array[Transform3D] = [contact_transform()]
+		var crew_shown: bool = _contact_on and is_visible_in_tree() and _silhouette.visible
+		var crew_shift: Vector2 = WeatherRig.sun_ground * CONTACT_SUN_SHIFT * FIGURE_CONTACT_SIZE
+		for feet: Vector3 in _crew_feet():
+			if not crew_shown:
+				out_gun.append(UnitContacts.HIDDEN)
+				continue
+			var cxf: Transform3D = _silhouette.global_transform * Transform3D(Basis.from_scale(Vector3(FIGURE_CONTACT_SIZE, 1.0, FIGURE_CONTACT_SIZE)), Vector3(feet.x, 0.06, feet.z))
+			cxf.origin += Vector3(crew_shift.x, 0.0, crew_shift.y)
+			out_gun.append(cxf)
+		return out_gun
+	var out: Array[Transform3D] = []
+	var shown: bool = _contact_on and is_visible_in_tree() and _silhouette.visible
+	var shift: Vector2 = WeatherRig.sun_ground * CONTACT_SUN_SHIFT * FIGURE_CONTACT_SIZE
+	for i in SQUAD_FIGURES:
+		if not shown or i >= _standing:
+			out.append(UnitContacts.HIDDEN)
+			continue
+		var feet: Vector3 = UnitSilhouettes.figure_transform(i, true, _layout).origin
+		var xf: Transform3D = (_silhouette.get_node("Hull") as Node3D).global_transform * Transform3D(Basis.from_scale(Vector3(FIGURE_CONTACT_SIZE, 1.0, FIGURE_CONTACT_SIZE)), Vector3(feet.x, 0.06, feet.z))
+		xf.origin += Vector3(shift.x, 0.0, shift.y)
+		out.append(xf)
+	return out
+
+
+func _has_figures() -> bool:
+	return (UnitSilhouettes.spec(_type_id, _set_id()).extras as Array).has(&"figures")
 
 
 func _exit_tree() -> void:
@@ -891,6 +1089,56 @@ static func _diamond_texture(size: int = 32) -> ImageTexture:
 			if absf(d - radius) <= thickness:
 				image.set_pixel(x, y, Color.WHITE)
 	_texture_cache[key] = ImageTexture.create_from_image(image)
+	return _texture_cache[key]
+
+
+## Значок дронів — над числом HP свого відділення, посередині, у світових одиницях: 0,42 × 0,15 (на найдальшому
+## зумі ~19 пікселів, цятка 3 × 3 з проміжком 2). Не в рядку числа: дрібний шрифт поруч зі значком розмазувався.
+## Над числом, бо всюди довкола смуги на пологому нахилі вже стоять смуги й бійці сусідів, а тут між смугами
+## сусідів зліва й справа лишається ±0,22, і відділення позаду стоїть на 0,87 вище.
+const DRONE_ICON_PIXEL: float = 0.42 / 61.0
+const DRONE_ICON_SIZE: Vector2i = Vector2i(61, 22)
+const HP_BAR_HALF: float = _HP_BAR_SIZE.x * HP_BAR_PIXEL_SIZE * 0.5
+## Зсув значка від середини числа HP у площині екрана (текселі): над верхом числа (0,08 + обведення) із зазором.
+const DRONE_ICON_OFFSET: Vector2 = Vector2(0.0, (0.08 + 0.04 + 0.01 + DRONE_ICON_SIZE.y * DRONE_ICON_PIXEL * 0.5) / DRONE_ICON_PIXEL)
+## Колір силуету й цяток — той самий жовтий, що й позначка дрона (DroneThreatened), обведений темним.
+const _DRONE_FILL: Color = Color("e2bd45")
+const _DRONE_INK: Color = Color("1d1a14")
+
+
+## Піктограма залишку дронів (§3.9, число публічне): силует барражуючого боєприпасу (фюзеляж, хрестоподібні
+## крила, хвостове оперення) з темним обведенням і під ним по цятці на кожен дрон, що лишився.
+static func drone_texture(count: int) -> ImageTexture:
+	var key: Array = ["drone", count]
+	if _texture_cache.has(key):
+		return _texture_cache[key]
+	var w: int = DRONE_ICON_SIZE.x
+	var h: int = DRONE_ICON_SIZE.y
+	var fill := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	fill.fill(Color(0, 0, 0, 0))
+	# фюзеляж і носовий обтічник
+	fill.fill_rect(Rect2i(3, 9, 22, 4), _DRONE_FILL)
+	fill.fill_rect(Rect2i(25, 10, 3, 2), _DRONE_FILL)
+	# крила посередині, хвостове оперення ззаду
+	fill.fill_rect(Rect2i(13, 2, 4, 18), _DRONE_FILL)
+	fill.fill_rect(Rect2i(3, 5, 3, 12), _DRONE_FILL)
+	# цятки праворуч, по одній на дрон: 10 текселів (3 пікселі на найдальшому зумі) і 7 між ними
+	for i in clampi(count, 0, _MAX_DRONES):
+		fill.fill_rect(Rect2i(33 + i * 17, 6, 10, 10), _DRONE_FILL)
+	# темне обведення на 1 піксель довкола всього, що залите: читається на будь-якому ґрунті
+	var out := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	out.fill(Color(0, 0, 0, 0))
+	for y in h:
+		for x in w:
+			if fill.get_pixel(x, y).a > 0.5:
+				out.set_pixel(x, y, _DRONE_FILL)
+				continue
+			for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 1), Vector2i(-1, -1), Vector2i(1, -1), Vector2i(-1, 1)]:
+				var q: Vector2i = Vector2i(x, y) + d
+				if q.x >= 0 and q.y >= 0 and q.x < w and q.y < h and fill.get_pixelv(q).a > 0.5:
+					out.set_pixel(x, y, _DRONE_INK)
+					break
+	_texture_cache[key] = ImageTexture.create_from_image(out)
 	return _texture_cache[key]
 
 

@@ -52,3 +52,7 @@ static func vehicle(type_id: int) -> ArrayMesh:
 static func soldier() -> ArrayMesh:
 	return mesh(UnitSilhouettes.FIGURE_SIZE)
 
+
+## Штурмовик із трубою дрона: той самий боєць, вищий на трубу (верх 2,4 м = 0,3 одиниці).
+static func tube_soldier() -> ArrayMesh:
+	return mesh(Vector3(UnitSilhouettes.FIGURE_SIZE.x, 0.3, UnitSilhouettes.FIGURE_SIZE.z))

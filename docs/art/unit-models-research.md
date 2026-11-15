@@ -19,7 +19,7 @@ Real names are private reference only — they never appear in code, data, UI or
 | # | role | real reference (private) | in-game name | real L × W × H, m | must read from above at 100 px |
 | --- | --- | --- | --- | --- | --- |
 | 0 | rifle squad | ROK infantry, digital uniform, rifle with optic | Line Section | 1.8 m figure | 4 helmets, rifles held low, plate-carrier backs, one plain olive tone |
-| 1 | assault squad | same, with a drone launch tube on the back | Strike Section | 1.8 m figure; tube 1.52 × 0.19 | the light tube end standing above a helmet, one per drone left |
+| 1 | assault squad | same, with a drone launch tube on the back | Strike Section | 1.8 m figure; tube 1.52 × 0.19 | the dark tube end standing above a helmet, one per drone left |
 | 2 | armoured car | K806 6×6 hull (real) **+ 30 mm unmanned turret (invented fit**, of the kind offered on Korean export 6×6s) | Kite | 6.6 × ~2.7 × 2.7 (hull) | 3 axles, flat-roofed boat hull, small offset turret with short 30 mm barrel |
 | 3 | troop carrier | K808 8×8 | Drover | 7.2 × ~2.7 × 2.7 | 4 axles, long flat roof with hatches, RWS cupola, rear ramp |
 | 4 | scout car | K153 (armoured K151 4×4 with RWS) | Wren | 4.9 × 2.2 × 2.0 | bonnet + cab, roof ring with RWS, 4 wheels clear of body |
@@ -69,7 +69,7 @@ The generated texture does not colour the body anyway; `paint.py` paints it.
 | # | prompt (before the shared suffix) | must not |
 | --- | --- | --- |
 | 0 | One adult soldier standing naturally, weight on one leg, rifle with a compact optic held low across the body, muzzle down; rounded ballistic helmet with a fabric cover, plate carrier with magazine pouches, small assault pack; mid olive uniform in one plain colour, darker olive plate carrier; dark boots; height 1.8 m, shoulders 0.5 m | A-pose or T-pose; a camouflage pattern; patches, flags, name tapes, rank; bright face paint; oversized hands or gun |
-| 1 | Same soldier, plus a light tan cylindrical launch tube 1.5 m long and 0.19 m across with black end caps, strapped upright on the back over a small pack, its bottom at hip height and its top a third of its length above the helmet; tablet controller on the chest | a box case; a quad-rotor; the drone flying; a tube thicker or longer than stated; the tube hidden by the body from above |
+| 1 | Same soldier, plus a dark olive cylindrical launch tube 1.5 m long and 0.19 m across with black end caps, strapped upright on the back over a small pack, its bottom at hip height and its top a third of its length above the helmet; tablet controller on the chest | a box case; a quad-rotor; the drone flying; a tube thicker or longer than stated; the tube hidden by the body from above |
 | 2 | Six-wheeled armoured car, boat-shaped flat-roofed hull, proportions L : W : H 2.5 : 1 : 1 (hull), three evenly spaced axles with large off-road tyres, small unmanned turret set back of centre with a short 30 mm cannon (barrel 0.3 × hull length), smoke grenade dischargers, periscopes, rear door | eight wheels; a tank-sized turret; a long gun; dual rear wheels; truck cab |
 | 3 | Eight-wheeled armoured personnel carrier, long boxy hull with sloped glacis, L : W : H 2.7 : 1 : 1, four evenly spaced axles, flat roof with two square troop hatches and a remote weapon station with a heavy machine gun forward-right, rear ramp, stowage boxes on the sides | a turret with a cannon; six wheels; tracks; open-top body |
 | 4 | Armoured 4×4 light tactical vehicle, L : W : H 2.2 : 1 : 0.9, short bonnet, four-door armoured cab with thick small windows, roof ring with a remote weapon station with a machine gun, short cargo bed behind the cab, spare wheel on the rear | civilian SUV look; chrome; light bars; road-car wheels |
@@ -298,14 +298,13 @@ skin shows on the face only.
 **Assault squad.** One standing figure carries a drone launch tube on its back for every drone
 the squad has left, so the public count (§3.9 of CLAUDE.md) also reads on the squad itself: two
 tubes at the start, none once both are spent, when the squad looks like a rifle squad, as it
-fights like one. The tube is a light tan
+fights like one. The tube is a dark olive
 cylinder, 1.52 m long and 0.19 m across, with black end caps, the size of the largest man-portable
 tube-launched loitering munitions. It is strapped upright over a small pack, its bottom at hip
-height and its top about 0.6 m above the helmet. A tablet controller sits on the chest. Every slot
-carries the same tube, because the drone marks the role.
+height and its top about 0.6 m above the helmet. A tablet controller sits on the chest.
 
 From any facing the camera sees the end of the tube above the head: about 6 px of it at the
 closest zoom, and at the farthest about 2 px long and under 1 px wide. It reads by tone against
-the uniform: ΔE about 18 for slot 0, 20 for slot 1 and 8 for slot 2, where the black cap carries
-the difference. The tube keeps its real size. At the farthest zoom this cue is weak, and nothing
+the uniform: dark olive against slot 0's lighter cloth is ΔE about 29; a light tan tube would be the
+yellowest part of the figure on sunny maps. The tube keeps its real size. At the farthest zoom this cue is weak, and nothing
 larger is fitted to fix it.

@@ -90,6 +90,7 @@ func test_dispatch_handles_every_concrete_event_instance_without_falling_through
 		Events.DamageDealt.new(2, 40, 60),
 		Events.UnitDestroyed.new(2, Vector2i(3, 3)),
 		Events.WreckLeft.new(Vector2i(3, 3), 5, 2),
+		Events.FiguresFell.new(Casualties.Body.new(1, Vector2i(3, 3), 0, 0, 2, 3, 1)),
 		Events.WreckRemoved.new(Vector2i(3, 3), Wrecks.Reason.BURNED_OUT),
 		Events.TileRevealed.new(0, [Vector2i(1, 1), Vector2i(1, 2)]),
 		Events.UnitFound.new(3, 0, 1),
@@ -565,6 +566,17 @@ func test_forest_broken_emits_forest_changed_without_payload() -> void:
 	assert_eq(seen[0], 1)
 
 
+## Бійці лягають у мить влучання, а не на перебудові після пакета: програвач віддає тіло з
+## події далі, а чи бачить його глядач, вирішує екран.
+func test_figures_fell_hands_the_body_on() -> void:
+	var got: Array[Casualties.Body] = []
+	player.figures_fell.connect(func(b: Casualties.Body) -> void: got.append(b))
+	var body := Casualties.Body.new(3, Vector2i(2, 4), 1, 0, 6, 3, 1)
+	await player.play([Events.FiguresFell.new(body)] as Array[Events.BattleEvent])
+	assert_eq(got.size(), 1)
+	assert_same(got[0], body)
+
+
 ## Удар дрона з загону, якого глядач не бачить, однаково показує влучання — як і гармата з
 ## невидимого стрільця. Запуску біля загону нема: його вузла нема.
 func test_drone_from_an_unseen_squad_still_shows_the_hit() -> void:
@@ -675,3 +687,23 @@ func test_muzzle_flash_uses_the_shooters_set() -> void:
 	assert_ne(UnitSilhouettes.muzzle(5, 1), UnitSilhouettes.muzzle(5, 0), "передумова: набори різняться")
 	assert_eq((flashes[0] as Node3D).position, shooter.transform * UnitSilhouettes.muzzle(5, 1))
 	_finish_all_processed_tweens()
+
+
+## Пакет чекає перекидання бійця лише тоді, коли перед падінням було влучання в це відділення; здача теж кладе
+## тіла, але без влучання — там чекати нічого.
+func test_figures_fell_pauses_only_after_a_hit_on_that_squad() -> void:
+	player.figures_fell.connect(func(_b: Casualties.Body) -> void: pass)
+	var body := Casualties.Body.new(5, Vector2i(2, 2), 1, 0, 0, 2, 2)
+	var fell := Events.FiguresFell.new(body)
+	player._batch = [Events.DamageDealt.new(5, 50, 50), fell] as Array[Events.BattleEvent]
+	player._batch_index = 1
+	assert_true(player._dispatch(fell) is Signal, "після влучання — чекає перекидання")
+	player._batch = [fell] as Array[Events.BattleEvent]
+	player._batch_index = 0
+	assert_null(player._dispatch(fell), "здача без влучання — не чекає")
+	player._batch = [Events.DamageDealt.new(9, 50, 50), fell] as Array[Events.BattleEvent]
+	player._batch_index = 1
+	assert_null(player._dispatch(fell), "влучання в інше відділення — не чекає")
+	player._batch = [Events.DamageDealt.new(5, 50, 50), Events.UnitTurned.new(5, 2), fell] as Array[Events.BattleEvent]
+	player._batch_index = 2
+	assert_null(player._dispatch(fell), "влучання не просто перед падінням — не те падіння, не чекає")
