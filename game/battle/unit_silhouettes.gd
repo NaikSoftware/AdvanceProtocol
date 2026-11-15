@@ -40,6 +40,9 @@ const SET_COUNT: int = 3
 ## без нього тип повністю береться з набору 0; тож рядок додають у тому самому коміті, що й GLB.
 const _SET_SPECS: Dictionary = {
 	1: {
+		# відділення набору: ті самі мірки, що в набору 0, бо фігура — 1,8 м на будь-якому наборі; рядок вмикає й моделі
+		0: {"hull": Vector3(0.40, 0.05, 0.40), "barrel": 0.0, "extras": [&"figures"]},
+		1: {"hull": Vector3(0.40, 0.05, 0.40), "barrel": 0.0, "extras": [&"figures", &"drone_rack"]},
 		# важкий танк набору 1: корпус і висота осі ствола виміряні з моделі, дуло й колесо — як у _SPECS
 		8: {"hull": Vector3(0.4793, 0.1903, 0.8877), "barrel": 0.75, "wheel": 0.039, "extras": [&"turret"]},
 		# середній: корпус і висота осі ствола виміряні з моделі; дуло коротше за _SPECS, щоб відрізнятися від важкого
@@ -54,6 +57,9 @@ const _SET_SPECS: Dictionary = {
 		4: {"hull": Vector3(0.2385, 0.2163, 0.6180), "barrel": 0.12, "wheel": 0.0624, "extras": [&"wheels", &"roof_gun"]},
 	},
 	2: {
+		# відділення набору: ті самі мірки, що в набору 0, бо фігура — 1,8 м на будь-якому наборі; рядок вмикає й моделі
+		0: {"hull": Vector3(0.40, 0.05, 0.40), "barrel": 0.0, "extras": [&"figures"]},
+		1: {"hull": Vector3(0.40, 0.05, 0.40), "barrel": 0.0, "extras": [&"figures", &"drone_rack"]},
 		5: {"hull": Vector3(0.4083, 0.1487, 0.8040), "barrel": 0.625, "wheel": 0.036, "extras": [&"turret"]},  # середній (набір 2) 3,4×6,7 м
 		6: {"hull": Vector3(0.4350, 0.2726, 0.9423), "barrel": 0.86, "wheel": 0.045, "extras": [&"turret"]},  # винищувач (набір 2) 3,5×7,6 м
 		7: {"hull": Vector3(0.3585, 0.153, 0.705), "barrel": 0.46, "wheel": 0.034, "extras": [&"turret"]},  # легкий (набір 2) 2,9×5,6 м
@@ -472,6 +478,11 @@ static var _fallen_materials: Dictionary = {}
 
 
 const FALLEN_SPECULAR: float = 0.1
+## Відтінок альбедо загиблих набору — множник кольору в sRGB: `albedo_color` у шейдері має підказку `source_color`, тож
+## Godot переводить колір у лінійний простір сам. Піскова тканина набору 2 темніла до тону ґрунту під хмарами
+## (L* 24,5 на ґрунті 25,2), і тіло читалось грудкою землі: світліше, але не вище за ґрунт + 2 L*. У набору 1 тепле
+## забарвлення загиблих зсувало тон зеленої тканини жовтіше за живих, і трохи холодніший множник гасить цей зсув.
+const FALLEN_TINT: Dictionary = {1: Color(0.985, 1.0, 1.015), 2: Color(1.08, 1.08, 1.08)}
 
 
 ## Матеріал загиблих набору: матеріал простого бійця з `fallen` (шейдер темнить), один на набір, тож
@@ -485,6 +496,11 @@ static func fallen_material(set_id: int) -> Material:
 			# Мокра від багна тканина не блищить: з відблиском бійця тіло під сонцем сіріло.
 			m.set_shader_parameter("specular", FALLEN_SPECULAR)
 			m.set_shader_parameter("roughness", 1.0)
+			var tint: Variant = m.get_shader_parameter("albedo_color")
+			if FALLEN_TINT.has(key) and tint is Color:
+				var c: Color = tint
+				var t: Color = FALLEN_TINT[key]
+				m.set_shader_parameter("albedo_color", Color(c.r * t.r, c.g * t.g, c.b * t.b, c.a))
 			_fallen_materials[key] = m
 		else:
 			var box := StandardMaterial3D.new()

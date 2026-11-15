@@ -167,3 +167,109 @@ func _road_wheel_radius(mesh: ArrayMesh) -> float:
 		if c[i].b > 0.5 and absf(c[i].a - 0.5) < 0.005:
 			r = maxf(r, Vector2(v[i].y, v[i].z).distance_to(uv2[i]))
 	return r
+
+
+const _FIGURE_SLUGS: Array[String] = [
+	"rifle_soldier", "assault_soldier", "rifle_soldier_crouch", "rifle_soldier_body",
+	"rifle_soldier_body_prone", "rifle_soldier_body_back",
+]
+## 1,8 м у тайлах: 1 тайл = 8 м.
+const _MAN: float = 0.225
+
+
+func _figure_mesh(set_id: int, slug: String) -> ArrayMesh:
+	var path: String = UnitSilhouettes.model_dir(set_id) + slug + ".glb"
+	return UnitSilhouettes._load_model(path)
+
+
+## Кожен набір має всі шість файлів фігур і рядки відділень: без рядка модель набору не діє, і набір тихо
+## стояв би в одязі набору 0.
+func test_every_set_has_every_figure_file_and_spec_row() -> void:
+	for set_id in UnitSilhouettes.SET_COUNT:
+		for slug in _FIGURE_SLUGS:
+			var path: String = UnitSilhouettes.model_dir(set_id) + slug + ".glb"
+			assert_true(ResourceLoader.exists(path), "нема файлу " + path)
+		if set_id > 0:
+			for id in 2:
+				assert_true((UnitSilhouettes._SET_SPECS.get(set_id, {}) as Dictionary).has(id), "набір %d тип %d: нема рядка відділення" % [set_id, id])
+
+
+## Відділення набору N справді бере фігури набору N, а не набору 0: власна модель, три пози тіл і поза навпочіпки.
+func test_squad_figures_come_from_the_players_set() -> void:
+	UnitSilhouettes.reset_models()
+	for set_id in range(1, UnitSilhouettes.SET_COUNT):
+		for id in 2:
+			assert_ne(UnitSilhouettes.model_mesh(id, set_id), UnitSilhouettes.model_mesh(id, 0), "набір %d тип %d" % [set_id, id])
+			assert_eq(UnitSilhouettes._resolved_set(id, set_id), set_id)
+		assert_not_null(UnitSilhouettes.crouch_mesh(set_id))
+		assert_eq(UnitSilhouettes.body_pose_count(set_id), UnitSilhouettes.BODY_POSES.size())
+		assert_ne(UnitSilhouettes.body_mesh(set_id), UnitSilhouettes.body_mesh(0))
+
+
+## Справжній зріст: боєць 1,8 м (0,225 тайла) на кожному наборі, підошви на нулі, труба — як у набору 0, загиблий
+## лежить нижче метра, кожна фігура вкладається в бюджет трикутників набору 0.
+func test_figures_have_real_height_in_every_set() -> void:
+	for set_id in UnitSilhouettes.SET_COUNT:
+		var where: String = "набір %d" % set_id
+		var man: AABB = _figure_mesh(set_id, "rifle_soldier").get_aabb()
+		assert_almost_eq(man.size.y, _MAN, 0.002, "зріст, " + where)
+		assert_almost_eq(man.position.y, 0.0, 0.0002, "підошви на землі, " + where)
+		var tube: AABB = _figure_mesh(set_id, "assault_soldier").get_aabb()
+		assert_between(tube.end.y, 0.28, 0.31, "верх труби (1,52 м над стегном), " + where)
+		var crouch: AABB = _figure_mesh(set_id, "rifle_soldier_crouch").get_aabb()
+		assert_between(crouch.end.y, 0.6 * _MAN, 0.85 * _MAN, "поза пригнувся не вища за 0,85 зросту, " + where)
+		assert_almost_eq(crouch.position.y, 0.0, 0.0002, "підошви пригнулого, " + where)
+		for slug in ["rifle_soldier_body", "rifle_soldier_body_prone", "rifle_soldier_body_back"]:
+			var body: AABB = _figure_mesh(set_id, slug).get_aabb()
+			assert_lt(body.end.y, 0.11, "лежить низько: %s, %s" % [slug, where])
+			assert_almost_eq(body.position.y, 0.0, 0.0002, "лежить на землі: %s, %s" % [slug, where])
+			assert_lte(body.size.x, WreckLayer.BODY_WIDTH, "ширше за BODY_WIDTH: %s, %s" % [slug, where])
+			assert_lte(body.size.z, WreckLayer.BODY_LENGTH, "довше за BODY_LENGTH: %s, %s" % [slug, where])
+		for slug in _FIGURE_SLUGS:
+			var idx: PackedInt32Array = _figure_mesh(set_id, slug).surface_get_arrays(0)[Mesh.ARRAY_INDEX]
+			assert_lte(idx.size() / 3, 900, "трикутників: %s, %s" % [slug, where])
+
+
+## Лице вперед (−Z): темні текселі стоячого бійця на висоті тулуба — гвинтівка й рукавички — лежать перед ним, а не за
+## спиною і не збоку. Труба для цього не годиться: вона завжди стоїть ззаду, хоч би куди дивилась модель. Півоберт
+## (±X) ловить друга умова: темне зміщене вздовж −Z не менше, ніж на півзміщення убік (боєць набору 0 тримає гвинтівку
+## впоперек тулуба, тож убік вона зміщена вдвічі більше, ніж уперед).
+func test_standing_figures_face_forward_in_every_set() -> void:
+	for set_id in UnitSilhouettes.SET_COUNT:
+		var mesh: ArrayMesh = _figure_mesh(set_id, "rifle_soldier")
+		var arrays: Array = mesh.surface_get_arrays(0)
+		var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+		var png: String = UnitSilhouettes.model_dir(set_id) + "rifle_soldier_albedo.png"
+		var img: Image = Image.load_from_file(ProjectSettings.globalize_path(png))
+		assert_not_null(img, "атлас " + png)
+		var dark: int = 0
+		var sum := Vector2.ZERO
+		for i in verts.size():
+			if verts[i].y < 0.4 * _MAN or verts[i].y > 0.8 * _MAN:
+				continue
+			var px: Color = img.get_pixel(clampi(int(uvs[i].x * img.get_width()), 0, img.get_width() - 1), clampi(int(uvs[i].y * img.get_height()), 0, img.get_height() - 1))
+			if px.get_luminance() < 0.2:
+				dark += 1
+				sum += Vector2(verts[i].x, verts[i].z)
+		assert_gt(dark, 10, "темні текселі на висоті тулуба, набір %d" % set_id)
+		var mean: Vector2 = sum / maxf(dark, 1.0)
+		assert_lt(mean.y, 0.0, "темне — спереду (−Z), набір %d" % set_id)
+		assert_gt(-mean.y, 0.5 * absf(mean.x), "темне — вздовж −Z, а не вбік (±X), набір %d: %s" % [set_id, mean])
+
+
+## Тон загиблих набору: набір 0 — як у живого (матеріал бійця без змін), набори 1 і 2 — рівно добуток тону бійця на
+## `FALLEN_TINT`.
+func test_fallen_material_carries_the_sets_tint() -> void:
+	UnitSilhouettes.reset_models()
+	assert_eq(UnitSilhouettes.FALLEN_TINT.keys(), [1, 2], "відтінок мають набори 1 і 2")
+	for set_id in UnitSilhouettes.SET_COUNT:
+		var base: Color = (UnitSilhouettes.model_material(0, set_id) as ShaderMaterial).get_shader_parameter("albedo_color")
+		var got: Color = (UnitSilhouettes.fallen_material(set_id) as ShaderMaterial).get_shader_parameter("albedo_color")
+		var want: Color = base
+		if UnitSilhouettes.FALLEN_TINT.has(set_id):
+			var t: Color = UnitSilhouettes.FALLEN_TINT[set_id]
+			want = Color(base.r * t.r, base.g * t.g, base.b * t.b, base.a)
+		assert_eq(got, want, "матеріал загиблих, набір %d" % set_id)
+	assert_gt(UnitSilhouettes.FALLEN_TINT[1].b, UnitSilhouettes.FALLEN_TINT[1].r, "набір 1 холодніший")
+	assert_gt(UnitSilhouettes.FALLEN_TINT[2].r, 1.0, "набір 2 світліший")
