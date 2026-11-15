@@ -22,6 +22,9 @@ extends Node3D
 ##   дахами (`set_reveal_cells`), тож невидимий ворог себе не видає.
 
 ## Тінь і глибинний прохід розчинених крон — раніше за прозорий паркан (PropLayer.FENCE_ALPHA_PRIORITY, −1) і дим (0).
+## У Compatibility звичайні крони теж у прозорому проході на −1 (batch_priority), тож із сітчастим
+## парканом сортуються за відстанню. shortcut: паркан перед лісом там може сховатися за кроною;
+## розвести пріоритети, якщо це трапиться на мапі.
 const FOREST_PRIORITY: int = -2
 const _SHADER: Shader = preload("res://assets/props/forest/forest_crown.gdshader")
 const _DIR: String = "res://assets/props/forest/"
