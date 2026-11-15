@@ -66,7 +66,7 @@ func _ready() -> void:
 		await _sets(screen, map, out, tag, a.size() > 6 and a[6] == "forest", a.size() > 6 and a[6] == "sel")
 		return
 	if a.size() > 5 and a[5] == "squads":
-		await _squads(screen, map, out, tag)
+		await _squads(screen, map, out, tag, int(a[6].substr(6)) if a.size() > 6 and a[6].begins_with("owner=") else 0)
 		return
 	if a.size() > 5 and a[5] == "facings":
 		await _facings(screen, map, out, tag)
@@ -646,7 +646,7 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 	var c := Vector2i(map.width / 2, map.height / 2)
 	var picks: Dictionary = {}
 	var relaxed: Dictionary = {}
-	var sides: Dictionary = {}
+	var side_cands: Dictionary = {}
 	var dirs: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
 	for y in range(4, map.height - 4):
 		for x in range(4, map.width - 4):
@@ -690,8 +690,9 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 					var b0: Vector2i = p - d
 					if clear and map.tiles[fk.y * map.width + fk.x] == Terrain.Kind.FOREST and map.tiles[b0.y * map.width + b0.x] == Terrain.Kind.FIELD:
 						var key := Vector3i(d.x, d.y, kk)
-						if not sides.has(key) or (p - c).length_squared() < (sides[key] - c).length_squared():
-							sides[key] = p
+						if not side_cands.has(key):
+							side_cands[key] = []
+						side_cands[key].append(p)
 	var cells: Array = []
 	var by_dist := func(a: Vector2i, b: Vector2i) -> bool: return (a - c).length_squared() < (b - c).length_squared()
 	for sv in [0, 1]:
@@ -717,11 +718,47 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 						far = false
 				if far and chosen.size() < 3:
 					chosen.append(cand)
+		# Резерв: місце, де відділення сховане за опорою ЛЕП чи крислатою кроною, знімається ще раз
+		# на наступній клітинці
+		# того самого роду, не ближче 5 клітинок до вже взятих.
+		var spare: Array[Vector2i] = []
+		for cand: Vector2i in list + (relaxed.get(sv, []) as Array):
+			var apart: bool = true
+			for o: Vector2i in chosen + spare:
+				if (o - cand).length_squared() < 25:
+					apart = false
+			if apart and spare.size() < 4:
+				spare.append(cand)
+		# Один резерв на всі місця поверхні: перше сховане бере його першу клітинку, наступне — вже
+		# наступну.
 		for i in chosen.size():
-			cells.append(["field%d%s" % [sv, "abcd"[i]], chosen[i]])
+			cells.append(["field%d%s" % [sv, "abcd"[i]], chosen[i], spare])
 	var names: Dictionary = {Vector2i(1, 0): "forestE", Vector2i(-1, 0): "forestW", Vector2i(0, 1): "forestS", Vector2i(0, -1): "forestN"}
-	for key: Vector3i in sides:
-		cells.append(["%s%d" % [names[Vector2i(key.x, key.y)], key.z], sides[key]])
+	# Клітинка одна на місце: поля вже зайняли свої (і запасні), а місця біля лісу не ділять між
+	# собою ні основну, ні запасні.
+	var taken: Dictionary = {}
+	for fc: Array in cells:
+		taken[fc[1]] = true
+		for sc: Vector2i in fc[2]:
+			taken[sc] = true
+	for key: Vector3i in side_cands:
+		var near: Array = (side_cands[key] as Array).filter(func(q: Vector2i) -> bool: return not taken.has(q))
+		if near.is_empty():
+			push_warning("unit_shot: місце біля лісу %s%d відкинуто: усі його клітинки вже зайняті" % [names[Vector2i(key.x, key.y)], key.z])
+			print("UNIT gate WARNING forest place %s%d dropped: every candidate cell is taken" % [names[Vector2i(key.x, key.y)], key.z])
+			continue
+		near.sort_custom(by_dist)
+		taken[near[0]] = true
+		var spare_sides: Array[Vector2i] = []
+		for cand: Vector2i in near.slice(1):
+			var apart: bool = (cand - near[0]).length_squared() >= 9
+			for o: Vector2i in spare_sides:
+				if (o - cand).length_squared() < 9:
+					apart = false
+			if apart and spare_sides.size() < 4 and not taken.has(cand):
+				spare_sides.append(cand)
+				taken[cand] = true
+		cells.append(["%s%d" % [names[Vector2i(key.x, key.y)], key.z], near[0], spare_sides])
 	var rig: IsoCameraRig = screen.get_node("%CameraRig")
 	for f in SETTLE_FRAMES:
 		await get_tree().process_frame
@@ -731,7 +768,10 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 	for f in SETTLE_FRAMES * 3:
 		await get_tree().process_frame
 	print("UNIT gate zoom %.2f" % rig.zoom_level)
-	for cl: Array in cells:
+	var queue: Array = cells.duplicate()
+	var printed: bool = false
+	while not queue.is_empty():
+		var cl: Array = queue.pop_front()
 		var cell: Vector2i = cl[1]
 		# Відділення таким, яким воно стоїть на початку матчу: штурмове — зі своїми трубами дрона.
 		var drones: int = int(UnitTypes.get_type(type_id).get("drones", 0))
@@ -767,7 +807,19 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 		var mask: Image = get_viewport().get_texture().get_image()
 		for nd: Node in soft:
 			(nd as Node3D).visible = true
-		if cl == cells[0]:
+		# Опора ЛЕП, крона чи шматок будівлі між відділенням і камерою лишають під межею гейту:
+		# місце міняється на наступну
+		# клітинку того самого роду, а не лишається «моделі нема».
+		if _mask_px(mask) < GATE_MIN_PX and not (cl[2] as Array).is_empty():
+			print("UNIT gate %s cell %s hidden (%d px), next place" % [cl[0], cell, _mask_px(mask)])
+			m.queue_free()
+			var rest: Array = cl[2]
+			queue.push_front([cl[0], rest.pop_front(), rest])
+			for f in 10:
+				await get_tree().process_frame
+			continue
+		if not printed:
+			printed = true
 			var tris: int = 0
 			for mi: MeshInstance3D in m.find_children("*", "MeshInstance3D", true, false):
 				for si in mi.mesh.get_surface_count():
@@ -784,6 +836,25 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 		print("UNIT gate %s cell %s" % [cl[0], cell])
 	get_tree().quit()
 
+
+
+## Пікселі пурпурової маски відділення у вікні виміру гейту: те саме вікно, що в
+## tools/unit_contrast_gate.py. Поріг —
+## 30, як у техніки там; відділення (типи 0 і 1) гейт міряє від 20, тож місце тут міняється, лише
+## коли воно нижче за 30.
+const GATE_MIN_PX: int = 30
+
+
+func _mask_px(img: Image) -> int:
+	var cx: int = img.get_width() / 2
+	var cy: int = img.get_height() / 2
+	var n: int = 0
+	for y in range(cy - 49, cy + 50):
+		for x in range(cx - 59, cx + 60):
+			var px: Color = img.get_pixel(x, y)
+			if absf(px.r - 1.0) + px.g + absf(px.b - 1.0) < 90.0 / 255.0:
+				n += 1
+	return n
 
 
 func _spin(screen: BattleScreen, map: MapData, out: String, tag: String, type_id: int, set_id: int = 0) -> void:
@@ -815,7 +886,8 @@ func _spin(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 ## Шостий аргумент squads: справжні відділення. Верхній ряд — стрілецьке, штурмове з двома дронами, стрілецьке й штурмове
 ## з одним (чи розрізняються формою на найдальшому зумі); середній — стрілецьке з 3, 2 і 1 стоячою фігурою та знищене;
 ## нижній — відділення, у яке влучили тричі, поки воно двічі йшло на тайл праворуч: тіла на трьох тайлах. Кадри _z6, _z8, _z20.
-func _squads(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
+## Сьомий аргумент owner=N ставить усі відділення й танк гравцю N: набір фігур — його.
+func _squads(screen: BattleScreen, map: MapData, out: String, tag: String, own: int = 0) -> void:
 	var m: MapData = map.duplicate(true)
 	m.take_over_path(map.resource_path)
 	# Ряди через один; карта без такої ділянки поля (River) — ряди впритул, але теж на полі, не на дорозі.
@@ -840,17 +912,18 @@ func _squads(screen: BattleScreen, map: MapData, out: String, tag: String) -> vo
 		c = Vector2i(m.width / 2, m.height / 2)
 	m.spawns = []
 	for col in 4:
-		m.spawns.append({"type_id": col % 2, "owner": 0, "pos": c + Vector2i(col - 1, 0), "facing": [0, 0, 6, 6][col]})
+		m.spawns.append({"type_id": col % 2, "owner": own, "pos": c + Vector2i(col - 1, 0), "facing": [0, 0, 6, 6][col]})
 	for col in 4:
-		m.spawns.append({"type_id": 0, "owner": 0, "pos": c + Vector2i(col - 1, step), "facing": 1})
-	m.spawns.append({"type_id": 1, "owner": 0, "pos": c + Vector2i(-1, 2 * step), "facing": 2})
+		m.spawns.append({"type_id": 0, "owner": own, "pos": c + Vector2i(col - 1, step), "facing": 1})
+	m.spawns.append({"type_id": 1, "owner": own, "pos": c + Vector2i(-1, 2 * step), "facing": 2})
 	# середній танк набору 0 поруч зі стрілецьким: нація читається тоном, тож тон бійця й техніки порівнюють поруч
-	m.spawns.append({"type_id": 5, "owner": 0, "pos": c + Vector2i(-2, 0), "facing": 0})
+	m.spawns.append({"type_id": 5, "owner": own, "pos": c + Vector2i(-2, 0), "facing": 0})
 	for sp: Dictionary in m.spawns:
 		var q: Vector2i = sp["pos"]
 		print("UNIT spawn type %d at %s on %s" % [sp["type_id"], q, Terrain.Kind.keys()[m.tiles[q.y * m.width + q.x]]])
-	screen.setup(m, 2, 1)
+	screen.setup(m, maxi(2, own + 1), 1)
 	var state: BattleState = MatchService.state
+	state.active_player = own
 	for u: Unit in state.alive_units():
 		var col: int = u.pos.x - c.x + 1
 		if u.pos.y == c.y and col == 3:

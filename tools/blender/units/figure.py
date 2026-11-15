@@ -6,16 +6,37 @@ A squad is four figures on fixed slots: the plain figure (<unit>, the rifle squa
 same figure with a drone launch tube on its back (each `variants` entry, e.g. assault_soldier). Both files come out of
 one run with one atlas layout, so the game draws a squad mixing them under one material. Config is the units.json
 entry's `figure` block:
+  out_dir, prefix  national set: the files go to assets/units/<out_dir>/ and `prefix` is cut off the
+    unit keys
   yaw       degrees about Blender Z that turn the source's chest onto +Y (glTF/Godot -Z, the front)
+  crown_rim_m, crown_rim_scale  metres above which the head is drawn in towards its axis (the
+    helmet's rim flare)
+  crown_cap_m, crown_squash  metres of the 1.8 m figure above which the helmet is pressed down to
+    `crown_squash` of its
+            height before the fit (a night-vision mount would otherwise be the crown and set the
+              height)
   tris      triangle budget of one figure (four per squad, up to ~10 squads on screen)
   tex       atlas size, px; the right 1/16 is kept for flat kit colours (the tube)
   paint     flat tones (sRGB 0..255): uniform, helmet, kit (plate carrier, pouches, pack), gun, boots, skin;
-            `kit_hue`, `kit_sat` pick the carrier out of the source colour; `head_h`, `boots_h` are heights as
+            `kit_hue`, `kit_sat` pick the carrier out of the source colour; `gun_v` is the value
+              below which low-saturation
+            texels are the rifle; `rifle_capsule_m` picks a cloth-coloured rifle by position;
+              `head_h`, `boots_h` are heights as
             fractions of the figure; `top_lift` multiplies (linear) the cloth tones of up-facing texels,
             `top_fade` (0..1) turns them towards grey
-  variants  {<unit>: {tube: {length_m, diameter_m, bottom_m, colour, cap}}}: a cylinder strapped upright on the back,
+  variants  {<unit>: {tube: {length_m, diameter_m, bottom_m, colour, cap, shades, light}}}: a
+    cylinder strapped upright on the back,
             real size, its side `colour`, its end caps `cap`; {<unit>: {body: {...}}}: the fallen soldier lying on his
-            side; {<unit>: {crouch: {hip_m, knee_m, thigh_deg, shin_deg}}}: the second pose, crouched
+            side; {<unit>: {crouch: {hip_m, knee_m, thigh_deg, shin_deg}}}: the second pose,
+              crouched;
+            {<unit>: {kneel: {hip_m, knee_m, front_sign, split_x_m, front, rear}}}: the same slot,
+              kneeling on one knee
+`shades` multiplies the tube colour from lit to shaded and `light` (a vector in the figure's frame)
+says where the lit side is.
+`rifle_pose` {r_m, axis, at_m}: carry the rifle across the chest (a split-off, turned copy of its
+faces); `camo` {cell_px, threshold,
+depth, seed}: dark patches on the cloth; `crown_ring` [scale, rise_m]: an inset ring raised on the
+head plate; `ao_gain`: strength of the baked occlusion.
 `--crude` skips the bake and paints the whole figure the uniform tone: the farthest-zoom shape test.
 
 Steps: import, yaw, scale to 1.8 m = 0.225 units with the body (not the rifle) centred on the origin and the soles on
@@ -42,6 +63,12 @@ work = os.path.join(os.environ.get("AP_UNIT_SCRATCH") or os.path.expanduser("~/.
 os.makedirs(work, exist_ok=True)
 N = fig.get("tex", 512)
 p = fig.get("paint", {})
+# A national set's figures live in assets/units/<out_dir>/ under the set 0 slugs: `prefix` is cut
+# off every unit key
+# (set1_rifle_soldier -> set1/rifle_soldier.glb), so a set's atlas names match set 0's.
+PREFIX = fig.get("prefix", "")
+OUT = os.path.join(REPO, "assets", "units", fig.get("out_dir", ""))
+slug = lambda unit: unit[len(PREFIX):] if unit.startswith(PREFIX) else unit
 
 
 def mesh_co(ob):
@@ -73,6 +100,29 @@ select_only(hi)
 bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
 co = mesh_co(hi)
 z0, z1 = co[:, 2].min(), co[:, 2].max()
+if "crown_rim_m" in fig and "crown_cap_m" not in fig:
+    print("FIG WARNING crown_rim_m is ignored without crown_cap_m")
+if "crown_cap_m" in fig:
+    # A mount or a spike on the helmet would set the 1.8 m and leave the man shorter under it:
+    # everything above
+    # `crown_cap_m` is pressed down to `crown_squash` of its height before the fit.
+    cap = z0 + fig["crown_cap_m"] / 1.8 * (z1 - z0)
+    top = co[:, 2] > cap
+    co[top, 2] = cap + (co[top, 2] - cap) * fig.get("crown_squash", 0.15)
+    if "crown_rim_m" in fig:
+        # The flare of a high-cut helmet (rails, ear flaps) is as wide as the torso seen from above
+        # and reads as a hat brim:
+        # above `crown_rim_m` the head is drawn in towards its own axis, fully by 0.1 m higher, to
+        # `crown_rim_scale`.
+        zn = (co[:, 2] - z0) / (z1 - z0) * 1.8
+        head = (zn > fig["crown_rim_m"]) & (zn < fig["crown_rim_m"] + 0.15)
+        ax, ay = np.median(co[head, 0]), np.median(co[head, 1])
+        t = np.clip((zn - fig["crown_rim_m"]) / 0.1, 0.0, 1.0)
+        k_rim = 1.0 + (fig.get("crown_rim_scale", 0.8) - 1.0) * t * t * (3.0 - 2.0 * t)
+        co[:, 0] = ax + (co[:, 0] - ax) * k_rim
+        co[:, 1] = ay + (co[:, 1] - ay) * k_rim
+    hi.data.vertices.foreach_set("co", co.ravel()); hi.data.update()
+    z1 = co[:, 2].max()
 k = HEIGHT / (z1 - z0)
 # The body, not the bbox, sits on the slot: a rifle held out front would otherwise shift the man.
 band = (co[:, 2] > z0 + 0.3 * (z1 - z0)) & (co[:, 2] < z0 + 0.8 * (z1 - z0))
@@ -120,6 +170,20 @@ small = [f for isl in islands if sum(g.calc_area() for g in isl) < fig.get("min_
 bmesh.ops.delete(bm, geom=small, context='FACES')
 bm.to_mesh(lo.data); bm.free()
 print("FIG tris", tris0, "->", len(lo.data.polygons), "islands", len(islands), "dropped faces", len(small))
+if "crown_ring" in fig:
+    # The decimated crown is one flat plate: an inset ring `crown_ring[0]` of its size, raised
+    # `crown_ring[1]` m, makes it a shell.
+    scale, rise = fig["crown_ring"]
+    bmc = bmesh.new(); bmc.from_mesh(lo.data); bmc.faces.ensure_lookup_table()
+    zmax = max(v.co.z for v in bmc.verts)
+    top = [f for f in bmc.faces if f.normal.z > 0.6 and f.calc_center_median().z > zmax - 0.025 * M]
+    tv = list({v for f in top for v in f.verts})
+    if top:
+        cen = sum((v.co for v in tv), Vector()) / len(tv)
+        rad = max((v.co - cen).xy.length for v in tv)
+        bmesh.ops.inset_region(bmc, faces=top, thickness=(1.0 - scale) * rad, depth=rise * M, use_even_offset=True)
+        print("FIG crown ring: %d top faces, radius %.3f m" % (len(top), rad / M))
+    bmc.to_mesh(lo.data); bmc.free()
 # the collapse moves the soles and the helmet top inwards: re-fit to 1.8 m standing on y = 0
 co = mesh_co(lo)
 k2 = HEIGHT / (co[:, 2].max() - co[:, 2].min())
@@ -223,6 +287,20 @@ else:
         votes.append(s[7:, 7:] - s[:-7, 7:] - s[7:, :-7] + s[:-7, :-7])
     cls[cloth] = np.argmax(np.stack(votes, -1), -1)[cloth]
     cls[skin] = 5                                             # 5 face
+    # A rifle the same colour as the cloth has no colour to find it by (see `rifle_capsule_m`
+    # below).
+    # A rifle the colour of the cloth is found by where it lies: `rifle_capsule_m` = [from, to,
+    # radius, y_min], metres in
+    # the figure's frame (front = +y), a capsule around the rifle's axis, cut off behind `y_min` so
+    # the chest stays cloth.
+    if "rifle_capsule_m" in p:
+        ca, cb, cr, cy0 = p["rifle_capsule_m"]
+        P = np.stack([x, y, pos[..., 2]], -1) / M
+        A, Bv = np.array(ca, np.float32), np.array(cb, np.float32)
+        ab = Bv - A
+        tt = np.clip(((P - A) @ ab) / (ab @ ab), 0.0, 1.0)
+        dist = np.linalg.norm(P - (A + tt[..., None] * ab), axis=-1)
+        cls[used & (dist < cr) & (y > cy0 * M) & (cls <= 3)] = 3
     cls_map = cls
     tones = [p.get(kname, dflt) for kname, dflt in (("uniform", UNIFORM), ("kit", [88, 88, 58]), ("helmet", UNIFORM),
                                                      ("gun", [30, 31, 31]), ("boots", [48, 46, 40]), ("skin", [146, 110, 88]))]
@@ -233,6 +311,21 @@ else:
     up = np.clip((nrm[..., 2] - 0.25) / 0.5, 0.0, 1.0)
     top = up * (cls <= 2)
     flat = flat * (1.0 + (p.get("top_lift", 1.0) - 1.0) * top)[..., None]
+    if "camo" in p:
+        # dark patches on the cloth to break the flat tone (the texels are uv islands, so a patch
+        # follows a sleeve or a leg):
+        # smooth value noise `cell_px` wide, thresholded, `depth` (0..1) dark in linear
+        cm = p["camo"]
+        rg = np.random.default_rng(cm.get("seed", 1))
+        gn = N // cm.get("cell_px", 24) + 2
+        coarse = rg.random((gn, gn)).astype(np.float32)
+        yy, xx = np.mgrid[0:N, 0:N].astype(np.float32) / cm.get("cell_px", 24)
+        y0i, x0i = yy.astype(int), xx.astype(int)
+        fy, fx = yy - y0i, xx - x0i
+        fy, fx = fy * fy * (3 - 2 * fy), fx * fx * (3 - 2 * fx)
+        nz = (coarse[y0i, x0i] * (1 - fx) + coarse[y0i, x0i + 1] * fx) * (1 - fy) + (coarse[y0i + 1, x0i] * (1 - fx) + coarse[y0i + 1, x0i + 1] * fx) * fy
+        patch = (nz > cm.get("threshold", 0.6)) & (cls == 0)
+        flat = flat * (1.0 - cm.get("depth", 0.3) * patch)[..., None]
     # olive tops share the grass's hue: the vehicles' tops passed only near-neutral, so they fade towards grey of the
     # same luminance (`top_fade`); sides keep the uniform's olive
     grey = (flat @ np.array([0.2126, 0.7152, 0.0722], np.float32))[..., None]
@@ -246,9 +339,16 @@ else:
 
 # Flat kit colours in the right strip: one block per colour, sampled at its centre (PNG rows from the top).
 kit_cols = []
+
+
+def tube_shades(t):
+    """The tube's side colours from lit to shaded: `shades` multiplies the colour (a flat tube reads as a paper roll)."""
+    return [tuple(int(round(ch * m)) for ch in t["colour"]) for m in t.get("shades", [1.0])]
+
+
 for v in fig.get("variants", {}).values():
     if "tube" in v:
-        kit_cols += [tuple(v["tube"]["colour"]), tuple(v["tube"]["cap"])]
+        kit_cols += tube_shades(v["tube"]) + [tuple(v["tube"]["cap"])]
 kit_cols = list(dict.fromkeys(kit_cols))
 BLOCK = N // 16
 
@@ -282,8 +382,8 @@ bpy.data.objects.remove(hi)
 def finish(ob, unit):
     """Material with this unit's own copy of the atlas (Godot extracts one per file), COLOR_0 black, export."""
     albedo = write_png(alb, "albedo", unit)
-    albedo.name = "%s_albedo" % unit
-    mat = bpy.data.materials.new(unit); mat.use_nodes = True
+    albedo.name = "%s_albedo" % slug(unit)
+    mat = bpy.data.materials.new(slug(unit)); mat.use_nodes = True
     nt = mat.node_tree; bsdf = nt.nodes["Principled BSDF"]
     tn = nt.nodes.new("ShaderNodeTexImage"); tn.image = albedo
     nt.links.new(tn.outputs[0], bsdf.inputs["Base Color"])
@@ -298,8 +398,9 @@ def finish(ob, unit):
     ca.data.foreach_set("color", np.tile([0.0, 0.0, 0.0, 1.0], len(ca.data)).astype(np.float32))
     me.color_attributes.active_color = ca
     me.color_attributes.render_color_index = me.color_attributes.find("Color")
-    ob.name = unit; me.name = unit
-    path = os.path.join(REPO, "assets", "units", unit + ".glb")
+    ob.name = slug(unit); me.name = slug(unit)
+    os.makedirs(OUT, exist_ok=True)
+    path = os.path.join(OUT, slug(unit) + ".glb")
     select_only(ob)
     bpy.ops.export_scene.gltf(filepath=path, use_selection=True, export_apply=True, export_tangents=True,
                               export_vertex_color='NAME', export_vertex_color_name="Color",
@@ -326,9 +427,18 @@ def tube(t, base):
     me = bpy.data.meshes.new("tube"); bm.to_mesh(me); bm.free()
     ob = bpy.data.objects.new("tube", me); bpy.context.collection.objects.link(ob)
     ul = me.uv_layers.new(name=base.data.uv_layers.active.name)
+    shades = tube_shades(t)
+    light = Vector(t.get("light", [0.6, -0.5, 0.0])).normalized()
     for poly in me.polygons:
         # only the bottom end is dark: the top end faces the camera and reads as the tube's colour
-        at = kit_uv(t["cap"] if poly.normal.z < -0.5 else t["colour"])
+        if poly.normal.z < -0.5:
+            at = kit_uv(t["cap"])
+        elif poly.normal.z > 0.5 or len(shades) == 1:
+            at = kit_uv(shades[0])
+        else:
+            # across the cylinder: the facets turned from the light step down through the shades
+            lit = 0.5 + 0.5 * poly.normal.dot(light)
+            at = kit_uv(shades[min(len(shades) - 1, int((1.0 - lit) * len(shades)))])
         for li in poly.loop_indices:
             ul.data[li].uv = at
     for poly in me.polygons:
@@ -344,35 +454,9 @@ def smoothstep(e0, e1, x):
 def make_body(b, base, unit):
     """A fallen soldier, not the standing one rotated flat: knees bent, face down and rolled onto one side so an
     arm lies under the torso, the rifle cut away and lying flat beside him. Same vertices' UVs, so the same atlas."""
-    # the rifle: dark (gun-class) faces well off the body axis at hand height; gloves on the chest stay with the man
-    bm = bmesh.new(); bm.from_mesh(base.data)
-    uvl = bm.loops.layers.uv.active
-    rifle = set()
-    for f in bm.faces:
-        u = sum(l[uvl].uv.x for l in f.loops) / len(f.loops)
-        v = sum(l[uvl].uv.y for l in f.loops) / len(f.loops)
-        c = f.calc_center_median()
-        dark = cls_map is not None and cls_map[min(N - 1, int((1.0 - v) * N)), min(N - 1, int(u * N))] == 3
-        if dark and math.hypot(c.x, c.y) > b.get("rifle_r_m", 0.3) * M and 0.3 * HEIGHT < c.z < 0.85 * HEIGHT:
-            rifle.add(f.index)
-    # only the largest connected piece is the rifle: dark knee pads and gloves would come away as floating shards
-    bm.faces.ensure_lookup_table()
-    best, seen_f = set(), set()
-    for i in rifle:
-        if i in seen_f:
-            continue
-        piece, stack = set(), [i]
-        seen_f.add(i)
-        while stack:
-            j = stack.pop(); piece.add(j)
-            for e in bm.faces[j].edges:
-                for g in e.link_faces:
-                    if g.index in rifle and g.index not in seen_f:
-                        seen_f.add(g.index); stack.append(g.index)
-        if len(piece) > len(best):
-            best = piece
-    rifle = best
-    bm.free()
+    # the rifle: dark (gun-class) faces well off the body axis at hand height, the largest connected
+    # piece (see find_rifle)
+    rifle = find_rifle(base, b.get("rifle_r_m", 0.3))
 
     def part(keep_rifle):
         bm = bmesh.new(); bm.from_mesh(base.data); bm.faces.ensure_lookup_table()
@@ -456,15 +540,137 @@ def make_crouch(c, base, unit):
     return ob
 
 
-outs = {name: finish(lo, name)}
+def find_rifle(base, r_m):
+    """Indices of the faces of the rifle: dark (gun-class) texels off the body axis at hand height, the largest connected piece."""
+    bm = bmesh.new(); bm.from_mesh(base.data)
+    uvl = bm.loops.layers.uv.active
+    rifle = set()
+    for f in bm.faces:
+        u = sum(l[uvl].uv.x for l in f.loops) / len(f.loops)
+        v = sum(l[uvl].uv.y for l in f.loops) / len(f.loops)
+        c = f.calc_center_median()
+        dark = cls_map is not None and cls_map[min(N - 1, int((1.0 - v) * N)), min(N - 1, int(u * N))] == 3
+        if dark and math.hypot(c.x, c.y) > r_m * M and 0.3 * HEIGHT < c.z < 0.85 * HEIGHT:
+            rifle.add(f.index)
+    bm.faces.ensure_lookup_table()
+    best, seen_f = set(), set()
+    for i in rifle:
+        if i in seen_f:
+            continue
+        piece, stack = set(), [i]
+        seen_f.add(i)
+        while stack:
+            j = stack.pop(); piece.add(j)
+            for e in bm.faces[j].edges:
+                for g in e.link_faces:
+                    if g.index in rifle and g.index not in seen_f:
+                        seen_f.add(g.index); stack.append(g.index)
+        if len(piece) > len(best):
+            best = piece
+    bm.free()
+    return best
+
+
+RIFLE_FACES = find_rifle(lo, fig.get("rifle_pose", {}).get("r_m", 0.2)) if "rifle_pose" in fig and cls_map is not None else set()
+
+
+def repose_rifle(ob):
+    """Carry the rifle across the chest at low ready (`rifle_pose` = {r_m, axis, at_m}): the source holds it pointing forward and
+    down, edge-on to a camera behind the squad. The rifle's faces are split off, turned so their axis is `axis` and moved so their
+    centre is at `at_m` (metres, front +y); the hands stay where they were."""
+    if not RIFLE_FACES:
+        return ob
+    rp = fig["rifle_pose"]
+    bm = bmesh.new(); bm.from_mesh(ob.data); bm.faces.ensure_lookup_table()
+    geom = [bm.faces[i] for i in RIFLE_FACES]
+    out = bmesh.ops.split(bm, geom=geom, use_only_faces=True)["geom"]
+    verts = list({v for f in out if isinstance(f, bmesh.types.BMFace) for v in f.verts})
+    pts = np.array([v.co[:] for v in verts])
+    ctr = pts.mean(0)
+    ax = np.linalg.eigh(np.cov((pts - ctr).T))[1][:, -1]
+    if ax[2] > 0:
+        ax = -ax
+    q = Vector(ax.tolist()).rotation_difference(Vector(rp["axis"]).normalized())
+    at = Vector(rp["at_m"]) * M
+    for v in verts:
+        v.co = at + q @ (v.co - Vector(ctr.tolist()))
+    bm.to_mesh(ob.data); bm.free()
+    return ob
+
+
+def make_kneel(c, base, unit):
+    """A real kneel: the front leg's thigh forward and its shin leaning back, the rear leg's thigh near vertical and its
+    shin lying back, the rear knee on the ground. The legs split at x = `split_x_m` (the gap between them;
+    `front_sign` -1 makes the leg on the smaller x the front one); parts inside `rifle_capsule_m` stay with the torso. Angles in degrees: `front` and `rear` = [thigh from
+    vertical, shin from vertical], positive forward."""
+    bm = bmesh.new(); bm.from_mesh(base.data)
+    hip, knee, band = c.get("hip_m", 0.95) * M, c.get("knee_m", 0.5) * M, 0.03
+    fr, re = c["front"], c["rear"]
+    sign = c.get("front_sign", -1)
+    split = c.get("split_x_m", 0.0) * M
+
+    def pivot(z, front):
+        """Where this leg's axis crosses height z: the legs of a stride do not stand over each other, so one pivot for
+        both would fling the leg that is stepping out."""
+        ys = [v.co.y for v in bm.verts if abs(v.co.z - z) < 0.02 and ((v.co.x - split) * sign > 0) == front]
+        return sum(ys) / max(1, len(ys))
+
+    kys, hys = {w: pivot(knee, w) for w in (True, False)}, {w: pivot(hip, w) for w in (True, False)}
+    cap = p.get("rifle_capsule_m")
+
+    def turn(co, py, pz, a):
+        y, z = co.y - py, co.z - pz
+        return py + y * math.cos(a) - z * math.sin(a), pz + y * math.sin(a) + z * math.cos(a)
+
+    def in_rifle(co):
+        if cap is None:
+            return False
+        P = np.array([co.x, co.y, co.z]) / M
+        A, Bv = np.array(cap[0]), np.array(cap[1])
+        ab = Bv - A
+        tt = min(1.0, max(0.0, float((P - A) @ ab) / float(ab @ ab)))
+        return np.linalg.norm(P - (A + tt * ab)) < cap[2] + 0.03 and co.y > cap[3] * M
+
+    side = {}
+    for v in bm.verts:
+        z0 = v.co.z
+        if z0 > hip + band or in_rifle(v.co):
+            continue
+        wf = smoothstep(-0.02 * M, 0.02 * M, (v.co.x - c.get("split_x_m", 0.0) * M) * sign)
+        thigh = math.radians(wf * fr[0] + (1 - wf) * re[0])
+        shin_net = math.radians(wf * fr[1] + (1 - wf) * re[1])
+        ky, hy = wf * kys[True] + (1 - wf) * kys[False], wf * hys[True] + (1 - wf) * hys[False]
+        ws = smoothstep(knee + band, knee - band, z0)
+        if ws > 0.0:
+            v.co.y, v.co.z = turn(v.co, ky, knee, (shin_net - thigh) * ws)
+        wt = smoothstep(hip + band, hip - band, z0)
+        if wt > 0.0:
+            v.co.y, v.co.z = turn(v.co, hy, hip, thigh * wt)
+        side[v.index] = wf
+    zmin = min(v.co.z for v in bm.verts)
+    lows = {w: min([v.co.z for v in bm.verts if v.index in side and (side[v.index] > 0.5) == w] or [0.0]) for w in (True, False)}
+    print("FIG kneel", unit, "front leg low %.3f rear leg low %.3f m (zmin %.3f m)" % ((lows[True] - zmin) / M, (lows[False] - zmin) / M, zmin / M))
+    bmesh.ops.translate(bm, vec=Vector((0.0, 0.0, -zmin)), verts=bm.verts)
+    me = bpy.data.meshes.new(unit); bm.to_mesh(me); bm.free()
+    ob = bpy.data.objects.new(unit, me); bpy.context.collection.objects.link(ob)
+    print("FIG kneel", unit, "top %.3f m" % (max(v.co.z for v in me.vertices) / M))
+    return ob
+
+
+std = bpy.data.objects.new(name, lo.data.copy()); bpy.context.collection.objects.link(std)
+outs = {name: finish(repose_rifle(std), name)}
 for unit, v in fig.get("variants", {}).items():
     if "body" in v:
         outs[unit] = finish(make_body(v["body"], lo, unit), unit)
         continue
     if "crouch" in v:
-        outs[unit] = finish(make_crouch(v["crouch"], lo, unit), unit)
+        outs[unit] = finish(repose_rifle(make_crouch(v["crouch"], lo, unit)), unit)
+        continue
+    if "kneel" in v:
+        outs[unit] = finish(repose_rifle(make_kneel(v["kneel"], lo, unit)), unit)
         continue
     body = bpy.data.objects.new(unit, lo.data.copy()); bpy.context.collection.objects.link(body)
+    repose_rifle(body)
     t = tube(v["tube"], body)
     bpy.ops.object.select_all(action='DESELECT')
     t.select_set(True); body.select_set(True); bpy.context.view_layer.objects.active = body
@@ -500,6 +706,8 @@ for unit, path in outs.items():
     top = max(HEIGHT, (t["bottom_m"] + t["length_m"]) * M) if t else HEIGHT
     if "body" in fig.get("variants", {}).get(unit, {}):
         check(pa["max"][1] < 0.11, "%s lies low (top %.4f = %.2f m)" % (unit, pa["max"][1], pa["max"][1] / M))
+    elif "kneel" in fig.get("variants", {}).get(unit, {}):
+        check(0.65 * HEIGHT < pa["max"][1] < 0.85 * HEIGHT, "%s kneels (top %.2f m)" % (unit, pa["max"][1] / M))
     elif "crouch" in fig.get("variants", {}).get(unit, {}):
         check(0.6 * HEIGHT < pa["max"][1] < 0.92 * HEIGHT, "%s crouches (top %.2f m)" % (unit, pa["max"][1] / M))
     else:
@@ -526,7 +734,7 @@ sc.collection.objects.link(cam); sc.camera = cam
 for unit in outs:
     for o in bpy.data.objects:
         if o.type == 'MESH':
-            o.hide_render = o.name != unit
+            o.hide_render = o.name != slug(unit)
     for tag, rot in (("top", (0, 0, 0)), ("front", (math.radians(90), 0, math.radians(180))),
                      ("iso", (math.radians(38), 0, math.radians(-135))), ("iso_back", (math.radians(38), 0, math.radians(45)))):
         cam.rotation_euler = rot
