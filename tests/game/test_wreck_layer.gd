@@ -821,7 +821,8 @@ func test_every_legal_crew_spot_is_clear_of_the_wreck_as_built_and_visible() -> 
 				for k in idx:
 					tris.append(node.basis * (v[k] + (node.get_node("Body") as Node3D).position))
 				var index: Dictionary = CrewLegal.ground_index(tris)
-				var bufs: Array = [CrewLegal.silhouette(tris, IsoCameraRig.PITCH_NEAR_DEG), CrewLegal.silhouette(tris, IsoCameraRig.PITCH_FAR_DEG)]
+				var seen: PackedVector3Array = tris + CrewLegal.flame_tris(id, set_id, facing)
+				var bufs: Array = [CrewLegal.silhouette(seen, IsoCameraRig.PITCH_NEAR_DEG), CrewLegal.silhouette(seen, IsoCameraRig.PITCH_FAR_DEG)]
 				node.free()
 				for i in spots.size():
 					if mask & (1 << i) == 0:

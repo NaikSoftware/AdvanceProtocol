@@ -46,6 +46,34 @@ static func wreck_tris(type_id: int, set_id: int, facing: int, tilt: Vector2) ->
 	return out
 
 
+## Вогонь над уламком як перекривач для виду: по коробці на кожен із двох коренів рядка `flame`
+## (метал лафета). Висота — верхівка язика (`FLAME_TIP_PER_WIDTH`, не вище `FLAME_MAX_H`), ширина —
+## половина язика: сам язик напівпрозорий, але тіло за його основою читається плямою, тож таке місце
+## не береться. Без рядка `flame` (танки) коробок нема. Координати як у `wreck_tris`.
+static func flame_tris(type_id: int, set_id: int, facing: int) -> PackedVector3Array:
+	var out := PackedVector3Array()
+	var roots: Array = UnitSilhouettes.spec(type_id, set_id).get("flame", [])
+	if roots.size() != 2:
+		return out
+	var width: float = WreckLayer.flame_width(type_id, set_id)
+	var rise: float = minf(WreckLayer.FLAME_TIP_PER_WIDTH * width, WreckLayer.FLAME_MAX_H * 0.85)
+	var half := Vector3(width * 0.25, rise * 0.5, width * 0.25)
+	var basis := Basis(Vector3.UP, deg_to_rad(UnitView._degrees_for_facing(facing)))
+	for r: Vector3 in roots:
+		var c: Vector3 = r - Vector3(0.0, WreckLayer.HULL_SAG, 0.0) + Vector3(0.0, half.y, 0.0)
+		var corners: Array[Vector3] = []
+		for sx: float in [-1.0, 1.0]:
+			for sy: float in [-1.0, 1.0]:
+				for sz: float in [-1.0, 1.0]:
+					corners.append(basis * (c + half * Vector3(sx, sy, sz)))
+		# шість граней по два трикутники; індекс кута = 4·(sx>0) + 2·(sy>0) + (sz>0)
+		for q: Array in [[0, 1, 3, 2], [4, 6, 7, 5], [0, 4, 5, 1], [2, 3, 7, 6], [0, 2, 6, 4], [1, 5, 7, 3]]:
+			for k: Array in [[0, 1, 2], [0, 2, 3]]:
+				for j: int in k:
+					out.append(corners[q[j]])
+	return out
+
+
 ## Трикутники нижче LOW у комірках сітки землі: прямокутник питає лише сусідні.
 static func ground_index(tris: PackedVector3Array) -> Dictionary:
 	var flat := PackedVector2Array()
@@ -252,7 +280,8 @@ static func legal_masks(type_id: int, set_id: int) -> PackedInt32Array:
 				tilts.append(ground_index(wreck_tris(type_id, set_id, facing, Vector2(tx, tz))))
 		var plain: PackedVector3Array = wreck_tris(type_id, set_id, facing, Vector2.ZERO)
 		tilts.append(ground_index(plain))
-		var bufs: Array = [silhouette(plain, IsoCameraRig.PITCH_NEAR_DEG), silhouette(plain, IsoCameraRig.PITCH_FAR_DEG)]
+		var seen: PackedVector3Array = plain + flame_tris(type_id, set_id, facing)
+		var bufs: Array = [silhouette(seen, IsoCameraRig.PITCH_NEAR_DEG), silhouette(seen, IsoCameraRig.PITCH_FAR_DEG)]
 		var mask: int = 0
 		for i in spots.size():
 			var rep: Dictionary = spot_report(spots[i], facing, tilts, bufs)

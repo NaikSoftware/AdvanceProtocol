@@ -80,7 +80,8 @@ func _scan(id: int, set_id: int = 0, min_facings: int = 4, step: float = 0.04) -
 				tilts.append(Legal.ground_index(Legal.wreck_tris(id, set_id, facing, Vector2(tx, tz))))
 		var plain: PackedVector3Array = Legal.wreck_tris(id, set_id, facing, Vector2.ZERO)
 		tilts.append(Legal.ground_index(plain))
-		per_facing.append([tilts, [Legal.silhouette(plain, IsoCameraRig.PITCH_NEAR_DEG), Legal.silhouette(plain, IsoCameraRig.PITCH_FAR_DEG)]])
+		var seen: PackedVector3Array = plain + Legal.flame_tris(id, set_id, facing)
+		per_facing.append([tilts, [Legal.silhouette(seen, IsoCameraRig.PITCH_NEAR_DEG), Legal.silhouette(seen, IsoCameraRig.PITCH_FAR_DEG)]])
 	var rows: Array = []
 	var reach: int = roundi(0.36 / step)
 	# грубіша сітка — чотири повороти, дрібніша — шість: на ній шукають місця для напрямів, де їх бракує
