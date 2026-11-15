@@ -19,6 +19,7 @@ extends Node
 ## інтерфейс, 3D-діти екрана) і друкує, скільки кожна коштує: рядок DIAG <map> <cell> z<zoom> <група>(<вузлів>)
 ## dc=… tris=… surfs=… inst=… vis=… (vis — скільки екземплярів MultiMesh у кадрі). Базу беруть перед кожною групою.
 ## --only=<підрядок> лишає в --diag групи з таким підрядком в імені.
+## --gpu: рядок GPU <кадр> lines=… no_lines=…: медіана часу кадру на GPU з лініями під кронами й без них.
 ## <map>@forest@x,y@zoom — танк гравця 0 проламав ліс на x,y і сусідню клітинку, піхота — у стоячому
 ## лісі поруч; камера на танку. <map>@forest@x,y@zoom@sel — те саме, піхоту вибрано (контури зон під кронами);
 ## @peek замість @sel — довгий натиск на танк (кільце дальності). З обома інтерфейс схований.
@@ -51,13 +52,15 @@ func _ready() -> void:
 	var diag: bool = args.has("--diag")
 	# --fencemask: до кожного кадру ще кадр «_nofence» без парканів дворів (маска для виміру їхнього кольору).
 	var fence_mask: bool = args.has("--fencemask")
+	# --gpu: ще й час кадру на GPU — з лініями під кронами і без них (крони не шукають землю під собою).
+	var gpu: bool = args.has("--gpu")
 	for a in args:
 		if a.begins_with("--only="):
 			_only = a.trim_prefix("--only=")
 	for i in range(1, args.size()):
 		if args[i].begins_with("--only="):
 			continue
-		if args[i] in ["--shadows", "--noshadows", "--stdmat", "--diag", "--fencemask"]:
+		if args[i] in ["--shadows", "--noshadows", "--stdmat", "--diag", "--fencemask", "--gpu"]:
 			continue
 		var parts: PackedStringArray = args[i].split("@")
 		var map: String = parts[0]
@@ -377,6 +380,15 @@ func _ready() -> void:
 					await RenderingServer.frame_post_draw
 					shots.append([name + "_nofence", get_viewport().get_texture().get_image()])
 					fence.visible = true
+			if gpu:
+				var bv: BoardView = screen.get_node("%BoardView")
+				var on: float = await _median_gpu()
+				bv.forest().set_contour_edges(null)
+				bv.forest().set_contour_rings(PackedVector4Array(), PackedColorArray())
+				var off: float = await _median_gpu()
+				bv.call("_publish_contours")
+				bv.call("_publish_circles")
+				print("GPU %s lines=%.2f ms no_lines=%.2f ms" % [name, on, off])
 			if diag:
 				await _diag(screen, "%s %s z%d" % [map, v[0], int(v[1])], Vector2i(dc, tris))
 		screen.free()
@@ -384,6 +396,20 @@ func _ready() -> void:
 	for s: Array in shots:
 		(s[1] as Image).save_jpg("%s/%s.jpg" % [out, s[0]], 0.9)
 	get_tree().quit()
+
+
+## Медіана часу кадру на GPU за 31 кадр, мс.
+func _median_gpu() -> float:
+	var vp: RID = get_viewport().get_viewport_rid()
+	RenderingServer.viewport_set_measure_render_time(vp, true)
+	for f in 5:
+		await RenderingServer.frame_post_draw
+	var t: Array[float] = []
+	for f in 31:
+		await RenderingServer.frame_post_draw
+		t.append(RenderingServer.viewport_get_measured_render_time_gpu(vp))
+	t.sort()
+	return t[15]
 
 
 ## Медіана draw calls і трикутників за 9 кадрів: лічильник окремого кадру стрибає (тіні й зонд

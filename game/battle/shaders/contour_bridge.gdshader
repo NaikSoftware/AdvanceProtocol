@@ -13,6 +13,12 @@ void vertex() {
 }
 
 void fragment() {
+	// Колір вершини — у sRGB, як і в стрічки на ґрунті (StandardMaterial3D.vertex_color_is_srgb): Mobile
+	// світить у лінійному просторі й переводить, Compatibility — у sRGB і бере як є.
+#if CURRENT_RENDERER == RENDERER_COMPATIBILITY
 	ALBEDO = COLOR.rgb;
+#else
+	ALBEDO = mix(COLOR.rgb / 12.92, pow((COLOR.rgb + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), COLOR.rgb));
+#endif
 	ALPHA = COLOR.a;
 }

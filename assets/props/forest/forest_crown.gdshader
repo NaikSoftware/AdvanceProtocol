@@ -47,9 +47,9 @@ uniform float card_up = 1.2;
 // малює ту саму лінію сама (ForestLayer.set_contour_edges, set_contour_rings). Типово вимкнено:
 // розчинена крона й стенди лісу лінії не малюють.
 // Картка ребер: у (2k, j) — ребро x = k − 0,5 у ряді j, у (2i + 1, k) — ребро z = k − 0,5 у стовпці i.
-// Колір лінійний, як колір вершин стрічки, тож без source_color.
+// Колір у sRGB, як у вершин стрічки: source_color переводить його так само, як рендерер — стрічку.
 uniform bool contour_on = false;
-uniform sampler2D contour_edges : filter_nearest, repeat_disable;
+uniform sampler2D contour_edges : source_color, filter_nearest, repeat_disable;
 uniform float contour_half = 0.01;
 uniform float contour_lift = 0.04;
 // Кільця: xy — центр, z — радіус (тайли), w — поступ імпульсу (BoardView). Колір — sRGB, source_color,
@@ -71,6 +71,9 @@ uniform float water_level = -0.15625;
 // Зонд відбиттів знімає крони (шар 1), але не накладки: у його знімку лінії активного гравця
 // лишились би для наступного.
 uniform int overlay_layers = 0;
+// Рамка всіх ліній на землі (xy — мінімум, zw — максимум, XZ світу; BoardView.line_rect): крона, чий
+// промінь до землі її не перетинає, лінії не несе й землі під собою не шукає. Типово порожня.
+uniform vec4 line_rect = vec4(1.0, 1.0, 0.0, 0.0);
 
 #include "res://game/battle/shaders/surroundings.gdshaderinc"
 #include "res://game/battle/shaders/fire_ring.gdshaderinc"
@@ -110,12 +113,12 @@ vec2 line_hit(vec3 eye, vec3 p, float lift) {
 	float ya = p.y;
 	float fa = ya - line_ground(p.xz) - lift;
 	float y_lo = water_level + lift;
-	for (int i = 1; i <= 8 && fa > 0.0; i++) {
-		float yb = mix(p.y, y_lo, float(i) / 8.0);
+	for (int i = 1; i <= 6 && fa > 0.0; i++) {
+		float yb = mix(p.y, y_lo, float(i) / 6.0);
 		float fb = yb - line_ground(mix(eye.xz, p.xz, (eye.y - yb) * k)) - lift;
 		if (fb <= 0.0) {
 			for (int j = 0; j < 2; j++) {
-				float yc = mix(ya, yb, fa / (fa - fb));
+				float yc = mix(ya, yb, fa / max(fa - fb, 1e-6));
 				float fc = yc - line_ground(mix(eye.xz, p.xz, (eye.y - yc) * k)) - lift;
 				if (fc > 0.0) {
 					ya = yc;
@@ -125,7 +128,8 @@ vec2 line_hit(vec3 eye, vec3 p, float lift) {
 					fb = fc;
 				}
 			}
-			return mix(eye.xz, p.xz, (eye.y - mix(ya, yb, fa / (fa - fb))) * k);
+			// fa > 0 ≥ fb, але денормалізоване fa на GPU обнуляється: ділення без захисту дало б NaN.
+			return mix(eye.xz, p.xz, (eye.y - mix(ya, yb, fa / max(fa - fb, 1e-6))) * k);
 		}
 		ya = yb;
 		fa = fb;
@@ -224,46 +228,48 @@ void fragment() {
 		// там розпливалась на кілька своїх ширин.
 		vec2 gw = max(fwidth(g), vec2(1e-5));
 		float px = max(0.7071 * length(vec2(length(dFdx(g)), length(dFdy(g)))), 1e-4);
-		// Чи ця точка крони над стрічкою: тоді промінь до стрічки йде крізь неї, і лінію малює вона.
-		// Колода нижче за стрічку лінію не малює — стрічка лягає поверх неї й так. Висота — під самою
-		// точкою, а не в g: біля висоти стрічки g ще не збігся, і колода малювала б лінію вдруге.
-		float here = base_y;
-		if (use_height) {
-			here = line_ground(world_pos.xz);
-			g = line_hit(eye, world_pos, contour_lift);
-		}
-		float above = step(here + contour_lift, world_pos.y);
-		// Колір із домноженою альфою: кільце під лінією зон, як на землі.
-		vec3 pre = vec3(0.0);
-		float cov = 0.0;
-		// Кільце не обрізане краєм дошки: на землі воно йде й за край, і розрив на кронах кільця читався б помилкою.
-		for (int i = 0; i < ring_count && i < 4; i++) {
-			float a = ring_colors[i].a * fire_ring(g - rings[i].xy, rings[i].z, rings[i].w, px);
-			pre = mix(pre, ring_colors[i].rgb, a);
-			cov = a + cov * (1.0 - a);
-		}
-		if (contour_on) {
-			ivec2 ts = textureSize(contour_edges, 0);
-			// Ряд (стовпець) береться з обох боків на півширини: лінія заходить за кут, як і стрічка.
-			int k = int(floor(g.x + 1.0));
-			vec4 ev = edge_pick(ivec2(2 * k, int(floor(g.y + 0.5 - contour_half))), ivec2(2 * k, int(floor(g.y + 0.5 + contour_half))), ts);
-			float av = ev.a * clamp((contour_half - abs(g.x - float(k) + 0.5)) / gw.x + 0.5, 0.0, 1.0);
-			int m = int(floor(g.y + 1.0));
-			vec4 eh = edge_pick(ivec2(2 * int(floor(g.x + 0.5 - contour_half)) + 1, m), ivec2(2 * int(floor(g.x + 0.5 + contour_half)) + 1, m), ts);
-			float ah = eh.a * clamp((contour_half - abs(g.y - float(m) + 0.5)) / gw.y + 0.5, 0.0, 1.0);
-			vec4 e = av >= ah ? vec4(ev.rgb, av) : vec4(eh.rgb, ah);
-			pre = mix(pre, e.rgb, e.a);
-			cov = e.a + cov * (1.0 - e.a);
-		}
-		ALBEDO *= 1.0 - cov * above;
-		SPECULAR *= 1.0 - cov * above;
-		EMISSION = pre * above;
-		// Лінія за краєм дошки не тоне в імлі кільця: на землі її теж ніщо не туманить.
-		FOG.a *= 1.0 - cov * above;
-		// Край пучка з лінією — повне покриття: часткове змішувало б лінію з тим, що за листям, у сіру
-		// пляму. Лише там, де поріг альфи пучок і так лишає, щоб не проступив квадрат картки.
-		if (cov * above > 0.004 && t.a >= cut) {
-			t.a = 1.0;
+		// Відрізок променя від точки крони до рівня води: лише на ньому може лежати земля під пікселем.
+		// Не зачепив рамки ліній — лінії тут немає, і крок променем не потрібен.
+		vec2 g_lo = mix(eye.xz, world_pos.xz, (eye.y - water_level - contour_lift) * k_ray);
+		vec2 seg_lo = min(world_pos.xz, g_lo);
+		vec2 seg_hi = max(world_pos.xz, g_lo);
+		if (all(lessThanEqual(seg_lo, line_rect.zw)) && all(greaterThanEqual(seg_hi, line_rect.xy))) {
+			// Чи ця точка крони над стрічкою: тоді промінь до стрічки йде крізь неї, і лінію малює вона.
+			// Колода нижче за стрічку лінію не малює — стрічка лягає поверх неї й так. Висота — під самою
+			// точкою, а не в g: біля висоти стрічки g ще не збігся, і колода малювала б лінію вдруге.
+			float here = base_y;
+			if (use_height) {
+				here = line_ground(world_pos.xz);
+				g = line_hit(eye, world_pos, contour_lift);
+			}
+			float above = step(here + contour_lift, world_pos.y);
+			// Колір із домноженою альфою: кільце під лінією зон, як на землі.
+			vec3 pre = vec3(0.0);
+			float cov = 0.0;
+			// Кільце не обрізане краєм дошки: на землі воно йде й за край, і розрив на кронах кільця читався б помилкою.
+			for (int i = 0; i < ring_count && i < 4; i++) {
+				float a = ring_colors[i].a * fire_ring(g - rings[i].xy, rings[i].z, rings[i].w, px);
+				pre = mix(pre, ring_colors[i].rgb, a);
+				cov = a + cov * (1.0 - a);
+			}
+			if (contour_on) {
+				ivec2 ts = textureSize(contour_edges, 0);
+				// Ряд (стовпець) береться з обох боків на півширини: лінія заходить за кут, як і стрічка.
+				int k = int(floor(g.x + 1.0));
+				vec4 ev = edge_pick(ivec2(2 * k, int(floor(g.y + 0.5 - contour_half))), ivec2(2 * k, int(floor(g.y + 0.5 + contour_half))), ts);
+				float av = ev.a * clamp((contour_half - abs(g.x - float(k) + 0.5)) / gw.x + 0.5, 0.0, 1.0);
+				int m = int(floor(g.y + 1.0));
+				vec4 eh = edge_pick(ivec2(2 * int(floor(g.x + 0.5 - contour_half)) + 1, m), ivec2(2 * int(floor(g.x + 0.5 + contour_half)) + 1, m), ts);
+				float ah = eh.a * clamp((contour_half - abs(g.y - float(m) + 0.5)) / gw.y + 0.5, 0.0, 1.0);
+				vec4 e = av >= ah ? vec4(ev.rgb, av) : vec4(eh.rgb, ah);
+				pre = mix(pre, e.rgb, e.a);
+				cov = e.a + cov * (1.0 - e.a);
+			}
+			ALBEDO *= 1.0 - cov * above;
+			SPECULAR *= 1.0 - cov * above;
+			EMISSION = pre * above;
+			// Лінія за краєм дошки не тоне в імлі кільця: на землі її теж ніщо не туманить.
+			FOG.a *= 1.0 - cov * above;
 		}
 	}
 	// Край пучка — alpha-to-coverage (MSAA): м'який перехід на 1–2 пікселі без растру й без

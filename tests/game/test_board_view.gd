@@ -228,6 +228,8 @@ func test_rebuild_tiles_keeps_circles() -> void:
 # Поки біжить імпульс, сітка — увесь круг; далі — лише смуга межі, щоб тримане кільце не їло трикутники.
 
 const _R: float = 3.0
+## Імпульс триває, поки фронт не пройде радіус і ширину хвилі: (r + RING_PULSE_W) / PULSE_SPEED.
+const _T: float = (_R + BoardView.RING_PULSE_W) / BoardView.PULSE_SPEED
 
 
 var _pulse_tweens: Array[Tween] = []
@@ -283,7 +285,7 @@ func test_pulse_mesh_covers_the_whole_disk_on_the_ground() -> void:
 func test_after_the_pulse_only_the_border_band_stays() -> void:
 	view.build(Board.create(10, 10, Terrain.GroundState.DRY))
 	var ring: MeshInstance3D = _draw_ring()
-	_ring_tween().custom_step(_R / BoardView.PULSE_SPEED)
+	_ring_tween().custom_step(_T)
 
 	var mesh := ring.mesh as ArrayMesh
 	_assert_drapes(mesh)
@@ -299,17 +301,17 @@ func test_after_the_pulse_only_the_border_band_stays() -> void:
 			assert_true(_point_covered(mesh, dir * r), "межа: точка %s накрита" % [dir * r])
 
 
-## Імпульс біжить один раз: поступ 0 → 1 рівномірно за radius / PULSE_SPEED, далі нічого не біжить і
+## Імпульс біжить один раз: поступ 0 → 1 рівномірно за _T, далі нічого не біжить і
 ## шейдер не міняється, тож статичний екран лишається статичним (TIME зробив би кадр щокадровим).
 func test_pulse_ring_runs_once_then_stands_still() -> void:
 	view.build(Board.create(10, 10, Terrain.GroundState.DRY))
 	var mat := _draw_ring().material_override as ShaderMaterial
 	assert_eq(mat.get_shader_parameter("pulse"), 0.0, "імпульс стартує з центру")
 	var tween: Tween = _ring_tween()
-	tween.custom_step(_R / BoardView.PULSE_SPEED * 0.5)
+	tween.custom_step(_T * 0.5)
 	assert_almost_eq(float(mat.get_shader_parameter("pulse")), 0.5, 1e-6, "півдороги — півшляху")
-	tween.custom_step(_R / BoardView.PULSE_SPEED * 0.5)
-	assert_eq(mat.get_shader_parameter("pulse"), 1.0, "до краю кільця за radius / PULSE_SPEED")
+	tween.custom_step(_T * 0.5)
+	assert_eq(mat.get_shader_parameter("pulse"), 1.0, "фронт пройшов радіус і хвилю за _T")
 	assert_false(tween.is_running(), "і більше не біжить")
 	for path: String in ["res://game/battle/shaders/fire_ring.gdshader", "res://game/battle/shaders/fire_ring.gdshaderinc"]:
 		assert_false(FileAccess.get_file_as_string(path).contains("TIME"), path)
@@ -322,9 +324,9 @@ func test_pulse_progress_reaches_the_canopy() -> void:
 	var forest: ForestLayer = view.forest()
 	assert_eq(forest.contour_rings, PackedVector4Array([Vector4(4, 6, _R, 0)]))
 	var tween: Tween = _ring_tween()
-	tween.custom_step(_R / BoardView.PULSE_SPEED * 0.5)
+	tween.custom_step(_T * 0.5)
 	assert_almost_eq(forest.contour_rings[0].w, 0.5, 1e-6, "крона бачить той самий поступ")
-	tween.custom_step(_R / BoardView.PULSE_SPEED * 0.5)
+	tween.custom_step(_T * 0.5)
 	assert_eq(forest.contour_rings, PackedVector4Array([Vector4(4, 6, _R, 1)]))
 
 
@@ -333,7 +335,7 @@ func test_rebuild_tiles_does_not_replay_the_pulse() -> void:
 	var board := Board.create(10, 10, Terrain.GroundState.DRY)
 	view.build(board)
 	_draw_ring()
-	_ring_tween().custom_step(_R / BoardView.PULSE_SPEED)
+	_ring_tween().custom_step(_T)
 	var before: Array[Tween] = get_tree().get_processed_tweens()
 
 	view.rebuild_tiles(board)
@@ -356,7 +358,83 @@ func test_canopy_and_ground_draw_the_ring_with_one_function() -> void:
 ## Вершини стрічки контуру — на відліках поля висот: крона шукає землю на тій самій білінійній
 ## поверхні, і лінія на вході під крону не ламається.
 func test_contour_ribbon_vertices_sit_on_the_height_lattice() -> void:
-	assert_eq(BoardView._CONTOUR_PIECES, TerrainHeight.SAMPLES_PER_TILE)
+	view.build(Board.create(5, 3, Terrain.GroundState.DRY))
+	var segs: Array[Dictionary] = []
+	for x in 3:
+		segs.append(_edge(Vector2i(x, 1), Vector2i(0, -1), Color.YELLOW))
+	view.draw_contour(segs, BoardView.LAYER_ZONES)
+	var mesh: Mesh = (view.get_node("Contour%d" % BoardView.LAYER_ZONES) as MultiMeshInstance3D).multimesh.mesh
+	var on_middle: int = 0
+	# Середнє ребро має сусідів з обох боків, тож іде рівно від кута до кута: кожна його вершина — на відліку.
+	for v in (mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array):
+		if v.x > 0.5 + 1e-4 and v.x < 1.5 - 1e-4:
+			on_middle += 1
+			var k: float = (v.x + 0.5) * TerrainHeight.SAMPLES_PER_TILE
+			assert_almost_eq(k, roundf(k), 1e-4, "x = %f на відліку поля висот" % v.x)
+	assert_eq(on_middle, (TerrainHeight.SAMPLES_PER_TILE - 1) * 2, "внутрішні відліки середнього ребра, по два боки стрічки")
+
+
+## Ширина межі й хвилі — у шейдері (fire_ring.gdshaderinc), сітка кільця й тривалість імпульсу — тут:
+## одне число в двох місцях мусить збігатися.
+func test_ring_widths_match_the_shader() -> void:
+	var code: String = FileAccess.get_file_as_string("res://game/battle/shaders/fire_ring.gdshaderinc")
+	var re := RegEx.create_from_string("const float (FR_LINE_W|FR_PULSE_W) = ([0-9.]+);")
+	var found: Dictionary = {}
+	for m: RegExMatch in re.search_all(code):
+		found[m.get_string(1)] = float(m.get_string(2))
+	assert_eq(found.get("FR_LINE_W"), BoardView.RING_LINE_W)
+	assert_eq(found.get("FR_PULSE_W"), BoardView.RING_PULSE_W)
+	assert_almost_eq(BoardView.RING_OUTER, BoardView.RING_LINE_W * 0.5 + 0.04, 1e-6, "півлінії плюс згладжування")
+
+
+## Фронти кільця гармати й кільця дрона біжать разом: однакова швидкість, а не однаковий час.
+func test_gun_and_drone_fronts_move_together() -> void:
+	view.build(Board.create(12, 12, Terrain.GroundState.DRY))
+	var before: Array[Tween] = get_tree().get_processed_tweens()
+	view.draw_circles([{"center": Vector2i(6, 6), "radius": 3, "color": Color.WHITE},
+		{"center": Vector2i(6, 6), "radius": 5, "color": Color.PURPLE}] as Array[Dictionary], BoardView.LAYER_INSPECT)
+	for t: Tween in get_tree().get_processed_tweens():
+		if not before.has(t):
+			t.custom_step(0.3)
+	for ring: MeshInstance3D in _circle_nodes():
+		var mat := ring.material_override as ShaderMaterial
+		var front: float = float(mat.get_shader_parameter("pulse")) * (float(mat.get_shader_parameter("radius")) + BoardView.RING_PULSE_W)
+		assert_almost_eq(front, 0.3 * BoardView.PULSE_SPEED, 1e-5, "%s: фронт" % ring.name)
+
+
+## Кільце на землі завжди під контурами зон, хоч куди зсунута камера: порядок прозорих задає зсув
+## сортування, а не відстань до камери.
+func test_ring_draws_under_the_contours() -> void:
+	view.build(Board.create(10, 10, Terrain.GroundState.DRY))
+	view.draw_contour([_edge(Vector2i(4, 3), Vector2i(0, -1), Color.YELLOW)] as Array[Dictionary], BoardView.LAYER_ZONES)
+	var ring: MeshInstance3D = _draw_ring(false)
+	var contour := view.get_node("Contour%d" % BoardView.LAYER_ZONES) as MultiMeshInstance3D
+	assert_eq((ring.material_override as ShaderMaterial).render_priority, contour.multimesh.mesh.surface_get_material(0).render_priority)
+	assert_eq(ring.sorting_offset, BoardView.RING_SORT_OFFSET)
+	assert_eq(contour.sorting_offset, 0.0)
+	assert_eq(BoardView.RING_SORT_OFFSET, -100.0, "далі за будь-яку різницю відстаней на дошці")
+
+
+## Палець відпущено посеред імпульсу: твін зупинено разом із вузлом, крони кільця не тримають. Новий
+## натиск — імпульс наново.
+func test_release_mid_pulse_stops_it_and_a_new_hold_restarts_it() -> void:
+	view.build(Board.create(10, 10, Terrain.GroundState.DRY))
+	_draw_ring()
+	var first: Tween = _ring_tween()
+	first.custom_step(_T * 0.5)
+	assert_true(view.is_pulsing())
+
+	view.draw_circles([] as Array[Dictionary], BoardView.LAYER_INSPECT)
+
+	assert_false(view.is_pulsing())
+	assert_false(first.custom_step(_T), "твін пішов разом із вузлом кільця: кроку більше немає")
+	assert_eq(view.forest().contour_rings.size(), 0, "і крони кільця не отримали")
+	var mat := _draw_ring().material_override as ShaderMaterial
+	assert_eq(mat.get_shader_parameter("pulse"), 0.0, "новий натиск — імпульс з центру")
+	assert_eq(_pulse_tweens.size(), 1)
+	assert_true(view.is_pulsing())
+	_ring_tween().custom_step(_T)
+	assert_false(view.is_pulsing(), "добіг — більше не біжить")
 
 
 # Лінія зони суцільна й лежить на межі клітинок: на прямій ребро доходить рівно до кута, на куті
@@ -433,14 +511,36 @@ func test_contour_edges_composite_later_layer_over_earlier_and_cleared_layer_dis
 	view.build(Board.create(4, 3, Terrain.GroundState.DRY))
 	view.draw_contour([_edge(Vector2i(1, 1), Vector2i(1, 0), Color.YELLOW)] as Array[Dictionary], BoardView.LAYER_ZONES)
 	view.draw_contour([_edge(Vector2i(2, 1), Vector2i(-1, 0), Color.WHITE)] as Array[Dictionary], BoardView.LAYER_PATH)
-	# a = 0,7 + 0,7·0,3 = 0,91; b = (1·0,7 + 0·0,21) / 0,91 = 0,769.
-	assert_eq(_texel(4, 1), [255, 255, 196, 232], "шлях поверх зони на тому самому ребрі, зона просвічує")
+	# a = 0,7 + 0,7·0,3 = 0,91; b = (1·0,7 + 0·0,21) / 0,91 = 0,769, у sRGB — 0,891.
+	assert_eq(_texel(4, 1), [255, 255, 227, 232], "шлях поверх зони на тому самому ребрі, зона просвічує")
 
 	view.clear_contour(BoardView.LAYER_PATH)
 	assert_eq(_texel(4, 1), [255, 255, 0, 178], "без шляху — знову зона")
 
 	view.clear_contour(BoardView.LAYER_ZONES)
 	assert_eq(_texel(4, 1), [0, 0, 0, 0], "без контурів — порожньо")
+
+
+## Колір лінії — у sRGB і в картці ребер, і у вершинах стрічки (vertex_color_is_srgb, sampler source_color):
+## кожен рендерер переводить його так само, як колір кільця, і Compatibility не темнить ліній. На Mobile
+## вигляд той самий, що й з лінійним кольором вершин: колір зони там читався лінійним.
+func test_contour_colour_is_srgb_encoded_on_the_ribbon_and_in_the_edge_card() -> void:
+	view.build(Board.create(4, 3, Terrain.GroundState.DRY))
+	var mid := Color(0.5, 0.25, 0.0)
+	view.draw_contour([_edge(Vector2i(1, 1), Vector2i(1, 0), mid)] as Array[Dictionary], BoardView.LAYER_ZONES)
+	var want: Color = mid.linear_to_srgb()
+	var texel: Color = view.contour_edges().get_pixel(4, 1)
+	assert_almost_eq(texel.r, want.r, 1.0 / 255.0)
+	assert_almost_eq(texel.g, want.g, 1.0 / 255.0)
+	var mesh: Mesh = (view.get_node("Contour%d" % BoardView.LAYER_ZONES) as MultiMeshInstance3D).multimesh.mesh
+	var c: Color = (mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR] as PackedColorArray)[0]
+	# Масив кольорів сітки рушій зберігає у 8 бітах.
+	assert_almost_eq(c.r, want.r, 1.0 / 255.0)
+	assert_almost_eq(c.g, want.g, 1.0 / 255.0)
+	assert_almost_eq(c.a, 0.7, 1.0 / 255.0)
+	assert_true((mesh.surface_get_material(0) as StandardMaterial3D).vertex_color_is_srgb)
+	var crown: String = FileAccess.get_file_as_string("res://assets/props/forest/forest_crown.gdshader")
+	assert_true(crown.contains("uniform sampler2D contour_edges : source_color"), "крона читає картку як sRGB")
 
 
 func test_contour_edges_within_a_layer_later_segment_wins_like_the_ribbon() -> void:
@@ -485,6 +585,27 @@ func test_draw_circles_publishes_rings_for_the_canopy() -> void:
 
 	view.draw_circles([] as Array[Dictionary], BoardView.LAYER_INSPECT)
 	assert_eq(forest.contour_rings, PackedVector4Array([Vector4(1, 1, 5, 0)]), "зняте кільце зникає й під кронами")
+
+
+# Крона шукає землю під собою лише, коли її промінь перетинає рамку всіх ліній: контурів (клітинки
+# з запасом на ширину) і кілець (центр ± радіус і смуга межі). Без ліній рамка порожня.
+func test_line_rect_bounds_every_contour_and_ring_for_the_canopy() -> void:
+	view.build(Board.create(10, 10, Terrain.GroundState.DRY))
+	var forest: ForestLayer = view.forest()
+	assert_eq(forest.line_rect, Vector4(1, 1, 0, 0), "без ліній — порожня")
+	view.draw_contour([_edge(Vector2i(1, 1), Vector2i(1, 0), Color.YELLOW)] as Array[Dictionary], BoardView.LAYER_ZONES)
+	_assert_vec4(forest.line_rect, Vector4(0.45, 0.45, 1.55, 1.55))
+	view.draw_circles([{"center": Vector2i(4, 6), "radius": 3, "color": Color.WHITE}] as Array[Dictionary], BoardView.LAYER_INSPECT)
+	_assert_vec4(forest.line_rect, Vector4(0.45, 0.45, 7.15, 9.15))
+	view.clear_contour(BoardView.LAYER_ZONES)
+	_assert_vec4(forest.line_rect, Vector4(0.85, 2.85, 7.15, 9.15))
+	view.draw_circles([] as Array[Dictionary], BoardView.LAYER_INSPECT)
+	assert_eq(forest.line_rect, Vector4(1, 1, 0, 0))
+
+
+func _assert_vec4(got: Vector4, want: Vector4) -> void:
+	for i in 4:
+		assert_almost_eq(got[i], want[i], 1e-5, "%s проти %s" % [got, want])
 
 
 # build() знімає контури й кола, а ліс переживає його: крони не мусять тримати старих ліній.

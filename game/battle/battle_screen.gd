@@ -151,7 +151,7 @@ const WET_MIN: float = 0.3
 ## поріг драга, — огляд дальності замість тапу; відпускання його знімає.
 const LONG_PRESS_SEC: float = 0.5
 ## §8: хід здебільшого стоїть на місці, а батарея — спільна для всіх гравців. Після
-## IDLE_AFTER_S без натисків, руху камери й анімації подій кадр обмежено до IDLE_FPS.
+## IDLE_AFTER_S без натисків, руху камери, анімації подій та імпульсу кільця кадр обмежено до IDLE_FPS.
 const IDLE_FPS: int = 30
 const IDLE_AFTER_S: float = 1.0
 ## Повтор ходів противників грає сам, прискорено (Engine.time_scale), а тап прискорює поточний такт ще
@@ -884,7 +884,7 @@ func _input(_event: InputEvent) -> void:
 
 
 func _on_idle_timeout() -> void:
-	if _camera_rig.is_processing() or (_event_player != null and _event_player.is_playing()):
+	if _camera_rig.is_processing() or (_event_player != null and _event_player.is_playing()) or _board_view.is_pulsing():
 		_idle_timer.start()
 	else:
 		Engine.max_fps = IDLE_FPS

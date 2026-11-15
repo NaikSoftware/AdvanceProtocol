@@ -141,6 +141,9 @@ var board_plan: Array[Dictionary] = []
 var _contour_edges: Texture2D
 var contour_rings := PackedVector4Array()
 var contour_ring_colors := PackedColorArray()
+## Рамка всіх ліній на землі (xy — мінімум, zw — максимум): крона, чий промінь до землі її не
+## перетинає, землі під собою не шукає. Порожня — (1, 1, 0, 0).
+var line_rect := Vector4(1.0, 1.0, 0.0, 0.0)
 
 
 ## `world` — дошка разом із кільцем (Surroundings.world_board), `ring` — ширина кільця;
@@ -218,6 +221,13 @@ func set_contour_rings(rings: PackedVector4Array, colors: PackedColorArray) -> v
 		_wire_rings(mat)
 
 
+## Рамка ліній (BoardView._publish_line_rect).
+func set_line_rect(rect: Vector4) -> void:
+	line_rect = rect
+	for mat: ShaderMaterial in _wired():
+		mat.set_shader_parameter("line_rect", rect)
+
+
 func _wire_all() -> void:
 	for mat: ShaderMaterial in _wired():
 		_wire(mat)
@@ -247,6 +257,7 @@ func _wire(mat: ShaderMaterial) -> void:
 		mat.set_shader_parameter("height_origin", -0.5 - th.margin)
 	# Стрічка контуру й сітка кільця над річкою лежать на воді (BoardView), тож і крона шукає землю не нижче за неї.
 	mat.set_shader_parameter("water_level", TerrainHeight.WATER_LEVEL)
+	mat.set_shader_parameter("line_rect", line_rect)
 	_wire_rings(mat)
 
 

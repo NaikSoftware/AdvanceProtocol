@@ -5,14 +5,16 @@ extends Node
 ## Запуск (потрібне вікно):
 ##   tools/godot_run.sh --path . res://tools/ring_shot.tscn -- <out_dir> <map>[@x,y] ... [--zooms=12,6,20]
 ## @x,y — переставити загін на клітинку (схил, берег, будинок під кільцем); ще @sx,sy — клітинка
-## вигорілого сліду (колія йде через неї вздовж X на ±2 клітинки), типово — поруч із загоном.
-## Кадри імпульсу на 0.15 / 0.35 / 0.55 с — справжні твіни кілець на паузі, прокручені вручну — і кінцевий.
+## вигорілого сліду (колія йде через неї вздовж X на ±2 клітинки), типово — поруч із загоном; ще @ux,uy —
+## поставити туди інший юніт гравця 0 (юніт під кронами, через клітинку якого йде кільце).
+## Кадри імпульсу на 0.15 / 0.35 / 0.55 / 0.75 с — справжні твіни кілець на паузі, прокручені вручну — і кінцевий.
 ## Рядок RINGDC <map> z<zoom> off=… on=… tris_off=… tris_mid=… tris_on=…: медіана 9 кадрів без кілець,
-## посеред імпульсу (0.35 с) і після нього, в тому ж процесі.
+## посеред імпульсу (0.35 с) і після нього, в тому ж процесі. RINGMESH — час побудови сітки круга дрона
+## й смуги його межі.
 ## Кадри тримаються в пам'яті й пишуться в кінці: save_png блокує ~1 с.
 
 const WINDOW: Vector2i = Vector2i(1600, 900)
-const PULSE_TIMES: Array[float] = [0.15, 0.35, 0.55]
+const PULSE_TIMES: Array[float] = [0.15, 0.35, 0.55, 0.75]
 
 
 func _ready() -> void:
@@ -58,6 +60,13 @@ func _ready() -> void:
 			if other != null and other != squad:
 				other.pos = squad.pos
 			squad.pos = spot
+			if parts.size() > 3:
+				var uxy: PackedStringArray = parts[3].split(",")
+				var cell := Vector2i(int(uxy[0]), int(uxy[1]))
+				for u: Unit in state.units_of(0):
+					if u != squad and state.unit_at(cell) == null:
+						u.pos = cell
+						break
 			state.refresh_vision(0)
 			screen.call("_rebuild_units_for_active_player")
 		# Слід бою під кільцями: вигорілий круг і колія через нього.
@@ -81,6 +90,14 @@ func _ready() -> void:
 			var t0: int = Time.get_ticks_usec()
 			controller.peek_cell(squad.pos)
 			print("RINGBUILD %s z%d %.1f ms" % [map, int(z), (Time.get_ticks_usec() - t0) / 1000.0])
+			# Сама сітка круга дрона (імпульс) і смуги його межі — без огляду core/.
+			var c3: Vector3 = IsoCameraRig.cell_to_world(squad.pos)
+			var t1: int = Time.get_ticks_usec()
+			var disk: ArrayMesh = bv.call("_ring_grid_mesh", c3, Vector2(0.0, 5.0 + BoardView.RING_OUTER))
+			var t2: int = Time.get_ticks_usec()
+			bv.call("_ring_grid_mesh", c3, Vector2(5.0 - BoardView.RING_OUTER, 5.0 + BoardView.RING_OUTER))
+			print("RINGMESH %s disk=%.1f ms (%d tris) band=%.1f ms" % [map, (t2 - t1) / 1000.0,
+				(disk.surface_get_arrays(0)[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3, (Time.get_ticks_usec() - t2) / 1000.0])
 			var rings: Array = bv.circles(BoardView.LAYER_INSPECT)
 			if rings.size() != 2:
 				push_error("ring_shot: %d кілець замість 2 на %s" % [rings.size(), map])

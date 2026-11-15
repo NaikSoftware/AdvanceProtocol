@@ -37,12 +37,19 @@ const CONTOUR_PRIORITY: int = 4
 ## Лінія зони тонка й напівпрозора: підказка шляху на ґрунті, а не головний акцент кадру.
 const _CONTOUR_WIDTH: float = 0.02
 const _CONTOUR_ALPHA: float = 0.7
-## Межа кільця дальності (fire_ring.gdshaderinc, FR_LINE_W = 0.12) ширша за лінію зон: її видно лише,
-## поки гравець тримає палець на юніті. Сітка кільця виходить за радіус на стільки в обидва боки:
-## півлінії плюс згладжування.
-const RING_OUTER: float = 0.1
-## Швидкість одноразового імпульсу кільця, тайлів за секунду: кільце дрона (5) — за 0.7 с.
+## Ширина межі кільця дальності й хвилі імпульсу, тайлів — ті самі FR_LINE_W і FR_PULSE_W у
+## fire_ring.gdshaderinc (тест звіряє). Межа ширша за лінію зон: її видно лише, поки гравець тримає
+## палець на юніті.
+const RING_LINE_W: float = 0.12
+const RING_PULSE_W: float = 0.9
+## Сітка кільця виходить за радіус на стільки в обидва боки: півлінії плюс згладжування.
+const RING_OUTER: float = RING_LINE_W * 0.5 + 0.04
+## Швидкість фронту імпульсу, тайлів за секунду, однакова для всіх кілець: фронти гармати й дрона
+## біжать разом. Імпульс кінчається, коли фронт пройшов радіус і ширину хвилі: дрон (5) — за 0.84 с.
 const PULSE_SPEED: float = 7.0
+## Зсув сортування кільця: серед прозорих того самого пріоритету воно завжди перше, тобто під
+## контурами зон, хоч як далеко від камери кожне. Більший за будь-яку різницю відстаней на дошці.
+const RING_SORT_OFFSET: float = -100.0
 const _RING_SHADER: Shader = preload("res://game/battle/shaders/fire_ring.gdshader")
 ## Відрізок клітинки на кожен відлік поля висот: вершини стрічки лягають на ті самі відліки, з яких
 ## крона лісу шукає землю під собою, і лінія на вході під крону не ламається.
@@ -337,7 +344,9 @@ func draw_contour(segments: Array[Dictionary], layer: int) -> void:
 		var from: float = _stroke_end(edges, seg, -along_i)
 		var to: float = _stroke_end(edges, seg, along_i)
 		var base: int = verts[surf].size()
-		var color: Color = seg["color"]
+		# Колір зони читався лінійним; у вершину йде вже в sRGB (vertex_color_is_srgb): так його однаково
+		# переводять Mobile і Compatibility, що лінійний колір вершин бере як є й темнить.
+		var color: Color = (seg["color"] as Color).linear_to_srgb()
 		color.a *= _CONTOUR_ALPHA
 		for k in _CONTOUR_PIECES + 1:
 			var c: Vector3 = mid + along * lerpf(from, to, float(k) / _CONTOUR_PIECES)
@@ -446,12 +455,13 @@ func draw_circles(circles: Array[Dictionary], layer: int, animate: bool = true) 
 		mi.layers = 1 << (OVERLAY_LAYER - 1)
 		# Вершини кільця — у світі (висота за ґрунтом), тож вузол стоїть у центрі колом на y = 0.
 		mi.position = Vector3(centre.x, 0.0, centre.z)
+		mi.sorting_offset = RING_SORT_OFFSET
 		if animate:
 			# Твін живе на вузлі кільця: відпустив палець — вузол звільнено, імпульс зупинився.
 			# Після нього матеріал не міняється, тож екран без руху знову стоїть.
 			var i: int = nodes.size()
 			var setter := func(v: float) -> void: _set_pulse(layer, i, mi, centre, r, v)
-			mi.create_tween().tween_method(setter, 0.0, 1.0, r / PULSE_SPEED)
+			mi.create_tween().tween_method(setter, 0.0, 1.0, (r + RING_PULSE_W) / PULSE_SPEED)
 		add_child(mi)
 		nodes.append(mi)
 		progress.append(0.0 if animate else 1.0)
@@ -510,6 +520,15 @@ func _ring_grid_mesh(centre: Vector3, band: Vector2) -> ArrayMesh:
 	return mesh
 
 
+## Чи біжить зараз імпульс якогось кола: тоді екран бою не обмежує кадри (BattleScreen._on_idle_timeout).
+func is_pulsing() -> bool:
+	for layer: int in _circle_pulse:
+		for v: float in _circle_pulse[layer]:
+			if v < 1.0:
+				return true
+	return false
+
+
 func circles(layer: int) -> Array:
 	return _circles.get(layer, [])
 
@@ -566,8 +585,9 @@ func _publish_contours() -> void:
 		for t: Vector2i in texels:
 			# Color.blend — «поверх» із тією самою альфою, з якою стрічка шару лягає на попередні.
 			comp[t] = (comp.get(t, Color(0, 0, 0, 0)) as Color).blend(texels[t])
+	# У картку — sRGB, як у вершини стрічки: крона читає її через source_color.
 	for t: Vector2i in comp:
-		_edge_image.set_pixelv(t, comp[t])
+		_edge_image.set_pixelv(t, (comp[t] as Color).linear_to_srgb())
 	var lit: bool = not comp.is_empty()
 	if _edge_tex == null:
 		_edge_tex = ImageTexture.create_from_image(_edge_image)
@@ -575,6 +595,7 @@ func _publish_contours() -> void:
 		_edge_tex.update(_edge_image)
 	if _forest != null:
 		_forest.set_contour_edges(_edge_tex if lit else null)
+	_publish_line_rect()
 
 
 ## Кола всіх шарів для крон лісу: центр і радіус у світі, у w — поступ імпульсу; колір — той самий
@@ -594,6 +615,28 @@ func _publish_circles() -> void:
 			rings.append(Vector4(centre.x, centre.z, float(c["radius"]), progress[i] if i < progress.size() else 1.0))
 			colors.append(c["color"])
 	_forest.set_contour_rings(rings, colors)
+	_publish_line_rect()
+
+
+## Рамка всіх контурів і кілець у XZ світу для крон лісу: крона, чий промінь до землі її не
+## перетинає, лінії не несе й кроком променя не платить. Запас — на ширину лінії й згладжування.
+func _publish_line_rect() -> void:
+	if _forest == null:
+		return
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	for layer: int in _contour_segments:
+		for seg: Dictionary in _contour_segments[layer]:
+			var c := Vector2(seg["cell"])
+			lo = lo.min(c - Vector2.ONE * 0.55)
+			hi = hi.max(c + Vector2.ONE * 0.55)
+	for layer: int in _circles:
+		for c: Dictionary in _circles[layer]:
+			var centre := Vector2(c["center"])
+			var reach: float = float(c["radius"]) + RING_OUTER + 0.05
+			lo = lo.min(centre - Vector2.ONE * reach)
+			hi = hi.max(centre + Vector2.ONE * reach)
+	_forest.set_line_rect(Vector4(lo.x, lo.y, hi.x, hi.y) if lo.x <= hi.x else Vector4(1.0, 1.0, 0.0, 0.0))
 
 
 func _contour_material(over_bridge: bool = false) -> Material:
@@ -606,6 +649,7 @@ func _contour_material(over_bridge: bool = false) -> Material:
 	# читання — сам він лишається білим, щоб не домішувати власний тон.
 	var mat := StandardMaterial3D.new()
 	mat.vertex_color_use_as_albedo = true
+	mat.vertex_color_is_srgb = true
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	# Стрічка без нормалей: освітлення дало б чорні ділянки; контур — позначка, не матеріал.
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
