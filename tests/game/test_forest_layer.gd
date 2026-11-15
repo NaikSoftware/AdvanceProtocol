@@ -373,11 +373,11 @@ func test_foliage_is_one_mesh_per_atlas_and_layer() -> void:
 		assert_gt(f._ring_fadable.size(), 0, "%s: кільце в злитій сітці" % season)
 
 
-## Юніта під кронами відкриває прохід глибини розчинення (FOREST_PRIORITY): він закриває все, що
-## прозорий прохід малює після нього за найближчою розчиненою кроною. Mobile кладе звичайні крони
-## (поріг альфи з краєм alpha-to-coverage) у прозорий прохід, Compatibility такі крони вважає
-## непрозорими й малює до маски — тож там крона кладе прозорість сама: відкидання за порогом і ALPHA 1.
-func test_ordinary_crowns_draw_after_the_fade_depth_on_every_renderer() -> void:
+## Звичайні крони малюються до розчинених копій (їхня глибина лягає поверх), а крони над юнітом
+## замінено розчиненими копіями. Mobile кладе звичайні крони (поріг альфи з краєм alpha-to-coverage)
+## у прозорий прохід, Compatibility такі крони вважає непрозорими: там крона кладе прозорість сама
+## (відкидання за порогом і ALPHA 1), щоб пріоритет `batch_priority` ставив її перед димом і наліпками.
+func test_ordinary_crowns_draw_before_the_fade_copies_on_every_renderer() -> void:
 	var mobile: String = ForestLayer.batch_code("mobile")
 	var gl: String = ForestLayer.batch_code("gl_compatibility")
 	assert_true(mobile.contains("ALPHA_SCISSOR_THRESHOLD = cut; ALPHA_ANTIALIASING_EDGE = a2c_edge;"), "Mobile: поріг із краєм a2c, як був")
@@ -397,7 +397,7 @@ func test_ordinary_crowns_draw_after_the_fade_depth_on_every_renderer() -> void:
 	for n: Node in drawn:
 		var mat := (n as GeometryInstance3D).material_override as ShaderMaterial
 		assert_eq(mat.shader.code, ForestLayer.batch_code(RenderingServer.get_current_rendering_method()), "%s: шейдер свого рендерера" % n.name)
-		assert_gt(mat.render_priority, depth_priority, "%s: після маски розчинення" % n.name)
+		assert_lt(mat.render_priority, depth_priority, "%s: до розчинених копій, їхня глибина лягає поверх" % n.name)
 		assert_eq(mat.render_priority, ForestLayer.batch_priority(RenderingServer.get_current_rendering_method()), "%s: пріоритет свого рендерера" % n.name)
 
 
@@ -469,10 +469,10 @@ func test_contour_edges_reach_every_crown_but_not_the_fade() -> void:
 	for n: Node in f.get_children():
 		if String(n.name).begins_with("Fade_"):
 			fades += 1
-			var depth := (n as GeometryInstance3D).material_override as ShaderMaterial
-			for m: ShaderMaterial in [depth, depth.next_pass as ShaderMaterial]:
-				assert_ne(m.get_shader_parameter("contour_on"), true, "%s: розчинена крона без лінії" % n.name)
-				assert_ne(m.get_shader_parameter("ring_count"), 1, "%s: розчинена крона без кільця" % n.name)
+			# Глибина (`Fade_N`) і колір (`Fade_N_c`) — окремі вузли, кожен зі своїм матеріалом.
+			var m := (n as GeometryInstance3D).material_override as ShaderMaterial
+			assert_ne(m.get_shader_parameter("contour_on"), true, "%s: розчинена крона без лінії" % n.name)
+			assert_ne(m.get_shader_parameter("ring_count"), 1, "%s: розчинена крона без кільця" % n.name)
 	assert_gt(fades, 0, "є розчинена крона")
 
 	f.set_contour_edges(null)

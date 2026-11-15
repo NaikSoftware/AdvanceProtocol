@@ -202,10 +202,11 @@ func _ready() -> void:
 	# Значки й смуга — інтерфейс, не тіло: у проході тіней кожен з них був би ще одним викликом.
 	for n: GeometryInstance3D in [_crosshair, _forbidden, _threatened, _drone_threatened, _hp_bar, _hp_label, _drone_icon]:
 		n.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	for n: SpriteBase3D in [_crosshair, _forbidden, _threatened, _drone_threatened]:
+	for n: SpriteBase3D in [_drone_icon, _crosshair, _forbidden, _threatened, _drone_threatened]:
 		n.render_priority = MARK_PRIORITY
 	# Розчинена крона пише глибину (проходить лише найближча поверхня) — значок дронів поверх неї, як смуга.
-	for n: Node in [_hp_bar, _hp_label, _drone_icon]:
+	_drone_icon.no_depth_test = true
+	for n: Node in [_hp_bar, _hp_label]:
 		n.set("no_depth_test", true)
 		n.set("render_priority", OVERLAY_PRIORITY)
 	_hp_label.outline_render_priority = OVERLAY_PRIORITY - 1
