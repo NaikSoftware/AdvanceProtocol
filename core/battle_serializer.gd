@@ -60,6 +60,7 @@ static func to_dict(state: BattleState) -> Dictionary:
 		# (BattleState.known_broken_map()), а seen і так зберігається нижче.
 		"broken_forest": broken_forest,
 		"vision": vision,
+		"start_hp": state.start_hp.duplicate(),
 	}
 
 static func from_dict(data: Dictionary) -> BattleState:
@@ -88,6 +89,9 @@ static func from_dict(data: Dictionary) -> BattleState:
 	state.rng = RandomNumberGenerator.new()
 	state.rng.state = int(data["rng_state"])
 	state.winner = int(data["winner"])
+	# Старі збереження ключа не мають: тоді team_hp_start() виводить суму сам.
+	for k in (data.get("start_hp", {}) as Dictionary):
+		state.start_hp[int(k)] = int(data["start_hp"][k])
 
 	state.eliminated.clear()
 	for e in (data["eliminated"] as Array):

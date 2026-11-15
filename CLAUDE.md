@@ -104,7 +104,8 @@ rifle squad and the engineer.
   allows. Nothing tracks "has already moved", and nothing may.
 - **The two movement zones are the primary UI of the game:** gold = reachable with `>= fire_cost`
   AP left, red = reachable but cannot act. Recomputed after every action that changes AP or
-  occupancy.
+  occupancy. **They are how a player reads AP: no AP number is shown anywhere in the UI** — not
+  on a unit, not in a preview, not in a card.
 - **A move is planned from what the player can see, and walked one tile at a time.** Planning and
   the zones use fog-filtered occupancy plus known mines — the player's own and the enemy mines
   found so far — and, for a vehicle, known wrecks;
@@ -189,7 +190,10 @@ product against the target's facing. No trigonometry, no division.
 - Recomputed for the active player from scratch at turn start and after every move step.
   **Never carry another player's visibility into the renderer.**
 - **The handover gate is mandatory.** Not skippable, not animated through, and the camera must not
-  leak the previous player's positions — recentre on the incoming player's first unit.
+  leak the previous player's positions — recentre on the incoming player's first unit. The gate
+  shows each team's remaining HP share, read from `core/` and drawn as lines or a bar: a deliberate
+  exception that reveals aggregate losses the incoming player did not witness
+  ([details](docs/ui/hud.md#handover-gate-and-pause)).
 - **After the gate, the incoming player watches a replay of the opponents' turns, filtered to what
   their side would have seen live** and to everything that hit their own units or mines. A squad
   that ends a move hidden in a building shows none of its route. Fogged actions take no time and
@@ -256,8 +260,9 @@ bridge, as with a demolition (§3.8).
 **Weather and time of day are cosmetic and touch no number.** In a hot-seat game with hidden
 information, a rule that silently shrinks your vision feels like cheating when you cannot see it.
 
-**Ground state is a rule and it is explicit.** `dry / mud / frozen`, shown as a labelled HUD icon
-at all times, offsetting off-road penalty. Roads are never affected — that is the point of a road.
+**Ground state is a rule that lives in the numbers, not on screen.** `dry / mud / frozen`, fixed
+per map, offsetting off-road penalty. Roads are never affected — that is the point of a road. No
+label or icon shows it anywhere in the UI: every movement zone and move preview already includes it.
 
 ### 3.13 What the board shows, and when → [details](docs/ui/overlays.md)
 
@@ -418,7 +423,8 @@ must hit (one tile = 1.0 unit, ground at `y = 0`, front along `−Z`).
 - No `get_node("../../Foo")` path strings in gameplay code; wire dependencies explicitly.
 - Rules never run in `_process`. If gameplay logic is in a frame callback, it is in the wrong file.
 - Signals go view-ward only. `core/` returns events; it does not emit Godot signals.
-- UI: tap targets ≥ 48 dp, respect notch/safe areas, every rule-relevant number visible somewhere.
+- UI: tap targets ≥ 48 dp, respect notch/safe areas, every rule-relevant number visible somewhere —
+  except AP and ground state, which the movement zones carry (§3.2, §3.12).
 - Localisation from day one: Ukrainian and English, no hard-coded display strings.
 - Comments explain **why**, not what, and are written in Ukrainian in `core/`.
 - Tests are required for anything in `core/`. The damage table gets golden tests; the roster gets

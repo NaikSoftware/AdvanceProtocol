@@ -696,6 +696,8 @@ func test_vehicle_crushes_infantry_does_not_and_the_enemy_never_sees_it_unscoute
 	assert_false(service.state.vision[1].is_seen(car_cell), "передумова: гравець 1 там не бував")
 	(screen.get_node("%Hud").get_node("%EndTurnButton") as Button).pressed.emit()
 	await wait_physics_frames(3)
+	# Гейт приймає «Готово» лише після вхідного твіну: докручуємо його вручну, не чекаючи реального часу.
+	(screen.get_node("%HandoverGate") as HandoverGate).entrance_tween.custom_step(HandoverGate.ENTRANCE_S + 0.01)
 	(screen.get_node("%HandoverGate").get_node("%ConfirmButton") as Button).pressed.emit()
 	assert_false(_crushed_on(screen, car_cell), "§3.5: уламки на нерозвіданому не видають танк")
 	assert_false(_faded(view, south), "§3.5: прозорий дах не видає невидимих стрільців")

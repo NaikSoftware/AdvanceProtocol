@@ -185,5 +185,8 @@ static func preview(state: BattleState, unit_id: int, target_id: int) -> Diction
 	var t: Unit = state.get_unit(target_id)
 	var sector: int = Rules.armour_sector(t.facing, t.pos, a.pos)
 	var dist_sq: int = Rules.distance_sq(a.pos, t.pos)
-	var bounds: Vector2i = Rules.damage_bounds(a, t, sector, dist_sq, Rules.in_cover(state.board, t))
-	return {"sector": sector, "min": bounds.x, "max": bounds.y}
+	var cover: bool = Rules.in_cover(state.board, t)
+	var bounds: Vector2i = Rules.damage_bounds(a, t, sector, dist_sq, cover)
+	# Обидва прапорці — ті самі запити, що їх читає формула: подання лише показує їх.
+	return {"sector": sector, "min": bounds.x, "max": bounds.y,
+			"armour_ignored": Rules.ignores_armour(a), "in_cover": cover}
