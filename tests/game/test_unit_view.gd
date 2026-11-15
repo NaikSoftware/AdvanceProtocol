@@ -374,7 +374,7 @@ func test_hp_label_and_drone_icon_are_stacked_above_the_bar_in_order() -> void:
 
 
 ## Позначки юніта (лічильник дронів, прицільні знаки) — інтерфейс, а не фарба на землі: серед прозорих
-## вони після ліній дошки (контури, кільця дальності з імпульсом), тож лінії й хвиля їх не перефарбовують.
+## вони після ліній дошки (контури, кільця дальності зі світлою смугою), тож лінії й смуга їх не перефарбовують.
 func test_unit_marks_draw_after_the_board_lines() -> void:
 	for n: SpriteBase3D in [view._drone_icon, view._crosshair, view._forbidden, view._threatened, view._drone_threatened]:
 		assert_eq(n.render_priority, UnitView.MARK_PRIORITY, n.name)

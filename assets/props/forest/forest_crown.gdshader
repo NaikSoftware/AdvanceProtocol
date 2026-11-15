@@ -52,7 +52,7 @@ uniform bool contour_on = false;
 uniform sampler2D contour_edges : source_color, filter_nearest, repeat_disable;
 uniform float contour_half = 0.01;
 uniform float contour_lift = 0.04;
-// Кільця: xy — центр, z — радіус (тайли). Колір — sRGB, source_color,
+// Кільця: xy — центр, z — радіус (тайли), w — множник смуги (BoardView._grad_gain). Колір — sRGB, source_color,
 // як ring_color кільця на землі: кожен рендерер переводить його так само, і кольори збігаються.
 uniform int ring_count = 0;
 uniform vec4 rings[4];
@@ -278,7 +278,14 @@ void fragment() {
 			float cov = 0.0;
 			// Кільце не обрізане краєм дошки: на землі воно йде й за край, і розрив на кронах кільця читався б помилкою.
 			for (int i = 0; i < ring_count && i < 4; i++) {
-				float a = ring_colors[i].a * fire_ring(g - rings[i].xy, rings[i].z, px);
+				float a = ring_colors[i].a * fire_ring(g - rings[i].xy, rings[i].z, rings[i].w, px);
+#if CURRENT_RENDERER == RENDERER_COMPATIBILITY
+				// Compatibility: на кроні смуга домішується в шейдері (ALBEDO + EMISSION), і на екрані
+				// виходить ≈ 1,15·(a − 0,08) — слабка смуга там зникала, на землі ж її змішує кадр. Виміряно
+				// на Crossroads z12 (крона проти ґрунту на тій самій відстані від лінії); 0 і суцільна
+				// лінія — без змін.
+				a = a > 0.002 && a < 0.999 ? min(a * 0.87 + 0.08, 1.0) : a;
+#endif
 				pre = mix(pre, ring_colors[i].rgb, a);
 				cov = a + cov * (1.0 - a);
 			}

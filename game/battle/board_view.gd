@@ -45,9 +45,9 @@ const _CONTOUR_ALPHA_COMPAT: float = 0.85
 ## вона гасне задовго до юніта, і більша частина круга лишається чистою.
 const RING_LINE_W: float = 0.045
 const RING_GRAD_W: float = 0.6
-## Сітка кільця виходить за радіус на стільки: на найдальшому зумі межа не тонша за 1,5 пікселя
-## (~0,05 тайла на бік) плюс згладжування.
-const RING_OUTER: float = 0.1
+## Сітка кільця виходить за радіус на стільки: на найдальшому зумі (піксель на ґрунті до ~0,05 тайла)
+## межа суцільна на 1,5 пікселя, тож півширина 1,25 пікселя плюс пів пікселя згладжування.
+const RING_OUTER: float = 0.15
 ## Запас сітки всередину за смугою: згладжування її внутрішнього краю.
 const RING_INNER_MARGIN: float = 0.05
 ## Зсув сортування кільця: серед прозорих того самого пріоритету воно завжди перше, тобто під
@@ -443,6 +443,7 @@ func draw_circles(circles: Array[Dictionary], layer: int) -> void:
 		sm.render_priority = CONTOUR_PRIORITY
 		sm.set_shader_parameter(&"ring_color", c["color"])
 		sm.set_shader_parameter(&"radius", r)
+		sm.set_shader_parameter(&"grad_gain", _grad_gain(c["color"]))
 		var mi := MeshInstance3D.new()
 		mi.name = "Circle%d_%d" % [layer, nodes.size()]
 		mi.mesh = _ring_grid_mesh(centre, Vector2(maxf(r - RING_GRAD_W - RING_INNER_MARGIN, 0.0), r + RING_OUTER))
@@ -545,6 +546,13 @@ static func _lattice_h(heights: PackedFloat32Array, cols: int, rows: int, ix: in
 	return heights[clampi(iz, 0, rows - 1) * cols + clampi(ix, 0, cols - 1)]
 
 
+## Множник світлої смуги кільця за яскравістю його кольору: біле кільце на темних кронах читалося
+## матовим склом, тож світлий колір дає 0,7 смуги; фіолетове кільце дрона (яскравість ~0,5) — повну.
+static func _grad_gain(color: Color) -> float:
+	var luma: float = 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b
+	return lerpf(1.0, 0.7, smoothstep(0.6, 0.95, luma))
+
+
 ## Альфа лінії зони: на Compatibility вища (див. _CONTOUR_ALPHA_COMPAT).
 static func _contour_alpha() -> float:
 	return _CONTOUR_ALPHA_COMPAT if RenderingServer.get_current_rendering_method() == "gl_compatibility" else _CONTOUR_ALPHA
@@ -619,7 +627,7 @@ func _publish_contours() -> void:
 	_publish_line_rect()
 
 
-## Кола всіх шарів для крон лісу: центр і радіус у світі (xyz); колір — той самий sRGB з альфою, що й
+## Кола всіх шарів для крон лісу: центр і радіус у світі (xyz), у w — множник смуги (_grad_gain); колір — той самий sRGB з альфою, що й
 ## ring_color кільця на ґрунті: в обох шейдерах він source_color.
 func _publish_circles() -> void:
 	if _forest == null:
@@ -631,7 +639,7 @@ func _publish_circles() -> void:
 	for layer: int in layers:
 		for c: Dictionary in _circles[layer]:
 			var centre: Vector3 = IsoCameraRig.cell_to_world(c["center"])
-			rings.append(Vector4(centre.x, centre.z, float(c["radius"]), 0.0))
+			rings.append(Vector4(centre.x, centre.z, float(c["radius"]), _grad_gain(c["color"])))
 			colors.append(c["color"])
 	_forest.set_contour_rings(rings, colors)
 
