@@ -141,24 +141,24 @@ falls back to the box placeholder, so a model may land one type at a time.
   at least 3 × 3 px with a 2 px gap at the farthest zoom) and drawn over everything, as the bar
   is, so a faded crown never hides it.
 - **The fallen** are the same cloth, darker and matte: hue within 5° of the living, chroma at
-  least half of theirs (under River's overcast sky half of theirs, so a body on dark wet ploughland
-  does not read as moss), a touch of warm mud, never ash grey and never a greener second uniform.
-  Faces turned to the sky are dimmed to 0.8, and under a clear sky a weak fill lifts the shaded
-  side out of black (none under overcast, where the light is already even), so the shading inside
-  a body spans at least 10 L*; the median body no lighter than the ground under it plus 2 L*.
-  Specular at most 0.1, roughness 1.0. A faint elongated contact patch lies under each torso. A
-  figure that falls tips over about its feet in 0.2 s, sliding meanwhile to where its body lies,
-  so the body appears where the fall ended and stays there all match. Each body lies around the tile's
-  centre, clear of the standing slots, 1.6–3.2 m out and up to 40° off its own slot's direction
-  (one body of a destroyed squad on the edge of its scorch), with a fixed seeded shift of up to
-  0.3 m and turn, its long axis at least 35° off the camera's view (along it, a body foreshortens
-  into a standing shape). Next to water the ring tightens so no body reaches the water, which
-  comes to 0.3 tile from a land cell's centre. On a bridge the bodies lie across the deck at deck
-  height, each shifted up to 0.3 m off its axis and turned off square: at least 0.4 m clear between
-  neighbours along the deck, the row within its tile and every body inside the railings (the
-  narrowest roadway is 0.46 tile). Four bodies that far apart leave about 0.56 m spare on an 8 m
-  deck, so the turns share it and one or two bodies lie up to about 20° off square, the rest nearly
-  square.
+  least half of theirs on sunny maps (under River's overcast sky the cloth's saturation is halved
+  before darkening, so a body on dark wet ploughland does not read as moss), a touch of warm mud,
+  never ash grey and never a greener second uniform. Faces turned to the sky are dimmed to 0.8,
+  and under a clear sky a weak fill lifts the shaded side out of black (none under overcast, where
+  the light is already even), so the shading inside a body spans at least 10 L*; the median body
+  no lighter than the ground under it plus 2 L*. Specular at most 0.1, roughness 1.0. A faint
+  elongated contact patch lies under each torso. A figure that falls tips over about its feet in
+  0.2 s, sliding meanwhile to where its body lies, so the body appears where the fall ended and
+  stays there all match. Each body lies around the tile's centre, clear of the standing slots,
+  1.6–3.2 m out and up to 40° off its own slot's direction (one body of a destroyed squad on the
+  edge of its scorch), with a fixed seeded shift of up to 0.3 m and turn, its long axis at least
+  35° off the camera's view (along it, a body foreshortens into a standing shape). Next to water
+  the ring tightens so no body reaches the water, which comes to 0.3 tile from a land cell's
+  centre. On a bridge the bodies lie across the deck at deck height, each shifted up to 0.3 m off
+  its axis and turned off square: at least 0.4 m clear between neighbours along the deck, the row
+  within its tile and every body inside the railings (the narrowest roadway is 0.46 tile). Four
+  bodies that far apart leave about 0.56 m spare on an 8 m deck, so the turns share it and one or
+  two bodies lie up to about 20° off square, the rest nearly square.
 - **Contact under soldiers.** Each standing soldier has his own contact shadow, a 0.9 m quad
   (about 0.6 m of visible core) under his feet at a fixed opacity of 0.39 under overcast and 0.65
   of that under sun, where he also casts a real shadow: the ground under him drops 5–10 L*, never
