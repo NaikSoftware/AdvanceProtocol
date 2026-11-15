@@ -168,6 +168,10 @@ var _hp_ratio: float = 1.0
 ## Живий твін останнього face(); тримаємо посилання, щоб наступний виклик
 ## міг убити цей замість того, щоб два твіни змагались за rotation_degrees.y.
 var _face_tween: Tween
+## Напрям (кроки по 45°), з яким збудована сітка відділення: поворот фігур у ній.
+var _built_face: int = 0
+## Фігури, що зараз перекидаються, за місцем: їх веде aim_tips().
+var _tipping: Dictionary = {}
 ## Половини основи корпусу (x — ширина, y — довжина): по її кутах юніт ставиться на схил.
 var _half_base: Vector2 = Vector2.ZERO
 ## Кут повороту, для якого востаннє рахувався нахил; NAN — ще не ставився.
@@ -185,8 +189,8 @@ func _ready() -> void:
 	# з кожного bind().
 	_hp_bar.pixel_size = HP_BAR_PIXEL_SIZE
 	_drone_icon.texture = drone_texture(_MAX_DRONES)
-	# Росте й меншає разом зі смугою HP і стоїть над її лівим кінцем (`DRONE_ICON_OFFSET`): число дронів
-	# читається як число саме цього відділення, а не сусіда.
+	# Росте й меншає разом зі смугою HP і стоїть над числом HP (`DRONE_ICON_OFFSET`): число дронів читається
+	# як число саме цього відділення, а не сусіда.
 	_drone_icon.fixed_size = false
 	_drone_icon.pixel_size = DRONE_ICON_PIXEL
 	_drone_icon.position.y = _hp_label.position.y
@@ -467,8 +471,26 @@ func _follow(s: float, line: PackedVector2Array, acc: PackedFloat32Array, tangen
 func _process(_delta: float) -> void:
 	if rotation.y != _posed_yaw:
 		_pose(position)
+	_hold_slots()
 	if _face_tween == null or not _face_tween.is_running():
 		set_process(false)
+		# поворот скінчився: фігури стають новим напрямом (місця — ті самі в світі)
+		if _has_figures() and posmod(roundi(rad_to_deg(rotation.y) / 45.0), 8) != _built_face:
+			_set_standing(_standing)
+
+
+## Місця бійців стоять у світі, а не повертаються з відділенням: вузол сітки крутиться назад на кут вузла.
+func _hold_slots() -> void:
+	if _has_figures():
+		(_silhouette.get_node("Hull") as Node3D).rotation.y = -rotation.y
+
+
+## Індекс напряму (0–7) з кута вузла в градусах, кратних 45°, — той самий, що в UnitView._degrees_for_facing.
+func _face_index_of(step: int) -> int:
+	for f in 8:
+		if posmod(roundi(_degrees_for_facing(f) / 45.0), 8) == step:
+			return f
+	return 0
 
 
 ## Ставить юніт у точці `at` на рельєф усією основою. Нахил — лише в силуеті, тангаж і
@@ -622,11 +644,6 @@ func set_drones(count: int) -> void:
 	_drones_left = clampi(count, 0, _MAX_DRONES)
 	_drone_icon.visible = _drones_left > 0
 	_drone_icon.texture = drone_texture(_drones_left)
-	# Число HP — праворуч від значка, коли він є; без значка — посередині смуги.
-	_hp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT if _drones_left > 0 else HORIZONTAL_ALIGNMENT_CENTER
-	_hp_label.offset.x = HP_LABEL_AFTER_ICON / _hp_label.pixel_size if _drones_left > 0 else 0.0
-	# Поруч зі значком число дрібніше: так воно кінчається в межах смуги, а не на бійцях сусіда.
-	_hp_label.font_size = HP_LABEL_FONT_BY_ICON if _drones_left > 0 else HP_LABEL_FONT
 	# Скільки дронів, стільки труб на спинах: пущений дрон знімає трубу з відділення.
 	_set_standing(_standing)
 
@@ -682,7 +699,10 @@ func _set_standing(count: int) -> void:
 	_standing = count
 	# Розкладка — за id юніта й нинішнім напрямом: стоячі не стають один за одним уздовж погляду камери.
 	_layout = UnitSilhouettes.pick_layout(_unit_id, rotation.y)
-	(_silhouette.get_node("Hull") as MeshInstance3D).mesh = UnitSilhouettes.merged_mesh(_type_id, count, _set_id(), _drones_left, _layout)
+	_built_face = posmod(roundi(rad_to_deg(rotation.y) / 45.0), 8)
+	var hull := _silhouette.get_node("Hull") as MeshInstance3D
+	hull.mesh = UnitSilhouettes.merged_mesh(_type_id, count, _set_id(), _drones_left, _layout, _face_index_of(_built_face))
+	_hold_slots()
 
 
 ## Бійці місць `from .. to - 1` перекидаються навзнак довкола ступень за FALL_TIP_SEC; тіло на землі з'являється
@@ -696,11 +716,25 @@ func _tip_over(from: int, to: int, layout: int) -> void:
 		mi.mesh = mesh
 		mi.material_override = UnitSilhouettes.model_material(UnitSilhouettes.PLAIN_FIGURE, _set_id())
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		mi.transform = UnitSilhouettes.model_figure_transform(i, layout)
-		_silhouette.add_child(mi)
+		mi.transform = UnitSilhouettes.model_figure_transform(i, layout, rotation.y)
+		_silhouette.get_node("Hull").add_child(mi)
 		var tween: Tween = mi.create_tween()
 		tween.tween_property(mi, "rotation:x", FALL_TIP_ANGLE, FALL_TIP_SEC).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
 		tween.tween_callback(mi.queue_free)
+		_tipping[i] = mi
+
+
+## Куди лягає тіло місця (світ, `WreckLayer.body_transform`): фігура, що перекидається, за той самий час
+## сповзає туди, і тіло з'являється там, де перекидання скінчилось, а не за метр від нього.
+func aim_tips(targets: Dictionary) -> void:
+	var hull := _silhouette.get_node("Hull") as Node3D
+	for slot: int in targets:
+		var mi: MeshInstance3D = _tipping.get(slot)
+		if mi == null or not is_instance_valid(mi):
+			continue
+		var at: Vector3 = hull.global_transform.affine_inverse() * (targets[slot] as Transform3D).origin
+		at.y = mi.position.y
+		mi.create_tween().tween_property(mi, "position", at, FALL_TIP_SEC)
 
 
 ## Твінує _silhouette, а не self: self.scale належить play_destroyed() відділення, і два
@@ -831,7 +865,7 @@ func contact_transforms() -> Array[Transform3D]:
 			out.append(UnitContacts.HIDDEN)
 			continue
 		var feet: Vector3 = UnitSilhouettes.figure_transform(i, true, _layout).origin
-		var xf: Transform3D = _silhouette.global_transform * Transform3D(Basis.from_scale(Vector3(FIGURE_CONTACT_SIZE, 1.0, FIGURE_CONTACT_SIZE)), Vector3(feet.x, 0.06, feet.z))
+		var xf: Transform3D = (_silhouette.get_node("Hull") as Node3D).global_transform * Transform3D(Basis.from_scale(Vector3(FIGURE_CONTACT_SIZE, 1.0, FIGURE_CONTACT_SIZE)), Vector3(feet.x, 0.06, feet.z))
 		xf.origin += Vector3(shift.x, 0.0, shift.y)
 		out.append(xf)
 	return out
@@ -981,18 +1015,15 @@ static func _diamond_texture(size: int = 32) -> ImageTexture:
 	return _texture_cache[key]
 
 
-## Значок дронів — у світових одиницях, як і смуга HP: 0,42 завширшки (на найдальшому зумі ~19 пікселів,
-## цятка — 3 × 3 пікселі з проміжком 2).
-const DRONE_ICON_WIDTH: float = 0.42
-const DRONE_ICON_PIXEL: float = DRONE_ICON_WIDTH / 61.0
-## Значок — у рядку числа HP, лівим краєм на лівому кінці своєї смуги: за смугу він не виходить і
-## на бійців сусіда не лягає. Число тоді вирівняне ліворуч одразу за значком.
+## Значок дронів — над числом HP свого відділення, посередині, у світових одиницях: 0,42 × 0,15 (на найдальшому
+## зумі ~19 пікселів, цятка 3 × 3 з проміжком 2). Не в рядку числа: дрібний шрифт поруч зі значком розмазувався.
+## Над числом, бо всюди довкола смуги на пологому нахилі вже стоять смуги й бійці сусідів, а тут між смугами
+## сусідів зліва й справа лишається ±0,22, і відділення позаду стоїть на 0,87 вище.
+const DRONE_ICON_PIXEL: float = 0.42 / 61.0
+const DRONE_ICON_SIZE: Vector2i = Vector2i(61, 22)
 const HP_BAR_HALF: float = _HP_BAR_SIZE.x * HP_BAR_PIXEL_SIZE * 0.5
-const DRONE_ICON_OFFSET: Vector2 = Vector2((-HP_BAR_HALF + DRONE_ICON_WIDTH * 0.5) / DRONE_ICON_PIXEL, 0.0)
-const HP_LABEL_AFTER_ICON: float = -HP_BAR_HALF + DRONE_ICON_WIDTH + 0.05
-## Розмір числа HP: звичайний і поруч зі значком дронів (тоді між значком і кінцем смуги ~0,49).
-const HP_LABEL_FONT: int = 32
-const HP_LABEL_FONT_BY_ICON: int = 22
+## Зсув значка від середини числа HP у площині екрана (текселі): над верхом числа (0,08 + обведення) із зазором.
+const DRONE_ICON_OFFSET: Vector2 = Vector2(0.0, (0.08 + 0.04 + 0.01 + DRONE_ICON_SIZE.y * DRONE_ICON_PIXEL * 0.5) / DRONE_ICON_PIXEL)
 ## Колір силуету й цяток — той самий жовтий, що й позначка дрона (DroneThreatened), обведений темним.
 const _DRONE_FILL: Color = Color("e2bd45")
 const _DRONE_INK: Color = Color("1d1a14")
@@ -1004,8 +1035,8 @@ static func drone_texture(count: int) -> ImageTexture:
 	var key: Array = ["drone", count]
 	if _texture_cache.has(key):
 		return _texture_cache[key]
-	var w: int = 61
-	var h: int = 22
+	var w: int = DRONE_ICON_SIZE.x
+	var h: int = DRONE_ICON_SIZE.y
 	var fill := Image.create(w, h, false, Image.FORMAT_RGBA8)
 	fill.fill(Color(0, 0, 0, 0))
 	# фюзеляж і носовий обтічник

@@ -125,6 +125,19 @@ func play(events: Array[Events.BattleEvent]) -> void:
 	playback_finished.emit()
 
 
+## Чи перекидається зараз боєць цього відділення: падіння малює хтось, і щойно перед ним (кілька подій назад —
+## між ними буває поворот) було влучання в це відділення. Здача теж кладе тіла, але без влучання —
+## там ніхто не перекидається, і чекати нічого.
+func _tips(unit_id: int) -> bool:
+	if figures_fell.get_connections().is_empty():
+		return false
+	for k in range(_batch_index - 1, maxi(_batch_index - 4, -1), -1):
+		var e: Events.BattleEvent = _batch[k]
+		if e is Events.DamageDealt and (e as Events.DamageDealt).unit_id == unit_id:
+			return true
+	return false
+
+
 ## Пропуск повтору: поточний play() кінчається одразу, без playback_finished, і програвач придатний
 ## для наступного. Чекати кінця анімації не можна: екран звільняє вузол, чий твін вона чекає, а
 ## вбитий твін finished не подає.
@@ -203,7 +216,7 @@ func _dispatch(event: Events.BattleEvent) -> Variant:
 		figures_fell.emit((event as Events.FiguresFell).body)
 		# Пакет чекає, доки боєць перекинеться (якщо падіння хтось малює): перебудова юнітів
 		# після пакета інакше обриває його на першому кадрі.
-		return _pause(UnitView.FALL_TIP_SEC) if not figures_fell.get_connections().is_empty() else null
+		return _pause(UnitView.FALL_TIP_SEC) if _tips((event as Events.FiguresFell).body.unit_id) else null
 	elif event is Events.UnitDestroyed:
 		return _handle_unit_destroyed(event)
 	elif event is Events.WreckLeft:

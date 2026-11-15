@@ -201,7 +201,9 @@ static func _merged_mat() -> StandardMaterial3D:
 ## Труб дрона на відділенні стільки, скільки дронів лишилось (§3.9, число публічне), і несуть їх
 ## перші стоячі місця — вони падають останніми; решта — простий боєць (`PLAIN_FIGURE`). Модель із
 ## трубою має той самий атлас, що й простий боєць, тож обидва малює її матеріал одним викликом.
-static func merged_mesh(type_id: int, standing: int = -1, set_id: int = 0, drones: int = 0, layout: int = 0) -> ArrayMesh:
+## `face` — напрям відділення (0–7): сітка будується у світових осях (вузол відділення повертають назад), і в
+## неї вписаний поворот самих фігур.
+static func merged_mesh(type_id: int, standing: int = -1, set_id: int = 0, drones: int = 0, layout: int = 0, face: int = 0) -> ArrayMesh:
 	var has_figures: bool = (spec(type_id, set_id).extras as Array).has(&"figures")
 	var up: int = _FIGURE_SLOTS.size() if standing < 0 else clampi(standing, 0, _FIGURE_SLOTS.size())
 	var model: ArrayMesh = model_mesh(type_id, set_id)
@@ -209,7 +211,7 @@ static func merged_mesh(type_id: int, standing: int = -1, set_id: int = 0, drone
 		return model
 	var plain: ArrayMesh = model_mesh(PLAIN_FIGURE, set_id) if model != null else null
 	var tubes: int = clampi(drones, 0, up) if plain != null and plain != model else 0
-	var key := "%d:%d:%s:%d:%d:%d" % [_resolved_set(type_id, set_id), type_id, "model" if model != null else "box", up if has_figures else 0, tubes, layout]
+	var key := "%d:%d:%s:%d:%d:%d:%d" % [_resolved_set(type_id, set_id), type_id, "model" if model != null else "box", up if has_figures else 0, tubes, layout, face if has_figures else 0]
 	if _merged_meshes.has(key):
 		return _merged_meshes[key]
 	if model != null:
@@ -219,7 +221,7 @@ static func merged_mesh(type_id: int, standing: int = -1, set_id: int = 0, drone
 		var bare: Array[Transform3D] = []
 		var crouched: Array[Transform3D] = []
 		for i in up:
-			var xf: Transform3D = model_figure_transform(i, layout)
+			var xf: Transform3D = model_figure_transform(i, layout, deg_to_rad(UnitView._degrees_for_facing(face)))
 			if i < tubes:
 				with_tube.append(xf)
 			elif crouch != null and CROUCH_SLOTS.has(i):
@@ -311,51 +313,68 @@ static func figure_transform(i: int, standing: bool, layout: int = 0) -> Transfo
 	return Transform3D(b, Vector3(s.x * 1.2, 0.05 + FIGURE_SIZE.z * 0.5, s.y * 1.2))
 
 
-## Стоячий боєць-модель на місці `i` розкладки `layout` (ступні моделі на y = 0) у тій самій системі.
-static func model_figure_transform(i: int, layout: int = 0) -> Transform3D:
+## Стоячий боєць-модель на місці `i` розкладки `layout` (ступні моделі на y = 0) у тій самій системі;
+## `face_yaw` — напрям відділення: місце в світі стале, повертається лише фігура.
+static func model_figure_transform(i: int, layout: int = 0, face_yaw: float = 0.0) -> Transform3D:
 	var s: Vector3 = _slot(layout, i)
-	return Transform3D(Basis(Vector3.UP, s.z), Vector3(s.x, 0.05, s.y))
+	return Transform3D(Basis(Vector3.UP, s.z + face_yaw), Vector3(s.x, 0.05, s.y))
 
 
-## Розкладки місць: 0 — рівний ромб, решта — сталі зсуви до ±0,2 м і повороти до ±20° від нього. Сід кожної
-## розкладки — її номер, тож вони однакові щозапуску; відділення бере одну з них (`pick_layout()`), і різні
-## відділення не стоять однаковим ромбом.
+## Розкладки місць — у світі, не в системі відділення: камера не обертається, тож місця розставлені вздовж
+## осі «поперек погляду» через ~0,76 м і зигзагом уздовж погляду, і жоден поворот відділення не ставить двох
+## бійців один за одним (повертаються лише самі фігури, `face_yaw`). Розкладка — перестановка місць між
+## бійцями, сталий зсув до ±0,06 м поперек і ±0,24 м уздовж і поворот фігури до ±20°; сід — номер розкладки.
 const LAYOUT_COUNT: int = 8
-const _LAYOUT_SHIFT: float = 0.025
+const _ACROSS: Array[float] = [-0.1425, -0.0475, 0.0475, 0.1425]
+const _ALONG: Array[float] = [0.045, -0.06, 0.06, -0.045]
+const _LAYOUT_SHIFT: float = 0.0075
+const _LAYOUT_DEPTH: float = 0.03
 const _LAYOUT_TURN: float = 0.35
 ## Щонайменше стільки (одиниць світу поперек погляду камери, 0,6 м) між стоячими: ширина бійця з проміжком.
 const MIN_SCREEN_GAP: float = 0.075
 static var _layouts: Array = []
 
 
-## (x, z, поворот) місця `i` розкладки `layout`.
+## (x, z, поворот) місця `i` розкладки `layout` у світових осях (поворот — фігури відносно напряму відділення).
 static func _slot(layout: int, i: int) -> Vector3:
 	if _layouts.is_empty():
+		var cam: float = deg_to_rad(IsoCameraRig.YAW_DEGREES)
+		var across := Vector2(cos(cam), -sin(cam))
+		var along := Vector2(sin(cam), cos(cam))
 		for k in LAYOUT_COUNT:
 			var rng := RandomNumberGenerator.new()
 			rng.seed = 7919 * (k + 1)
+			var order: Array[int] = [0, 1, 2, 3]
+			if k > 0:
+				for n in range(order.size() - 1, 0, -1):
+					var m: int = rng.randi_range(0, n)
+					var t: int = order[n]
+					order[n] = order[m]
+					order[m] = t
 			var slots: Array[Vector3] = []
-			for j in _FIGURE_SLOTS.size():
-				var s: Vector2 = _FIGURE_SLOTS[j]
-				var d := Vector3.ZERO
+			for j in order.size():
+				var u: float = _ACROSS[order[j]]
+				var w: float = _ALONG[order[j]]
+				var turn: float = _FIGURE_YAW[j]
 				if k > 0:
-					d = Vector3(rng.randf_range(-_LAYOUT_SHIFT, _LAYOUT_SHIFT), rng.randf_range(-_LAYOUT_SHIFT, _LAYOUT_SHIFT),
-						rng.randf_range(-_LAYOUT_TURN, _LAYOUT_TURN))
-				slots.append(Vector3(s.x + d.x, s.y + d.y, _FIGURE_YAW[j] + d.z))
+					u += rng.randf_range(-_LAYOUT_SHIFT, _LAYOUT_SHIFT)
+					w += rng.randf_range(-_LAYOUT_DEPTH, _LAYOUT_DEPTH)
+					turn += rng.randf_range(-_LAYOUT_TURN, _LAYOUT_TURN)
+				var at: Vector2 = across * u + along * w
+				slots.append(Vector3(at.x, at.y, turn))
 			_layouts.append(slots)
 	return _layouts[layout][i]
 
 
 ## Найменший проміжок між першими `up` стоячими поперек погляду камери, коли відділення повернуте на `yaw`:
 ## менший за ширину бійця — і з камери двоє зливаються в одну фігуру з двома головами.
-static func screen_gap(layout: int, yaw: float, up: int) -> float:
+static func screen_gap(layout: int, _yaw: float, up: int) -> float:
 	var cam: float = deg_to_rad(IsoCameraRig.YAW_DEGREES)
 	var across := Vector2(cos(cam), -sin(cam))
 	var xs: Array[float] = []
 	for i in up:
 		var s: Vector3 = _slot(layout, i)
-		var w := Vector2(s.x * cos(yaw) + s.y * sin(yaw), -s.x * sin(yaw) + s.y * cos(yaw))
-		xs.append(w.dot(across))
+		xs.append(Vector2(s.x, s.y).dot(across))
 	var gap: float = INF
 	for i in xs.size():
 		for j in range(i + 1, xs.size()):

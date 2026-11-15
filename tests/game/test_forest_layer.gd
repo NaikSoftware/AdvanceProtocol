@@ -163,7 +163,7 @@ func test_fade_reaches_every_foliage_group() -> void:
 				if String(n.name).begins_with("Fade_"):
 					var m := (n as GeometryInstance3D).material_override as ShaderMaterial
 					if String(n.name).ends_with("_c"):
-						assert_true(m.shader.code.contains("ALPHA = COLOR.a;"), "%s: колір із прозорістю" % n.name)
+						assert_true(m.shader.code.contains("fade_far(VERTEX, VIEW_MATRIX)"), "%s: колір із прозорістю" % n.name)
 						assert_eq(m.render_priority, PropLayer.FADE_DEPTH_PRIORITY + 1, "%s: колір після глибини" % n.name)
 					else:
 						assert_true(m.shader.code.contains("depth_draw_always"), "%s: спершу прохід глибини" % n.name)
@@ -196,6 +196,13 @@ func _ray_hits(e: Dictionary, o: Vector2, dir: Vector2, slope: float) -> bool:
 		if ForestLayer.FIGURE_LOW + slope * sd <= top and ForestLayer.FIGURE_HIGH + slope * sd >= top * ForestLayer.CROWN_LOW:
 			return true
 	return false
+
+
+## Скільки крон (з підростом) розчиняється над одним юнітом у тестовому лісі — стеля за сезоном і нахилом
+## (38° і 55°): більше означало б, що розчиняється шмат лісу, а не те, що закриває бійців.
+const FADE_CEILING: Dictionary = {&"summer": {38: 23, 55: 17}, &"late": {38: 32, 55: 28}}
+## Те саме над трьома юнітами поряд (літо).
+const FADE_CEILING_THREE: Dictionary = {38: 38, 55: 35}
 
 
 ## Для юнітів `units` на нахилі `pitch`: кожна крона, що закриває якесь місце бійця (сітка точок у межах
@@ -240,6 +247,8 @@ func test_fade_selects_exactly_the_crowns_over_the_slot_rays() -> void:
 				var cam := _rig_camera(pitch, Vector3(u.x, 0.0, u.y))
 				f.set_reveal_cells([u] as Array[Vector2i])
 				var faded: int = _check_fade_matches_slot_rays(f, [u] as Array[Vector2i], cam, "%s %d° %s" % [season, pitch, u])
+				# сторож від плями-«привида»: зафіксовані кількості для цього лісу (з підростом від 0,8 м)
+				assert_between(faded, 0, int(FADE_CEILING[season][int(pitch)]), "%s %d° %s: розчинено крон" % [season, pitch, u])
 				if u == Vector2i(5, 5):
 					assert_gt(faded, 0, "у лісі над юнітом щось розчиняється")
 				cam.free()
@@ -272,6 +281,20 @@ func test_crown_on_higher_ground_covers_a_slot_it_would_miss_on_flat() -> void:
 	assert_true(ForestLayer.covers_slots(p, 0.5, 0.44, u, dir, slope, 0.15), "кущ на 1,2 м вище — закриває")
 
 
+## Розчинена крона прозора лише довкола показаних юнітів: матеріал кольору отримує їхні точки (клітинка на висоті
+## середини фігури) і їх кількість; без юнітів — жодної, і розчинена крона непрозора.
+func test_fade_colour_gets_the_shown_unit_points() -> void:
+	var f := _layer(&"summer")
+	f.set_reveal_cells([Vector2i(5, 5), Vector2i(6, 5)] as Array[Vector2i])
+	for m: ShaderMaterial in f._fade_color.values():
+		assert_eq(m.get_shader_parameter("fade_count"), 2)
+		var pts: PackedVector4Array = m.get_shader_parameter("fade_points")
+		assert_eq(pts[0], Vector4(5.0, ForestLayer.FIGURE_MID_Y, 5.0, 0.0), "середина фігури над клітинкою")
+	f.set_reveal_cells([] as Array[Vector2i])
+	for m: ShaderMaterial in f._fade_color.values():
+		assert_eq(m.get_shader_parameter("fade_count"), 0)
+
+
 ## Три юніти поряд — те саме для кожного.
 func test_fade_over_adjacent_units_covers_every_slot() -> void:
 	for pitch: float in [IsoCameraRig.PITCH_NEAR_DEG, IsoCameraRig.PITCH_FAR_DEG]:
@@ -279,7 +302,8 @@ func test_fade_over_adjacent_units_covers_every_slot() -> void:
 		var units: Array[Vector2i] = [Vector2i(4, 5), Vector2i(5, 5), Vector2i(5, 6)]
 		var cam := _rig_camera(pitch, Vector3(5.0, 0.0, 5.0))
 		f.set_reveal_cells(units)
-		assert_gt(_check_fade_matches_slot_rays(f, units, cam, "троє, %d°" % pitch), 0)
+		var n3: int = _check_fade_matches_slot_rays(f, units, cam, "троє, %d°" % pitch)
+		assert_between(n3, 1, int(FADE_CEILING_THREE[int(pitch)]), "троє, %d°: розчинено крон" % pitch)
 		cam.free()
 
 

@@ -165,8 +165,10 @@ func _paint(cell: Vector2i, kinds: int) -> void:
 ## Слід, який повалена опора чи паркан лишає на розмоклій землі: темна смуга ~1 м завширшки вздовж
 ## a→b (світові точки, тайли) з рваним краєм; та сама темрява R, що в плями, але слабка (до SCUFF_DARK),
 ## щоб читалась як мокра прим'ята земля, а не як згарище. Той самий туман `seen`, що в плями.
-func stamp_scuff(a: Vector3, b: Vector3) -> void:
-	var cell := Vector2i(roundi(a.x), roundi(a.z))
+## `source` — клітинка, з якої пропс повалено: слід видно лише тому, хто її розвідав (крайній пропс стоїть
+## на межі, і клітинка точки падіння могла б бути сусідньою, вже розвіданою).
+func stamp_scuff(a: Vector3, b: Vector3, source: Vector2i = Vector2i(-9999, -9999)) -> void:
+	var cell: Vector2i = source if source.x != -9999 else Vector2i(roundi(a.x), roundi(a.z))
 	_scuffs.append([cell, a, b])
 	if _vision == null or _vision.is_seen(cell):
 		_scuffs_painted[_scuffs.size() - 1] = true

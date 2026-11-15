@@ -122,16 +122,14 @@ func test_each_slot_has_its_own_fixed_yaw_and_the_squad_keeps_its_facing() -> vo
 	assert_eq(UnitSilhouettes.figure_transform(2, true), UnitSilhouettes.figure_transform(2, true))
 
 
-## Розкладки місць — сталі зсуви до ±0,2 м і повороти до ±20° від ромба; відділення бере ту, де стоячі
-## не стоять один за одним уздовж погляду камери, і різні відділення — різні розкладки.
+## Розкладки місць — у світових осях: місця поперек погляду через ~0,76 м, перестановка між бійцями й сталі
+## зсуви; бійці лишаються в межах сліду відділення, і різні відділення — різні розкладки.
 func test_squads_take_seeded_layouts_that_keep_standing_figures_apart_on_screen() -> void:
-	for k in range(1, UnitSilhouettes.LAYOUT_COUNT):
+	for k in UnitSilhouettes.LAYOUT_COUNT:
 		for i in UnitView.SQUAD_FIGURES:
-			var base: Transform3D = UnitSilhouettes.model_figure_transform(i, 0)
 			var lay: Transform3D = UnitSilhouettes.model_figure_transform(i, k)
-			assert_lte(absf(lay.origin.x - base.origin.x), 0.025 + 0.0001, "зсув до 0,2 м")
-			assert_lte(absf(lay.origin.z - base.origin.z), 0.025 + 0.0001)
-			assert_lte(absf(wrapf(lay.basis.get_euler().y - base.basis.get_euler().y, -PI, PI)), 0.35 + 0.0001, "поворот до 20°")
+			assert_lte(Vector2(lay.origin.x, lay.origin.z).length(), 0.2, "у межах сліду відділення")
+			assert_lte(absf(wrapf(lay.basis.get_euler().y, -PI, PI)), 0.3 + 0.35 + 0.0001, "поворот фігури до ±37°")
 			assert_eq(lay, UnitSilhouettes.model_figure_transform(i, k), "стала розкладка")
 	var picked: Dictionary = {}
 	for facing in 8:

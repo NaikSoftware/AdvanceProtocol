@@ -131,3 +131,38 @@ func test_growing_seen_set_paints_only_new_stamps() -> void:
 	scars.show_for(v)
 	assert_true(scars.is_painted(Vector2i(6, 4)), "нова пляма домальована")
 	assert_eq(scars.image().get_pixel(3 * 32 + 16, 2 * 32 + 16).g8, 255, "стара не перемальована з нуля")
+
+
+## Крайній пропс (паркан на межі клітинок): слід його падіння прив'язаний до клітинки, з якої його повалено, а
+## не до точки падіння — та може лежати на вже розвіданій сусідній клітинці й видати техніку на нерозвіданій.
+func test_edge_scuff_follows_its_crush_cell_not_its_pivot() -> void:
+	var state := BattleState.create(Board.create(8, 6, Terrain.GroundState.DRY), 2, 3)
+	var v: Vision = state.vision[0]
+	v.seen.fill(0)
+	v.seen[2 * 8 + 2] = 1
+	scars.show_for(v)
+	# точка падіння на межі (2,5; 2) округлюється в розвідану (2, 2), але повалено з нерозвіданої (3, 2)
+	scars.stamp_scuff(Vector3(2.5, 0, 2), Vector3(1.6, 0, 2), Vector2i(3, 2))
+	var on_seen := Vector2i(2 * 32 + 10, 2 * 32 + 16)
+	assert_eq(scars.image().get_pixelv(on_seen).r8, 0, "з нерозвіданої клітинки — сліду нема")
+	v.seen[2 * 8 + 3] = 1
+	scars.show_for(v)
+	assert_gt(scars.image().get_pixelv(on_seen).r8, 0, "клітинку розвідано — слід на місці")
+
+
+## Показ звужується (інший глядач): слід, чиє джерело новий глядач не розвідав, зникає.
+func test_painted_scuff_disappears_for_a_viewer_who_has_not_seen_its_source() -> void:
+	var state := BattleState.create(Board.create(8, 6, Terrain.GroundState.DRY), 2, 3)
+	var a: Vision = state.vision[0]
+	var b: Vision = state.vision[1]
+	a.seen.fill(0)
+	b.seen.fill(0)
+	a.seen[2 * 8 + 3] = 1
+	a.seen[2 * 8 + 2] = 1
+	b.seen[2 * 8 + 2] = 1
+	scars.show_for(a)
+	scars.stamp_scuff(Vector3(3, 0, 2), Vector3(2, 0, 2), Vector2i(3, 2))
+	var on_seen := Vector2i(2 * 32 + 16, 2 * 32 + 16)
+	assert_gt(scars.image().get_pixelv(on_seen).r8, 0, "перший глядач бачить слід")
+	scars.show_for(b)
+	assert_eq(scars.image().get_pixelv(on_seen).r8, 0, "другий джерела не розвідав — сліду нема")

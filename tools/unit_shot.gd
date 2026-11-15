@@ -49,6 +49,9 @@ func _ready() -> void:
 	if a.size() > 5 and a[5] == "squads":
 		await _squads(screen, map, out, tag)
 		return
+	if a.size() > 5 and a[5] == "facings":
+		await _facings(screen, map, out, tag)
+		return
 	if a.size() > 5 and a[5] == "squads_forest":
 		await _squads_forest(screen, map, out, tag)
 		return
@@ -669,6 +672,51 @@ func _squads(screen: BattleScreen, map: MapData, out: String, tag: String) -> vo
 
 ## Шостий аргумент squads_forest: стрілецьке відділення на тайлі лісу (крона над ним гасне) і штурмове на полі поруч,
 ## з того боку лісу, куди падає тінь від сонця (у тіні крон). Кадри _forest_z6 і _forest_z20.
+## Вісім відділень на полі, кожне на своєму з 8 напрямів (стрілецьке й штурмове з двома дронами через одне):
+## жодні двоє бійців не стоять один за одним уздовж погляду на жодному напрямі. Наближення й віддалення.
+func _facings(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
+	var m: MapData = map.duplicate(true)
+	m.take_over_path(map.resource_path)
+	var cells: Array[Vector2i] = []
+	var around: Array[Vector2i] = []
+	for col in 4:
+		for row in 2:
+			cells.append(Vector2i(col - 1, row))
+	for dx in range(-2, 4):
+		for dy in range(-1, 3):
+			around.append(Vector2i(dx, dy))
+	var c: Vector2i = _field_near_centre(m, false, cells, around, true)
+	if c.x < 0:
+		c = _field_near_centre(m, false, cells)
+	m.spawns = []
+	for f in 8:
+		m.spawns.append({"type_id": f % 2, "owner": 0, "pos": c + Vector2i(f % 4 - 1, f / 4), "facing": f})
+	screen.setup(m, 2, 1)
+	for u: Unit in MatchService.state.alive_units():
+		if u.type_id == 1:
+			u.drones_left = 2
+	MatchService.state.refresh_vision_all()
+	screen._rebuild_units_for_active_player(true)
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	for f in SETTLE_FRAMES:
+		await get_tree().process_frame
+	rig.center_on(c + Vector2i(0, 0))
+	var shots: Dictionary = {}
+	for z: float in [IsoCameraRig.MIN_ZOOM, IsoCameraRig.MAX_ZOOM]:
+		rig.zoom_by(z / rig.zoom_level)
+		for f in SETTLE_FRAMES * 2:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		shots["%s/%s_facings_z%d.png" % [out, tag, int(z)]] = get_viewport().get_texture().get_image()
+		var cam: Camera3D = get_viewport().get_camera_3d()
+		for u: Unit in MatchService.state.units.values():
+			var sp: Vector2 = cam.unproject_position(Vector3(u.pos.x, 0.08, u.pos.y))
+			print("UNIT z%d facing %d type %d at %s px %d,%d" % [int(z), u.facing, u.type_id, u.pos, int(sp.x), int(sp.y)])
+	for path: String in shots:
+		(shots[path] as Image).save_png(path)
+	get_tree().quit(0)
+
+
 func _squads_forest(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
 	var m: MapData = map.duplicate(true)
 	m.take_over_path(map.resource_path)
@@ -878,7 +926,7 @@ func _forest_n2(screen: BattleScreen, map: MapData, out: String, tag: String) ->
 	var shots: Dictionary = {}
 	for place: Array in [["n2", n2], ["hidden", hide]]:
 		rig.center_on(place[1])
-		for z: float in [IsoCameraRig.MIN_ZOOM, IsoCameraRig.MAX_ZOOM]:
+		for z: float in [IsoCameraRig.MIN_ZOOM, 8.0, IsoCameraRig.MAX_ZOOM]:
 			rig.zoom_by(z / rig.zoom_level)
 			for f in SETTLE_FRAMES * 2:
 				await get_tree().process_frame
@@ -898,6 +946,8 @@ func _forest_n2(screen: BattleScreen, map: MapData, out: String, tag: String) ->
 				for ch: Node3D in hidden:
 					ch.visible = true
 				await RenderingServer.frame_post_draw
+			if place[0] == "n2" and z < 9.0:
+				await _ab_pair(screen, shots, "%s/%s_n2_z%d" % [out, tag, int(z)])
 	for path: String in shots:
 		(shots[path] as Image).save_png(path)
 	print("UNIT forest_n2 at %s, enemy hidden at %s (seen %s), bodies at %s (seen %s, shown %s)" % [n2, hide,
@@ -940,10 +990,18 @@ func _fall(screen: BattleScreen, map: MapData, out: String, tag: String) -> void
 		await RenderingServer.frame_post_draw
 		frames.append(get_viewport().get_texture().get_image())
 		stamps.append(Time.get_ticks_msec() - t0)
+	# між перекиданням і тим, як пил улігся: тіло має лишатися там, де скінчилось перекидання
+	var later: Dictionary = {}
+	for ms: int in [1500, 2000, 2500, 3000]:
+		while Time.get_ticks_msec() - t0 < ms:
+			await RenderingServer.frame_post_draw
+		later[ms] = get_viewport().get_texture().get_image()
 	# пил улігся: кадр через 3,5 с після пострілу
 	while Time.get_ticks_msec() - t0 < 3500:
 		await RenderingServer.frame_post_draw
 	var settled: Image = get_viewport().get_texture().get_image()
+	for ms: int in later:
+		(later[ms] as Image).save_png("%s/%s_fall_t%02d.png" % [out, tag, ms / 100])
 	for i in frames.size():
 		frames[i].save_png("%s/%s_fall_%03d.png" % [out, tag, i])
 	print("UNIT fall frame times ms %s" % [stamps])
@@ -952,9 +1010,30 @@ func _fall(screen: BattleScreen, map: MapData, out: String, tag: String) -> void
 	get_tree().quit()
 
 
+## Пара для порівняння на поточному зумі: `<base>_nofade` (крони не гаснуть) і `<base>_noforest` (лісу нема);
+## потім усе як було.
+func _ab_pair(screen: BattleScreen, shots: Dictionary, base: String) -> void:
+	var bv: BoardView = screen._board_view
+	var keep: Array[Vector2i] = bv._forest._reveal.duplicate()
+	bv.set_reveal_cells([] as Array[Vector2i], true)
+	for f in 6:
+		await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	shots[base + "_nofade.png"] = get_viewport().get_texture().get_image()
+	bv._forest.visible = false
+	await RenderingServer.frame_post_draw
+	await RenderingServer.frame_post_draw
+	shots[base + "_noforest.png"] = get_viewport().get_texture().get_image()
+	bv._forest.visible = true
+	bv.set_reveal_cells(keep, true)
+	for f in 6:
+		await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+
+
 ## Шостий аргумент forest_deep: штурмове відділення (значок дронів) на клітинці лісу, довкола якої на дві
-## клітинки ліс (якщо такої нема — на одну). Кадри _deep_z6, _deep_z20 і на зумі 6 пари для порівняння: _deep_z6_nofade (крона не
-## гасне) і _deep_z6_noforest (лісу нема).
+## клітинки ліс (якщо такої нема — на одну). Кадри _deep_z6, _deep_z8, _deep_z20 і на зумах 6 і 8 пари для порівняння:
+## _nofade (крона не гасне) і _noforest (лісу нема).
 func _forest_deep(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
 	var m: MapData = map.duplicate(true)
 	m.take_over_path(map.resource_path)
@@ -991,19 +1070,11 @@ func _forest_deep(screen: BattleScreen, map: MapData, out: String, tag: String) 
 			await get_tree().process_frame
 		await RenderingServer.frame_post_draw
 		shots["%s/%s_deep_z%d.png" % [out, tag, int(z)]] = get_viewport().get_texture().get_image()
-	rig.zoom_by(IsoCameraRig.MIN_ZOOM / rig.zoom_level)
-	for f in SETTLE_FRAMES * 2:
-		await get_tree().process_frame
-	var bv: BoardView = screen._board_view
-	bv.set_reveal_cells([] as Array[Vector2i], true)
-	for f in 6:
-		await get_tree().process_frame
-	await RenderingServer.frame_post_draw
-	shots["%s/%s_deep_z6_nofade.png" % [out, tag]] = get_viewport().get_texture().get_image()
-	bv._forest.visible = false
-	await RenderingServer.frame_post_draw
-	await RenderingServer.frame_post_draw
-	shots["%s/%s_deep_z6_noforest.png" % [out, tag]] = get_viewport().get_texture().get_image()
+	for z: float in [IsoCameraRig.MIN_ZOOM, 8.0]:
+		rig.zoom_by(z / rig.zoom_level)
+		for f in SETTLE_FRAMES * 2:
+			await get_tree().process_frame
+		await _ab_pair(screen, shots, "%s/%s_deep_z%d" % [out, tag, int(z)])
 	for path: String in shots:
 		(shots[path] as Image).save_png(path)
 	print("UNIT forest_deep at %s" % deep)

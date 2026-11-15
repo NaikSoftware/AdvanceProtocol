@@ -411,10 +411,12 @@ func test_hp_label_and_drone_icon_are_stacked_above_the_bar_in_order() -> void:
 	assert_true(view._hp_bar.position.y < view._hp_label.position.y, "підпис сидить над смугою")
 	assert_false(view._drone_icon.fixed_size, "значок росте й меншає разом зі смугою")
 	assert_true(view._drone_icon.no_depth_test, "значок поверх розчиненої крони, як смуга")
-	assert_eq(view._drone_icon.position.y, view._hp_label.position.y, "значок — у рядку числа HP")
+	assert_eq(view._drone_icon.position.y, view._hp_label.position.y, "значок — над числом HP")
+	assert_eq(view._hp_label.horizontal_alignment, HORIZONTAL_ALIGNMENT_CENTER, "число HP — посередині, як без дронів")
+	assert_eq(view._hp_label.offset, Vector2.ZERO)
 	var r: Rect2 = _icon_rect(Vector2.ZERO)
-	assert_almost_eq(r.position.x, -UnitView.HP_BAR_HALF, 0.001, "лівим краєм — на лівому кінці своєї смуги, не далі")
-	assert_lt(r.end.x, UnitView.HP_LABEL_AFTER_ICON, "число HP — праворуч від значка")
+	assert_almost_eq(r.get_center().x, 0.0, 0.001, "посередині, над числом")
+	assert_gt(r.position.y, 0.1, "вище за число HP")
 	# цятка 10 текселів, проміжок 7; на найдальшому зумі ~45 пк на одиницю світу
 	var px_per_texel: float = UnitView.DRONE_ICON_PIXEL * 45.0
 	assert_gte(10.0 * px_per_texel, 3.0, "цятка щонайменше 3 × 3 пікселі")
@@ -433,20 +435,43 @@ func _icon_rect(anchor: Vector2) -> Rect2:
 func test_fallen_figures_tip_over_then_go() -> void:
 	UnitSilhouettes.use_models({0: UnitModelFixture.soldier(), 1: UnitModelFixture.tube_soldier()})
 	view.bind(_unit(0))
-	var before: int = view._silhouette.get_child_count()
+	var before: int = view._silhouette.get_node("Hull").get_child_count()
 	view.set_hp(40, 100)
-	var tipping: Array = view._silhouette.get_children().slice(before)
+	var tipping: Array = view._silhouette.get_node("Hull").get_children().slice(before)
 	assert_eq(tipping.size(), 2, "з чотирьох стоячих лишилось два — два перекидаються")
-	# кут — посеред твіна, кадр за кадром, доки фігура ще є
-	var deepest: float = 0.0
-	var t0: int = Time.get_ticks_msec()
-	while is_instance_valid(tipping[0]) and Time.get_ticks_msec() - t0 < 1000:
-		deepest = minf(deepest, (tipping[0] as Node3D).rotation.x)
-		await get_tree().process_frame
-	assert_lt(deepest, -0.1, "перекидається")
-	assert_gt(deepest, UnitView.FALL_TIP_ANGLE - 0.01, "не далі за кут перекидання")
-	await get_tree().create_timer(UnitView.FALL_TIP_SEC + 0.2).timeout
-	assert_eq(view._silhouette.get_child_count(), before, "перекинувшись, зникає")
+	# твін — вручну, без реального часу: посеред перекидання кут — чверть кінцевого (EASE_IN, квадрат)
+	for t: Tween in get_tree().get_processed_tweens():
+		t.custom_step(UnitView.FALL_TIP_SEC * 0.5)
+	assert_almost_eq((tipping[0] as Node3D).rotation.x, UnitView.FALL_TIP_ANGLE * 0.25, 0.05, "посеред перекидання")
+	for t: Tween in get_tree().get_processed_tweens():
+		t.custom_step(UnitView.FALL_TIP_SEC)
+	await get_tree().process_frame
+	assert_eq(view._silhouette.get_node("Hull").get_child_count(), before, "перекинувшись, зникає")
+
+
+## Місця бійців стоять у світі, тож на будь-якому з 8 напрямів жодні двоє не стають один за одним уздовж
+## погляду: поперек екрана між будь-якими двома щонайменше MIN_SCREEN_GAP (0,6 м); повертаються лише фігури.
+func test_figures_never_line_up_along_the_view_at_any_facing() -> void:
+	UnitSilhouettes.use_models({0: UnitModelFixture.soldier(), 1: UnitModelFixture.tube_soldier()})
+	var cam: float = deg_to_rad(IsoCameraRig.YAW_DEGREES)
+	var across := Vector3(cos(cam), 0.0, -sin(cam))
+	for unit_id in 6:
+		var u: Unit = _unit(0)
+		u.id = unit_id
+		view.bind(u)
+		for f in 8:
+			view.rotation.y = deg_to_rad(UnitView._degrees_for_facing(f))
+			view._set_standing(UnitView.SQUAD_FIGURES)
+			var hull := view._silhouette.get_node("Hull") as Node3D
+			var xs: Array[float] = []
+			for i in UnitView.SQUAD_FIGURES:
+				var at: Vector3 = (hull.global_transform * UnitSilhouettes.model_figure_transform(i, view.layout(), view.rotation.y)).origin
+				xs.append(at.dot(across))
+			xs.sort()
+			for i in range(1, xs.size()):
+				assert_gte(xs[i] - xs[i - 1], UnitSilhouettes.MIN_SCREEN_GAP - 0.0001,
+						"відділення %d, напрям %d: двоє бійців один за одним уздовж погляду" % [unit_id, f])
+	UnitSilhouettes.use_models({})
 
 
 ## Значок дронів — публічне число саме цього відділення (§3.9): у площині екрана він не налазить ні на свій
@@ -456,13 +481,9 @@ func test_drone_icon_never_overlaps_a_neighbours_bar_or_label() -> void:
 	view.bind(_unit(1))
 	var label: Label3D = view._hp_label
 	var font: Font = label.font if label.font != null else ThemeDB.fallback_font
-	assert_eq(label.font_size, UnitView.HP_LABEL_FONT_BY_ICON, "поруч зі значком число дрібніше")
-	# ширина числа: посередині (без дронів) і праворуч від значка (з ними)
-	var wide_w: float = font.get_string_size("100/100", HORIZONTAL_ALIGNMENT_LEFT, -1, UnitView.HP_LABEL_FONT).x * label.pixel_size
-	var text_w: float = font.get_string_size("100/100", HORIZONTAL_ALIGNMENT_LEFT, -1, UnitView.HP_LABEL_FONT_BY_ICON).x * label.pixel_size
+	var text_w: float = font.get_string_size("100/100", HORIZONTAL_ALIGNMENT_LEFT, -1, label.font_size).x * label.pixel_size
 	var pad: float = label.outline_size * label.pixel_size * 0.5  # обведення — по пів товщини з кожного боку
-	var label_h: float = UnitView.HP_LABEL_FONT * label.pixel_size + 2.0 * pad
-	assert_lte(UnitView.HP_LABEL_AFTER_ICON + text_w + pad, UnitView.HP_BAR_HALF + 0.001, "число зі значком кінчається в межах смуги")
+	var label_h: float = label.font_size * label.pixel_size + 2.0 * pad
 	var bar_size := Vector2(UnitView.HP_BAR_HALF * 2.0, UnitView._HP_BAR_SIZE.y * UnitView.HP_BAR_PIXEL_SIZE)
 	for pitch_deg: float in [IsoCameraRig.PITCH_NEAR_DEG, IsoCameraRig.PITCH_FAR_DEG]:
 		var yaw := Basis(Vector3.UP, deg_to_rad(IsoCameraRig.YAW_DEGREES))
@@ -472,14 +493,10 @@ func test_drone_icon_never_overlaps_a_neighbours_bar_or_label() -> void:
 		var bar_y: float = view._hp_bar.position.y * up.y
 		var row_y: float = label.position.y * up.y
 		var own: Rect2 = _icon_rect(Vector2(0.0, row_y))
-		# підпис сусіда — посередині (без дронів) або праворуч від його значка: береться весь можливий проміжок
 		var label_rect := func(at: Vector2) -> Rect2:
-			var x0: float = minf(-wide_w * 0.5, UnitView.HP_LABEL_AFTER_ICON) - pad
-			var x1: float = maxf(wide_w * 0.5, UnitView.HP_LABEL_AFTER_ICON + text_w) + pad
-			return Rect2(at + Vector2(x0, row_y - label_h * 0.5), Vector2(x1 - x0, label_h))
-		# своє число праворуч від значка
-		var own_label := Rect2(Vector2(UnitView.HP_LABEL_AFTER_ICON - pad, row_y - label_h * 0.5), Vector2(text_w + 2.0 * pad, label_h))
-		assert_false(own.intersects(own_label), "свій підпис HP значок не накриває")
+			return Rect2(at + Vector2(-text_w * 0.5 - pad, row_y - label_h * 0.5), Vector2(text_w + 2.0 * pad, label_h))
+		assert_false(own.intersects(label_rect.call(Vector2.ZERO)), "свій підпис HP значок не накриває")
+		assert_false(own.intersects(Rect2(Vector2(-bar_size.x * 0.5, bar_y - bar_size.y * 0.5), bar_size)), "свою смугу значок не накриває")
 		for dz in range(-1, 2):
 			for dx in range(-1, 2):
 				if dx == 0 and dz == 0:
@@ -488,12 +505,12 @@ func test_drone_icon_never_overlaps_a_neighbours_bar_or_label() -> void:
 				var at := Vector2(w.dot(right), w.dot(up))
 				var bar := Rect2(at + Vector2(-bar_size.x * 0.5, bar_y - bar_size.y * 0.5), bar_size)
 				var figures := Rect2(at + Vector2(-0.2, 0.0), Vector2(0.4, 0.225 * up.y))
+				var icon_n: Rect2 = _icon_rect(at + Vector2(0.0, row_y))
 				var tag: String = "нахил %d°, сусід (%d, %d)" % [pitch_deg, dx, dz]
 				assert_false(own.intersects(bar), tag + ": значок на його смузі")
 				assert_false(own.intersects(label_rect.call(at)), tag + ": значок на його підписі")
 				assert_false(own.intersects(figures), tag + ": значок на його бійцях")
-				assert_false(own_label.intersects(bar), tag + ": зсунуте число на його смузі")
-				assert_false(own_label.intersects(figures), tag + ": зсунуте число на його бійцях")
+				assert_false(own.intersects(icon_n), tag + ": значок на його значку")
 
 
 ## §3.9: залишок дронів публічний — метод навіть не має доступу до owner,
@@ -1240,14 +1257,15 @@ func test_bodies_on_a_bridge_lie_along_the_deck_at_its_height() -> void:
 	assert_ne(bridge, Vector2i(-1, -1), "передумова: на Річці є міст")
 	var water_x: bool = WreckLayer._is_water(_river_board, bridge + Vector2i(1, 0)) or WreckLayer._is_water(_river_board, bridge + Vector2i(-1, 0))
 	var along := Vector2(0.0, 1.0) if water_x else Vector2(1.0, 0.0)
+	var widest: float = 0.0
 	for facing in 8:
 		for seq in 3:
-			var b := Casualties.Body.new(7, bridge, 0, 0, facing, 0, 4)
+			var b := Casualties.Body.new(7 + facing * 3 + seq, bridge, 0, 0, facing, 0, 4)
 			b.seq = seq
-			var alongs: Array[float] = []
+			var strips: Array = []  # [середина вздовж настилу, смуга]
 			for slot in 4:
 				var xf: Transform3D = WreckLayer.body_transform(b, slot, _river_board)
-				alongs.append(Vector2(xf.origin.x - bridge.x, xf.origin.z - bridge.y).dot(along))
+				var mid: float = Vector2(xf.origin.x - bridge.x, xf.origin.z - bridge.y).dot(along)
 				assert_almost_eq(xf.origin.y, t.deck_y(bridge), 0.0001, "на настилі, не під ним і не над ним")
 				var rel := Vector2(xf.origin.x - bridge.x, xf.origin.z - bridge.y)
 				var across: float = absf(rel.x * along.y - rel.y * along.x)
@@ -1256,11 +1274,16 @@ func test_bodies_on_a_bridge_lie_along_the_deck_at_its_height() -> void:
 				# поперек настилу: половина довжини тіла вздовж його осі й половина ширини впоперек — у межах поручнів
 				var half_across: float = 0.5 * (WreckLayer.BODY_LENGTH * off + WreckLayer.BODY_WIDTH * sqrt(maxf(1.0 - off * off, 0.0)))
 				assert_lte(across + half_across, 0.23, "тіло між поручнями (поперек %.3f)" % across)
-			alongs.sort()
-			# тіло поперек настилу з поворотом до BODY_DECK_TURN займає вздовж нього ширину й частку довжини
-			var span: float = WreckLayer.BODY_WIDTH * cos(WreckLayer.BODY_DECK_TURN) + WreckLayer.BODY_LENGTH * sin(WreckLayer.BODY_DECK_TURN)
-			for i in range(1, alongs.size()):
-				assert_gte(alongs[i] - alongs[i - 1] - span, 0.05, "між тілами на настилі щонайменше 0,4 м")
+				# поперек настилу під кутом: уздовж нього займає ширину й частку довжини
+				var span: float = WreckLayer.BODY_WIDTH * off + WreckLayer.BODY_LENGTH * sqrt(maxf(1.0 - off * off, 0.0))
+				strips.append([mid, span])
+				assert_lte(absf(mid) + span * 0.5, 0.5, "у межах свого тайла мосту")
+				widest = maxf(widest, acos(minf(off, 1.0)))
+			strips.sort_custom(func(p: Array, q: Array) -> bool: return p[0] < q[0])
+			for i in range(1, strips.size()):
+				var gap: float = strips[i][0] - strips[i - 1][0] - (strips[i][1] + strips[i - 1][1]) * 0.5
+				assert_gte(gap, 0.05 - 0.0001, "між тілами на настилі щонайменше 0,4 м")
+	assert_gt(widest, deg_to_rad(15.0), "тіла лежать під різними кутами, не рівною шеренгою")
 
 
 ## Тіло лягає на ґрунт під собою — і на схилі; біля води воно в межах 0,3 тайла від середини клітинки, куди
@@ -1404,3 +1427,23 @@ static func _lum(c: Color) -> float:
 func test_contact_shadow_shader_water_level_matches_terrain() -> void:
 	var src: String = FileAccess.get_file_as_string("res://game/battle/shaders/unit_contact_shadow.gdshader")
 	assert_true(src.contains("const float WATER_LEVEL = %s;" % str(TerrainHeight.WATER_LEVEL)), "WATER_LEVEL у шейдері")
+
+
+## Фігура, що перекидається, за час перекидання сповзає туди, де ляже тіло: тіло з'являється там, де падіння
+## скінчилось, а не за метр від нього.
+func test_tipping_figure_ends_where_its_body_lies() -> void:
+	UnitSilhouettes.use_models({0: UnitModelFixture.soldier(), 1: UnitModelFixture.tube_soldier()})
+	view.bind(_unit(0))
+	var hull := view._silhouette.get_node("Hull") as Node3D
+	var before: int = hull.get_child_count()
+	view.set_hp(70, 100)
+	var tipping: Array = hull.get_children().slice(before)
+	assert_eq(tipping.size(), 1, "передумова: перекидається один")
+	var slot: int = view._tipping.keys()[0]
+	var spot := Vector3(view.global_position.x + 0.3, 0.0, view.global_position.z - 0.2)
+	view.aim_tips({slot: Transform3D(Basis(), spot)})
+	for t: Tween in get_tree().get_processed_tweens():
+		t.custom_step(UnitView.FALL_TIP_SEC * 0.999)
+	var at: Vector3 = (tipping[0] as Node3D).global_position
+	assert_almost_eq(Vector2(at.x, at.z), Vector2(spot.x, spot.z), Vector2(0.01, 0.01), "наприкінці — над місцем тіла")
+	UnitSilhouettes.use_models({})

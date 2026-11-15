@@ -33,6 +33,7 @@ const float TREAD_STRIP = 0.0625;
 // власне світло (FALLEN_FILL) підіймає тіньовий бік: без нього затінена половина тіла сідала в чорне.
 const float FALLEN_DARK = 0.25;
 const float FALLEN_SAT = 1.0;
+const float FALLEN_SAT_OVERCAST = 0.5;
 const vec3 FALLEN_MUD = vec3(1.03, 1.0, 0.96);
 const float FALLEN_TOP = 0.8;
 const float FALLEN_FILL = 0.45;
@@ -71,10 +72,12 @@ void fragment() {
 	if (fallen) {
 		float y = dot(col, vec3(0.2126, 0.7152, 0.0722));
 		float sky = clamp((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).y, 0.0, 1.0);
-		col = max(mix(vec3(y), col, FALLEN_SAT), vec3(0.0)) * FALLEN_MUD * FALLEN_DARK * mix(1.0, FALLEN_TOP, sky);
+		float sun = smoothstep(0.3, 0.7, sky_clear);
+		// Під похмурим небом хрома — FALLEN_SAT_OVERCAST: оливкове тіло на мокрій темній ріллі читалось мохом.
+		float sat = mix(FALLEN_SAT_OVERCAST, FALLEN_SAT, sun);
+		col = max(mix(vec3(y), col, sat), vec3(0.0)) * FALLEN_MUD * FALLEN_DARK * mix(1.0, FALLEN_TOP, sky);
 		// Лише під ясним небом: там сонце лишає тіньовий бік у чорному. Під похмурим (River) світло й так
 		// рівне, а ґрунт темний — підсвічене тіло читалось би світлішим за ріллю й зсувало тон.
-		float sun = smoothstep(0.3, 0.7, sky_clear);
 		EMISSION = (col * FALLEN_FILL + vec3(FALLEN_FLOOR)) * sun;
 	}
 	ALBEDO = col;

@@ -1319,6 +1319,13 @@ func _on_wreck_left(pos: Vector2i, type_id: int, facing: int, owner: int) -> voi
 ## Тіло береться з показаного стану за (unit_id, seq): об'єкт події на повторі — живий стан перегону, і
 ## його біти показу вже кінця проміжку.
 func _on_figures_fell(body: Casualties.Body) -> void:
+	# Фігури, що перекидаються, сповзають туди, де ляже тіло.
+	var view: UnitView = _unit_views.get(body.unit_id)
+	if view != null and is_instance_valid(view):
+		var targets: Dictionary = {}
+		for slot in range(body.first, body.first + body.count):
+			targets[slot] = WreckLayer.body_transform(body, slot, _state().board)
+		view.aim_tips(targets)
 	# Тіло лягає, коли фігура вже перекинулась (UnitView._tip_over).
 	get_tree().create_timer(UnitView.FALL_TIP_SEC).timeout.connect(_land_body.bind(body.unit_id, body.seq, _fall_run))
 	# Ніхто не лишився стояти — відділення знищене: стримана пляма (на нерозвіданому її ховає маска).
@@ -1559,10 +1566,10 @@ func _on_secondary_broke(origin: Vector3) -> void:
 		_crush_marks.append(origin)
 
 
-func _on_topple_landed(a: Vector3, b: Vector3, debris: int, live_wire: bool, is_pole: bool) -> void:
+func _on_topple_landed(a: Vector3, b: Vector3, debris: int, live_wire: bool, is_pole: bool, cell: Vector2i) -> void:
 	# Падіння бачимо лише на розвіданому (_on_cell_entered), тож слід на мокрій землі — теж лише там.
 	if _board_view.wet and _scars != null:
-		_scars.stamp_scuff(a, b)
+		_scars.stamp_scuff(a, b, cell)
 	if is_pole:
 		BattleFx.spawn_topple_land(_units, _units_point(a), _units_point(b), debris as BattleFx.Debris, live_wire, true)
 		return

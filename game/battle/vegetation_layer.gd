@@ -804,6 +804,7 @@ func set_crushed(cells: Array[Vector2i]) -> void:
 ## Клітинки юнітів: рослина, чия крона над такою клітинкою або між нею й камерою (ті самі
 ## сусіди, що й у PropLayer.REVEAL_OFFSETS), стає напівпрозорою.
 func set_reveal_cells(cells: Array[Vector2i]) -> void:
+	_reveal_units = cells.duplicate()
 	var next: Dictionary = {}
 	for c in cells:
 		for o in PropLayer.REVEAL_OFFSETS:
@@ -831,6 +832,10 @@ func warm_fade(near: Vector2i) -> Vector2i:
 		_reveal = {cell: true}
 		_refade()
 	return cell
+
+
+## Клітинки показаних юнітів (без сусідніх, якими розширено `_reveal`): довкола них прозора розчинена рослина.
+var _reveal_units: Array[Vector2i] = []
 
 
 func _covers(p: Dictionary) -> bool:
@@ -982,6 +987,8 @@ func _refade() -> void:
 			mmi.name = "%s_faded" % node if pass_i == 0 else "%s_c_faded" % node
 			mmi.multimesh = mm
 			mmi.material_override = _depth_only(depth_mat) if pass_i == 0 else depth_mat.next_pass
+			if pass_i == 1:
+				ForestLayer.set_fade_points(depth_mat.next_pass as ShaderMaterial, _reveal_units)
 			# §8: сонце кидає тінь лише на юнітів.
 			mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			add_child(mmi)

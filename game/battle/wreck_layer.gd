@@ -677,12 +677,15 @@ const BODY_JITTER: float = 0.0375
 const BODY_TURN: float = 0.8
 ## Довга вісь тіла — не ближче за 35° до погляду камери: уздовж погляду тіло скорочується в стоячу фігуру.
 const BODY_VIEW_MIN: float = 0.6109
-## На мосту тіла лежать поперек настилу (тіло 0,225 — коротше за найвужчу проїжджу частину 0,46, тож лишається між
-## поручнями), рядом через BODY_DECK_STEP: тіло з гвинтівкою обіч займає вздовж настилу до BODY_WIDTH, і між
-## сусідами лишається щонайменше 0,05 (0,4 м) — уздовж настилу тіла зливались у суцільну смугу.
-const BODY_DECK_ACROSS: float = 0.02
-const BODY_DECK_STEP: float = 0.26
-const BODY_DECK_TURN: float = 0.08
+## На мосту тіла лежать поперек настилу, кожне під своїм кутом до BODY_DECK_TURN (40°) і зі зсувом убік до
+## BODY_DECK_ACROSS (0,3 м): рівним рядом вони читались як шеренга. Тіло 0,225 під 40° із зсувом займає поперек
+## до 0,185 — у межах найвужчої проїжджої частини 0,46. Уздовж настилу кожне займає свою смугу (ширина й частка
+## довжини за кутом), між смугами — BODY_DECK_GAP (0,4 м), і весь ряд — у межах BODY_DECK_ROW свого тайла:
+## уздовж настилу тіла зливались у суцільну смугу.
+const BODY_DECK_ACROSS: float = 0.0375
+const BODY_DECK_TURN: float = deg_to_rad(40.0)
+const BODY_DECK_GAP: float = 0.05
+const BODY_DECK_ROW: float = 0.98
 ## Ширина тіла разом із гвинтівкою обіч (поперек його довгої осі) і довжина.
 const BODY_WIDTH: float = 0.19
 const BODY_LENGTH: float = 0.225
@@ -701,9 +704,17 @@ static func body_transform(b: Casualties.Body, slot: int, board: Board = null) -
 		var along_z: bool = _is_water(board, b.pos + Vector2i(1, 0)) or _is_water(board, b.pos + Vector2i(-1, 0))
 		var along := Vector3(0.0, 0.0, 1.0) if along_z else Vector3(1.0, 0.0, 0.0)
 		var across := Vector3(along.z, 0.0, along.x)
-		var at: Vector3 = centre + along * (float(slot) - 1.5) * BODY_DECK_STEP \
-			+ across * rng.randf_range(-BODY_DECK_ACROSS, BODY_DECK_ACROSS)
-		var heading: float = (PI * 0.5 if along_z else 0.0) + rng.randf_range(-BODY_DECK_TURN, BODY_DECK_TURN)
+		var turns: PackedFloat32Array = _deck_turns(b)
+		var spans := PackedFloat32Array()
+		var row: float = BODY_DECK_GAP * (turns.size() - 1)
+		for t in turns:
+			spans.append(deck_span(t))
+			row += spans[-1]
+		var pos: float = -row * 0.5 + spans[slot] * 0.5
+		for k in slot:
+			pos += spans[k] + BODY_DECK_GAP
+		var at: Vector3 = centre + along * pos + across * rng.randf_range(-BODY_DECK_ACROSS, BODY_DECK_ACROSS)
+		var heading: float = (PI * 0.5 if along_z else 0.0) + turns[slot]
 		at.y = _body_ground(b.pos, at)
 		return Transform3D(Basis(Vector3.UP, heading), at)
 	var near_water: bool = false
@@ -734,6 +745,35 @@ static func body_transform(b: Casualties.Body, slot: int, board: Board = null) -
 	var at: Vector3 = centre + turn * local
 	at.y = _body_ground(b.pos, at)
 	return Transform3D(Basis(Vector3.UP, heading), at)
+
+
+## Скільки займає вздовж настилу тіло, що лежить поперек нього під кутом `turn`.
+static func deck_span(turn: float) -> float:
+	return BODY_WIDTH * cos(turn) + BODY_LENGTH * sin(absf(turn))
+
+
+## Кути тіл на мосту до напряму поперек настилу — для всіх чотирьох місць відділення на цьому тайлі, бо місце
+## кожного залежить від сусідів (сід — юніт і тайл: записи одного відділення лягають в один ряд, а не одне на
+## одне). Чотири тіла з проміжками 0,4 м лишають на настилі ~0,4 м запасу, тож кути роздаються з нього по черзі:
+## одне-двоє лягають помітно скоса, решта — майже поперек; поворот без запасу ряд не вміщає.
+static func _deck_turns(b: Casualties.Body) -> PackedFloat32Array:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([b.unit_id, b.pos, &"deck"])
+	var turns := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
+	var spare: float = BODY_DECK_ROW - BODY_DECK_GAP * 3.0 - BODY_WIDTH * 4.0
+	var order: Array = [0, 1, 2, 3]
+	for k in range(3, 0, -1):
+		var j: int = rng.randi_range(0, k)
+		var tmp: int = order[k]
+		order[k] = order[j]
+		order[j] = tmp
+	for k: int in order:
+		var t: float = rng.randf_range(-BODY_DECK_TURN, BODY_DECK_TURN)
+		while deck_span(t) - BODY_WIDTH > spare and absf(t) > 0.001:
+			t *= 0.97
+		spare -= deck_span(t) - BODY_WIDTH
+		turns[k] = t
+	return turns
 
 
 ## Поза тіла (`UnitSilhouettes.BODY_POSES`) за тим самим сідом, що й місце: те саме тіло щоразу в тій самій позі.

@@ -2174,16 +2174,17 @@ func test_a_falling_figure_survives_the_end_of_the_batch() -> void:
 	squad.ap = 0  # без відповіді: пакет кінчається одразу після влучання
 	screen._rebuild_units_for_active_player(true)
 	var view: UnitView = screen._unit_views[squad.id]
-	var base: int = view._silhouette.get_child_count()
+	var base: int = view._silhouette.get_node("Hull").get_child_count()
 	assert_eq(service.submit(FireCommand.create(service.state.unit_at(Vector2i(2, 2)).id, squad.id)), "")
 	var t0: int = Time.get_ticks_msec()
-	while is_instance_valid(view) and view._silhouette.get_child_count() <= base and Time.get_ticks_msec() - t0 < 3000:
+	while is_instance_valid(view) and view._silhouette.get_node("Hull").get_child_count() <= base and Time.get_ticks_msec() - t0 < 3000:
 		await get_tree().process_frame
 	assert_true(is_instance_valid(view), "передумова: вигляд відділення ще є")
 	if is_instance_valid(view):
-		assert_gt(view._silhouette.get_child_count(), base, "передумова: боєць почав перекидатися")
-		await get_tree().process_frame
-		assert_true(is_instance_valid(view) and view._silhouette.get_child_count() > base, "кадр по тому — ще перекидається")
+		assert_gt(view._silhouette.get_node("Hull").get_child_count(), base, "передумова: боєць почав перекидатися")
+		await get_tree().create_timer(UnitView.FALL_TIP_SEC * 0.75).timeout
+		assert_true(is_instance_valid(view), "три чверті перекидання по тому — вигляд відділення ще є")
+		assert_true(is_instance_valid(view) and view._silhouette.get_node("Hull").get_child_count() > base, "і боєць ще перекидається")
 	UnitSilhouettes.use_models({})
 
 

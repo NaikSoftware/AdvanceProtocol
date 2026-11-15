@@ -687,3 +687,20 @@ func test_muzzle_flash_uses_the_shooters_set() -> void:
 	assert_ne(UnitSilhouettes.muzzle(5, 1), UnitSilhouettes.muzzle(5, 0), "передумова: набори різняться")
 	assert_eq((flashes[0] as Node3D).position, shooter.transform * UnitSilhouettes.muzzle(5, 1))
 	_finish_all_processed_tweens()
+
+
+## Пакет чекає перекидання бійця лише тоді, коли перед падінням було влучання в це відділення; здача теж кладе
+## тіла, але без влучання — там чекати нічого.
+func test_figures_fell_pauses_only_after_a_hit_on_that_squad() -> void:
+	player.figures_fell.connect(func(_b: Casualties.Body) -> void: pass)
+	var body := Casualties.Body.new(5, Vector2i(2, 2), 1, 0, 0, 2, 2)
+	var fell := Events.FiguresFell.new(body)
+	player._batch = [Events.DamageDealt.new(5, 50, 50), fell] as Array[Events.BattleEvent]
+	player._batch_index = 1
+	assert_true(player._dispatch(fell) is Signal, "після влучання — чекає перекидання")
+	player._batch = [fell] as Array[Events.BattleEvent]
+	player._batch_index = 0
+	assert_null(player._dispatch(fell), "здача без влучання — не чекає")
+	player._batch = [Events.DamageDealt.new(9, 50, 50), fell] as Array[Events.BattleEvent]
+	player._batch_index = 1
+	assert_null(player._dispatch(fell), "влучання в інше відділення — не чекає")

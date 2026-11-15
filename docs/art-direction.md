@@ -113,16 +113,19 @@ falls back to the box placeholder, so a model may land one type at a time.
 - **Path** `res://assets/units/<slug>.glb`, by type id: 0 `rifle_soldier`, 1 `assault_soldier`,
   2 `armoured_car`, 3 `troop_carrier`, 4 `scout_car`, 5 `medium_tank`, 6 `tank_destroyer`,
   7 `light_tank`, 8 `heavy_tank`, 9 `field_gun`, 10 `howitzer`, 11 `engineer_vehicle`.
-- **Soldiers.** A squad is four figures on a square of 1.6 m sides turned 22.5° from the squad's
-  axes, so from any of the 8 facings no two stand one behind another along the camera's view.
-  Each squad takes one of 8 fixed layouts (each slot shifted up to 0.2 m and turned up to 20°),
-  picked once per unit and facing among those that keep all four at least 0.4 m apart across the
-  view, so survivors do not jump when a figure falls and squads are not all the same diamond.
+- **Soldiers.** A squad's four slots are fixed in the world, not in the squad's frame: the camera
+  never turns, so they stand in a row across the camera's view, 0.76 m apart, zigzagging 0.36–0.48 m
+  towards and away from it, and only the figures turn to the squad's facing. No facing can then put
+  two soldiers one behind another along the view; any two stand at least 0.6 m apart across the
+  screen at all 8 facings. Each squad takes one of 8 fixed layouts (the slots shuffled between the
+  figures, each shifted up to 0.06 m across and 0.24 m along the view and turned up to 20°), picked
+  once per unit, so survivors do not jump when a figure falls and squads are not all the same row.
   `rifle_soldier` is the plain soldier; `rifle_soldier_crouch` is the same man crouched (1.42 m),
   on slots 1 and 3, so a squad does not stand in one pose; `assault_soldier` is the plain soldier
-  with the drone launch tube (1.52 × 0.19 m, sand composite with dark olive end caps, the lightest
-  kit on the figure and its mark from afar; upright on the back,
-  bottom at hip height, top 0.6 m above the helmet); the fallen are three separate meshes —
+  with the drone launch tube (1.52 × 0.19 m, faded sand composite (150, 142, 100) with dark olive
+  end caps, the lightest kit on the figure and its mark from afar; on the back, 0.1 m off to one
+  side and leaning 12°, bottom at hip height, top 0.6 m above the helmet); the fallen are three
+  separate meshes —
   `rifle_soldier_body` on his side with knees bent and an arm under the torso,
   `rifle_soldier_body_prone` face down, `rifle_soldier_body_back` on his back — each with the rifle on
   the ground beside him, and each body takes one of them by its seed. All six come out of one run
@@ -131,23 +134,31 @@ falls back to the box placeholder, so a model may land one type at a time.
   under a copy of the plain soldier's material with the shader uniform `fallen`. An assault squad carries
   as many tubes as it has drones left (0–2, public by §3.9), on its first standing slots, which
   fall last; the rest are plain figures, so at 0 drones it looks like a rifle squad, which by then
-  it is. The remaining count also shows as a small munition pictogram with one pip per drone, in
-  the HP-number row above the left end of the squad's own bar, never past that bar's left edge,
-  with the number moved right of it. It is sized with the bar in world units (0.42 tile wide;
-  each pip at least 3 × 3 px with a 2 px gap at the farthest zoom) and drawn over everything, as
-  the bar is, so a faded crown never hides it.
+  it is. The remaining count also shows as a small munition pictogram with one pip per drone,
+  centred above the squad's HP number, which keeps the shared size and place of every unit's
+  number; it never overlaps its own bar or number, nor the bars, numbers, figures or pictograms of
+  the eight neighbouring tiles. It is sized with the bar in world units (0.42 tile wide; each pip
+  at least 3 × 3 px with a 2 px gap at the farthest zoom) and drawn over everything, as the bar
+  is, so a faded crown never hides it.
 - **The fallen** are the same cloth, darker and matte: hue within 5° of the living, chroma at
-  least half of theirs, a touch of warm mud, never ash grey and never a greener second uniform;
-  faces turned sideways or down darker still, so the shading inside a body spans at least
-  10 L*; the median body no lighter than the ground under it plus 2 L*. Specular at most 0.1,
-  roughness 1.0. A faint elongated contact patch lies under each torso. A figure that falls tips
-  over about its feet in 0.2 s, and then lies where it fell. Each body lies around the tile's
+  least half of theirs (under River's overcast sky half of theirs, so a body on dark wet ploughland
+  does not read as moss), a touch of warm mud, never ash grey and never a greener second uniform.
+  Faces turned to the sky are dimmed to 0.8, and under a clear sky a weak fill lifts the shaded
+  side out of black (none under overcast, where the light is already even), so the shading inside
+  a body spans at least 10 L*; the median body no lighter than the ground under it plus 2 L*.
+  Specular at most 0.1, roughness 1.0. A faint elongated contact patch lies under each torso. A
+  figure that falls tips over about its feet in 0.2 s, sliding meanwhile to where its body lies,
+  so the body appears where the fall ended and stays there all match. Each body lies around the tile's
   centre, clear of the standing slots, 1.6–3.2 m out and up to 40° off its own slot's direction
   (one body of a destroyed squad on the edge of its scorch), with a fixed seeded shift of up to
   0.3 m and turn, its long axis at least 35° off the camera's view (along it, a body foreshortens
   into a standing shape). Next to water the ring tightens so no body reaches the water, which
-  comes to 0.3 tile from a land cell's centre; on a bridge the bodies lie in a row along the deck,
-  1.2 m apart and within 0.5 m of its axis, at deck height.
+  comes to 0.3 tile from a land cell's centre. On a bridge the bodies lie across the deck at deck
+  height, each shifted up to 0.3 m off its axis and turned off square: at least 0.4 m clear between
+  neighbours along the deck, the row within its tile and every body inside the railings (the
+  narrowest roadway is 0.46 tile). Four bodies that far apart leave about 0.56 m spare on an 8 m
+  deck, so the turns share it and one or two bodies lie up to about 20° off square, the rest nearly
+  square.
 - **Contact under soldiers.** Each standing soldier has his own contact shadow, a 0.9 m quad
   (about 0.6 m of visible core) under his feet at a fixed opacity of 0.39 under overcast and 0.65
   of that under sun, where he also casts a real shadow: the ground under him drops 5–10 L*, never
@@ -292,7 +303,10 @@ falls back to the box placeholder, so a model may land one type at a time.
   litter the picture.
 - **Whatever hides a visible unit turns semi-transparent** — crowns, roofs and walls between the
   camera and a unit the current player can see fade smoothly with alpha blending to about
-  30–40 % (crowns and garden trees 35 %), bark a little more. Only the nearest faded surface
+  30–40 % (crowns and garden trees 35 %), bark a little more. A crown or garden tree fades only
+  around the units it hides, never whole: 35 % within about 0.25 tile of a shown unit, measured
+  across the screen, back to full opacity by 0.6 tile, so the wood around a squad stays standing
+  instead of opening into a bare clearing with a crisp rim. Only the nearest faded surface
   blends, so stacked crowns do not darken one another, and the zone contours and the drone icon
   stay visible through them. A crown counts when it really hides a soldier: taken as a column
   of its own radius from a quarter of the tree's height to its top, the line of sight from some

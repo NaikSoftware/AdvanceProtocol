@@ -30,6 +30,15 @@ uniform float card_up = 1.2;
 // Нижня межа альфи над юнітом для дерев (ставить розстановка для пізньої пори, напр. 0,6): гола
 // крона юніта не ховає, а без межі дерево зникало б зовсім. Кущі й очерет (G ≥ 0,5) — без межі.
 uniform float fade_floor = 0.0;
+#if defined(VEG_FADE)
+// Розчинена крона прозора лише довкола показаних юнітів: точки — їхні клітинки на висоті середини
+// фігури (світ). Відстань — у площині екрана, перерахована в одиниці світу на глибині юніта: від
+// FADE_NEAR 35 % до FADE_FAR повна непрозорість, тож крона не зникає цілою, лишаючи голу галявину.
+uniform vec4 fade_points[32];
+uniform int fade_count = 0;
+const float FADE_NEAR = 0.25;
+const float FADE_FAR = 0.6;
+#endif
 
 varying float is_card;
 // 1 — нерухома вертикальна картка (очерет, рогіз) або картка, що лежить (повалений кущ):
@@ -141,7 +150,14 @@ void fragment() {
 	ALPHA = shadow_pass ? 1.0 : 0.0;
 #elif defined(VEG_FADE)
 	// Кора гасне швидше за листя: гілля над юнітом інакше стирчить темними рисками.
-	ALPHA = max(COLOR.a, fade_floor * (1.0 - no_floor)) * mix(0.6, 1.0, is_card);
+	float near_a = max(COLOR.a, fade_floor * (1.0 - no_floor)) * mix(0.6, 1.0, is_card);
+	vec2 frag = VERTEX.xy / max(-VERTEX.z, 0.001);
+	float d = 1e6;
+	for (int i = 0; i < fade_count; i++) {
+		vec3 q = (VIEW_MATRIX * vec4(fade_points[i].xyz, 1.0)).xyz;
+		d = min(d, length(frag - q.xy / max(-q.z, 0.001)) * -q.z);
+	}
+	ALPHA = mix(near_a, 1.0, smoothstep(FADE_NEAR, FADE_FAR, d));
 #else
 	ALPHA = t.a; ALPHA_SCISSOR_THRESHOLD = cut; ALPHA_ANTIALIASING_EDGE = a2c_edge; ALPHA_TEXTURE_COORDINATE = UV * vec2(textureSize(albedo_tex, 0));
 #endif
