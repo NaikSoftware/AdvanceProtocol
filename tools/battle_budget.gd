@@ -19,7 +19,8 @@ extends Node
 ## інтерфейс, 3D-діти екрана) і друкує, скільки кожна коштує: рядок DIAG <map> <cell> z<zoom> <група>(<вузлів>)
 ## dc=… tris=… surfs=… inst=… vis=… (vis — скільки екземплярів MultiMesh у кадрі). Базу беруть перед кожною групою.
 ## --only=<підрядок> лишає в --diag групи з таким підрядком в імені.
-## --gpu: рядок GPU <кадр> lines=… no_lines=…: медіана часу кадру на GPU з лініями під кронами й без них.
+## --gpu: рядок GPU <кадр> lines=… no_lines=…: медіана часу кадру на GPU з лініями під кронами й без них;
+## ще кадр «_nolines» без ліній під кронами.
 ## <map>@forest@x,y@zoom — танк гравця 0 проламав ліс на x,y і сусідню клітинку, піхота — у стоячому
 ## лісі поруч; камера на танку. <map>@forest@x,y@zoom@sel — те саме, піхоту вибрано (контури зон під кронами);
 ## @peek замість @sel — довгий натиск на танк (кільце дальності). З обома інтерфейс схований.
@@ -386,6 +387,7 @@ func _ready() -> void:
 				bv.forest().set_contour_edges(null)
 				bv.forest().set_contour_rings(PackedVector4Array(), PackedColorArray())
 				var off: float = await _median_gpu()
+				shots.append([name + "_nolines", get_viewport().get_texture().get_image()])
 				bv.call("_publish_contours")
 				bv.call("_publish_circles")
 				print("GPU %s lines=%.2f ms no_lines=%.2f ms" % [name, on, off])

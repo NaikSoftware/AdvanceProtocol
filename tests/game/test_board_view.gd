@@ -275,11 +275,72 @@ func _assert_drapes(mesh: ArrayMesh) -> void:
 func test_pulse_mesh_covers_the_whole_disk_on_the_ground() -> void:
 	view.build(Board.create(10, 10, Terrain.GroundState.DRY))
 	var mesh := _draw_ring().mesh as ArrayMesh
-	_assert_drapes(mesh)
 	for k in 24:
 		var dir := Vector2.from_angle(TAU * k / 24.0)
 		for r: float in [0.0, _R * 0.5, _R, _R + BoardView.RING_OUTER]:
 			assert_true(_point_covered(mesh, dir * r), "імпульс: точка %s накрита" % [dir * r])
+
+
+## Висота сітки в точці XZ (відносно центру кільця): площина трикутника, що її накриває; NAN — не накрита.
+func _mesh_height(mesh: ArrayMesh, p: Vector2) -> float:
+	var arrays: Array = mesh.surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+	for t in range(0, idx.size(), 3):
+		var a: Vector3 = verts[idx[t]]
+		var b: Vector3 = verts[idx[t + 1]]
+		var c: Vector3 = verts[idx[t + 2]]
+		var bc: Vector3 = _bary(p, Vector2(a.x, a.z), Vector2(b.x, b.z), Vector2(c.x, c.z))
+		if bc.x >= -1e-5 and bc.y >= -1e-5 and bc.z >= -1e-5:
+			return a.y * bc.x + b.y * bc.y + c.y * bc.z
+	return NAN
+
+
+func _bary(p: Vector2, a: Vector2, b: Vector2, c: Vector2) -> Vector3:
+	var d: float = (b.y - c.y) * (a.x - c.x) + (c.x - b.x) * (a.y - c.y)
+	var u: float = ((b.y - c.y) * (p.x - c.x) + (c.x - b.x) * (p.y - c.y)) / d
+	var v: float = ((c.y - a.y) * (p.x - c.x) + (a.x - c.x) * (p.y - c.y)) / d
+	return Vector3(u, v, 1.0 - u - v)
+
+
+## Хвиля м'яка, тож усередині круга сітка імпульсу рідша, а смуга межі — повна: лінія не стрибає, коли
+## круг змінює смуга. Рідша сітка не тоне в пагорбі: у кожному відліку поля висот вона не нижча за
+## ґрунт із підйомом.
+func test_pulse_disk_is_coarse_inside_and_never_sinks_into_hills() -> void:
+	var board := Board.create(12, 12, Terrain.GroundState.DRY)
+	for y in range(2, 11):
+		for x in range(2, 11):
+			board.set_kind(Vector2i(x, y), Terrain.Kind.HILL)
+	view.build(board)
+	var lo: float = INF
+	var hi: float = -INF
+	for k in 50:
+		var h: float = TerrainHeight.ground_y(3.0 + k * 0.1, 6.0)
+		lo = minf(lo, h)
+		hi = maxf(hi, h)
+	assert_gt(hi - lo, 0.05, "передумова: під кільцем рельєф")
+	view.draw_circles([{"center": Vector2i(6, 6), "radius": 3, "color": Color.WHITE}] as Array[Dictionary], BoardView.LAYER_INSPECT)
+	var mesh := _circle_nodes()[0].mesh as ArrayMesh
+	var fine: ArrayMesh = view.call("_ring_grid_mesh", Vector3(6, 0, 6), Vector2(0.0, 3.0 + BoardView.RING_OUTER))
+	var tris: int = (mesh.surface_get_arrays(0)[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3
+	var fine_tris: int = (fine.surface_get_arrays(0)[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3
+	assert_lt(tris, fine_tris * 3 / 5, "рідша сітка всередині: %d проти %d" % [tris, fine_tris])
+	for v in (mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array):
+		if Vector2(v.x, v.z).length() >= 3.0 - BoardView.RING_OUTER:
+			assert_almost_eq(v.y, maxf(TerrainHeight.ground_y(6.0 + v.x, 6.0 + v.z), TerrainHeight.WATER_LEVEL) + 0.04, 1e-4, "смуга межі — на ґрунті")
+	var s: int = TerrainHeight.SAMPLES_PER_TILE
+	var checked: int = 0
+	for kz in range(-3 * s, 3 * s + 1):
+		for kx in range(-3 * s, 3 * s + 1):
+			# Відліки поля — на x = k / s - 0.5, тож від центру тайла 6 вони зсунуті на пів кроку.
+			var p := Vector2((kx + 0.5) / s, (kz + 0.5) / s)
+			if p.length() > 3.0:
+				continue
+			var h: float = _mesh_height(mesh, p)
+			assert_false(is_nan(h), "%s накрита" % p)
+			assert_true(h >= TerrainHeight.ground_y(6.0 + p.x, 6.0 + p.y) + 0.04 - 1e-4, "%s: сітка не тоне в ґрунті" % p)
+			checked += 1
+	assert_gt(checked, 1000)
 
 
 func test_after_the_pulse_only_the_border_band_stays() -> void:

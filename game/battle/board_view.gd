@@ -449,7 +449,8 @@ func draw_circles(circles: Array[Dictionary], layer: int, animate: bool = true) 
 		var mi := MeshInstance3D.new()
 		mi.name = "Circle%d_%d" % [layer, nodes.size()]
 		# Поки біжить імпульс, сітка — увесь круг; далі лише смуга межі (_set_pulse).
-		mi.mesh = _ring_grid_mesh(centre, Vector2(0.0 if animate else r - RING_OUTER, r + RING_OUTER))
+		mi.mesh = _ring_grid_mesh(centre, Vector2(0.0, r + RING_OUTER), r - RING_OUTER) if animate \
+				else _ring_grid_mesh(centre, Vector2(r - RING_OUTER, r + RING_OUTER))
 		mi.material_override = sm
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		mi.layers = 1 << (OVERLAY_LAYER - 1)
@@ -484,33 +485,87 @@ func _set_pulse(layer: int, i: int, mi: MeshInstance3D, centre: Vector3, r: floa
 ## смугу band = [внутрішній, зовнішній радіус]. Вершини стоять рівно на відліках висот, тож і широкий
 ## круг лягає на ґрунт, а не протинає схил хордою. Над водою — на її поверхні, як лінії зон: з дна
 ## кільце просвічувало б крізь воду зсунутим. Вершини — відносно центру в XZ.
-func _ring_grid_mesh(centre: Vector3, band: Vector2) -> ArrayMesh:
-	var s: float = float(TerrainHeight.active.samples if TerrainHeight.active != null else TerrainHeight.SAMPLES_PER_TILE)
+## coarse_to > 0: клітинки 2×2 відліки, цілком ближчі за coarse_to, — одна рідша клітинка (м'яка хвиля
+## імпульсу не потребує повної густоти). Її кути підняті до найвищого з сусідніх відліків, тож площина
+## не тоне в пагорбі; смуга межі лишається повною й точною.
+func _ring_grid_mesh(centre: Vector3, band: Vector2, coarse_to: float = -1.0) -> ArrayMesh:
+	var th: TerrainHeight = TerrainHeight.active
+	var si: int = th.samples if th != null else TerrainHeight.SAMPLES_PER_TILE
+	var s: float = float(si)
 	var c := Vector2(centre.x, centre.z)
-	# Лінії відліків: x = k / s - 0.5 (поле висот починається з краю клітинки, margin цілий).
-	var k0 := Vector2i(floori((c.x - band.y + 0.5) * s), floori((c.y - band.y + 0.5) * s))
-	var k1 := Vector2i(ceili((c.x + band.y + 0.5) * s), ceili((c.y + band.y + 0.5) * s))
+	# Лінії відліків: x = k / s - 0.5 (поле висот починається з краю клітинки, margin цілий). Межі
+	# парні, щоб рідша клітинка 2×2 лягала на ті самі відліки.
+	var k0 := Vector2i(floori((c.x - band.y + 0.5) * s / 2.0) * 2, floori((c.y - band.y + 0.5) * s / 2.0) * 2)
+	var k1 := Vector2i(ceili((c.x + band.y + 0.5) * s / 2.0) * 2, ceili((c.y + band.y + 0.5) * s / 2.0) * 2)
+	# Висота вершини — прямо з відліку поля (ground_y у вузлі ґратки дає те саме), а номер вершини — з
+	# плаского масиву: круг дрона — тисячі вершин, і at() зі словником коштували десятки мс.
+	var heights: PackedFloat32Array = th.heights() if th != null else PackedFloat32Array()
+	var off: int = th.margin * si if th != null else 0
+	var cols: int = th.cols if th != null else 0
+	var rows: int = th.rows if th != null else 0
+	var nx: int = k1.x - k0.x + 1
+	var index_of := PackedInt32Array()
+	index_of.resize(nx * (k1.y - k0.y + 1))
+	index_of.fill(-1)
 	var verts := PackedVector3Array()
 	var indices := PackedInt32Array()
-	var index_of: Dictionary = {}
+	var inv: float = 1.0 / s
+	# Рідші клітинки — спершу: їхні кути підняті, і повні клітинки поруч беруть ті самі вершини.
+	var coarse := PackedByteArray()
+	coarse.resize((nx / 2) * ((k1.y - k0.y) / 2 + 1))
+	if coarse_to > 0.0:
+		for kz in range(k0.y, k1.y, 2):
+			var span: Vector2i = _row_span(kz, 2, k0.x, k1.x, c, coarse_to, s)
+			for kx in range(k0.x + (span.x - k0.x) / 2 * 2, span.y, 2):
+				var lo := Vector2(kx * inv - 0.5, kz * inv - 0.5) - c
+				var hi := lo + Vector2(2.0 * inv, 2.0 * inv)
+				if Vector2(maxf(-lo.x, hi.x), maxf(-lo.y, hi.y)).length() >= coarse_to:
+					continue
+				coarse[((kz - k0.y) / 2) * (nx / 2) + (kx - k0.x) / 2] = 1
+				var q: Array[int] = [0, 0, 0, 0]
+				for n in 4:
+					var vx: int = kx + (n & 1) * 2
+					var vz: int = kz + (n >> 1) * 2
+					var slot: int = (vz - k0.y) * nx + (vx - k0.x)
+					if index_of[slot] < 0:
+						index_of[slot] = verts.size()
+						var h: float = 0.0
+						if cols > 0:
+							h = -INF
+							for iz in range(clampi(vz + off - 1, 0, rows - 1), clampi(vz + off + 1, 0, rows - 1) + 1):
+								var row: int = iz * cols
+								for ix in range(clampi(vx + off - 1, 0, cols - 1), clampi(vx + off + 1, 0, cols - 1) + 1):
+									h = maxf(h, heights[row + ix])
+						verts.append(Vector3(vx * inv - 0.5 - c.x, maxf(h, TerrainHeight.WATER_LEVEL) + _CONTOUR_Y, vz * inv - 0.5 - c.y))
+					q[n] = index_of[slot]
+				indices.append_array([q[0], q[1], q[2], q[1], q[3], q[2]])
+	# Клітинки, що напевно всередині (рідші чи ближчі за band.x), рядок пропускає цілим відрізком.
+	var hole: float = coarse_to - 2.0 * sqrt(2.0) * inv - 1e-3 if coarse_to > 0.0 else band.x
 	for kz in range(k0.y, k1.y):
-		for kx in range(k0.x, k1.x):
-			var lo := Vector2(kx / s - 0.5, kz / s - 0.5) - c
-			var hi := lo + Vector2.ONE / s
+		var span: Vector2i = _row_span(kz, 1, k0.x, k1.x, c, band.y, s)
+		var skip: Vector2i = _row_hole(kz, c, hole, s)
+		for kx in range(span.x, span.y):
+			if kx >= skip.x and kx < skip.y:
+				continue
+			if coarse_to > 0.0 and coarse[((kz - k0.y) / 2) * (nx / 2) + (kx - k0.x) / 2] == 1:
+				continue
+			var lo := Vector2(kx * inv - 0.5, kz * inv - 0.5) - c
+			var hi := lo + Vector2(inv, inv)
 			var near := Vector2(clampf(0.0, lo.x, hi.x), clampf(0.0, lo.y, hi.y)).length()
 			var far := Vector2(maxf(-lo.x, hi.x), maxf(-lo.y, hi.y)).length()
 			if near > band.y or far < band.x:
 				continue
-			var quad: Array[int] = []
-			for corner: Vector2i in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]:
-				var key := Vector2i(kx, kz) + corner
-				if not index_of.has(key):
-					var p := Vector2(key.x / s - 0.5, key.y / s - 0.5)
-					index_of[key] = verts.size()
-					var y: float = maxf(TerrainHeight.ground_y(p.x, p.y), TerrainHeight.WATER_LEVEL) + _CONTOUR_Y
-					verts.append(Vector3(p.x - c.x, y, p.y - c.y))
-				quad.append(index_of[key])
-			indices.append_array([quad[0], quad[1], quad[2], quad[1], quad[3], quad[2]])
+			var q: Array[int] = [0, 0, 0, 0]
+			for n in 4:
+				var vx: int = kx + (n & 1)
+				var vz: int = kz + (n >> 1)
+				var slot: int = (vz - k0.y) * nx + (vx - k0.x)
+				if index_of[slot] < 0:
+					index_of[slot] = verts.size()
+					var y: float = maxf(_lattice_h(heights, cols, rows, vx + off, vz + off), TerrainHeight.WATER_LEVEL) + _CONTOUR_Y
+					verts.append(Vector3(vx * inv - 0.5 - c.x, y, vz * inv - 0.5 - c.y))
+				q[n] = index_of[slot]
+			indices.append_array([q[0], q[1], q[2], q[1], q[3], q[2]])
 	var arrays: Array = []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = verts
@@ -518,6 +573,34 @@ func _ring_grid_mesh(centre: Vector3, band: Vector2) -> ArrayMesh:
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	return mesh
+
+
+## Відрізок [від, до) номерів клітинок рядка kz (висотою step відліків), що можуть зачепити круг радіуса r.
+static func _row_span(kz: int, step: int, kx0: int, kx1: int, c: Vector2, r: float, s: float) -> Vector2i:
+	var lo: float = kz / s - 0.5 - c.y
+	var hi: float = lo + step / s
+	var minz: float = 0.0 if lo <= 0.0 and hi >= 0.0 else minf(absf(lo), absf(hi))
+	if minz > r:
+		return Vector2i(kx0, kx0)
+	var xo: float = sqrt(r * r - minz * minz)
+	return Vector2i(maxi(kx0, floori((c.x - xo + 0.5) * s) - step), mini(kx1, ceili((c.x + xo + 0.5) * s) + 1))
+
+
+## Відрізок [від, до) клітинок рядка kz, що цілком лежать у крузі радіуса r (порожній, коли таких немає).
+static func _row_hole(kz: int, c: Vector2, r: float, s: float) -> Vector2i:
+	var lo: float = kz / s - 0.5 - c.y
+	var maxz: float = maxf(absf(lo), absf(lo + 1.0 / s))
+	if r <= maxz:
+		return Vector2i.ZERO
+	var xi: float = sqrt(r * r - maxz * maxz)
+	return Vector2i(ceili((c.x - xi + 0.5) * s), floori((c.x + xi + 0.5) * s) - 1)
+
+
+## Відлік поля висот за індексами з відступом; без карти висот — 0.
+static func _lattice_h(heights: PackedFloat32Array, cols: int, rows: int, ix: int, iz: int) -> float:
+	if cols == 0:
+		return 0.0
+	return heights[clampi(iz, 0, rows - 1) * cols + clampi(ix, 0, cols - 1)]
 
 
 ## Чи біжить зараз імпульс якогось кола: тоді екран бою не обмежує кадри (BattleScreen._on_idle_timeout).

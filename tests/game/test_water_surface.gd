@@ -276,14 +276,20 @@ func test_water_is_drawn_first_of_the_transparent_and_writes_no_depth() -> void:
 
 
 ## Кільце над річкою лежить на воді, як лінії зон, а не на дні: вода глибини не пише,
-## тож кільце з дна малювалося б поверх неї, зсунуте на глибину річки.
+## тож кільце з дна малювалося б поверх неї, зсунуте на глибину річки. Межа (смуга після імпульсу) —
+## рівно на воді; рідша сітка імпульсу біля берега піднята до берега, але ніде не нижча за воду.
 func test_ring_lies_on_the_water_not_the_bed() -> void:
 	view.build(_river())
-	view.draw_circles([{"center": Vector2i(10, 7), "radius": 3, "color": Color.WHITE}] as Array[Dictionary], BoardView.LAYER_INSPECT)
-	var ring: MeshInstance3D = view.get_node("Circle%d_0" % BoardView.LAYER_INSPECT)
-	var on_water: int = 0
-	for v in ((ring.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array):
-		if TerrainHeight.ground_y(10.0 + v.x, 7.0 + v.z) < TerrainHeight.WATER_LEVEL:
-			on_water += 1
-			assert_almost_eq(v.y, TerrainHeight.WATER_LEVEL + 0.04, 1e-6, "float32 вершини")
-	assert_gt(on_water, 0, "передумова: кільце заходить на річку")
+	var circle: Array[Dictionary] = [{"center": Vector2i(10, 7), "radius": 3, "color": Color.WHITE}]
+	for animate: bool in [false, true]:
+		view.draw_circles(circle, BoardView.LAYER_INSPECT, animate)
+		var ring: MeshInstance3D = view.get_node("Circle%d_0" % BoardView.LAYER_INSPECT)
+		var on_water: int = 0
+		for v in ((ring.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array):
+			if TerrainHeight.ground_y(10.0 + v.x, 7.0 + v.z) < TerrainHeight.WATER_LEVEL:
+				on_water += 1
+				if animate:
+					assert_true(v.y >= TerrainHeight.WATER_LEVEL + 0.04 - 1e-6, "імпульс не нижче за воду")
+				else:
+					assert_almost_eq(v.y, TerrainHeight.WATER_LEVEL + 0.04, 1e-6, "float32 вершини")
+		assert_gt(on_water, 0, "передумова: кільце заходить на річку")

@@ -218,7 +218,9 @@ void fragment() {
 	}
 	// Промінь камери крізь піксель до площини лінії (земля під деревом) — точка землі, яку піксель
 	// закриває; лінія там — і тут той самий колір і ширина, неосвітлені, як стрічка на землі.
-	if (!shadow_pass && (contour_on || ring_count > 0) && (CAMERA_VISIBLE_LAYERS & uint(overlay_layers)) != 0u) {
+	// Крона, що рідшає над показаним юнітом (альфа екземпляра < 1), ліній не малює, як і розчинена:
+	// промінь крізь її пучки до землі йде через юніта, і лінія лягла б уривками перед ним.
+	if (!shadow_pass && COLOR.a > 0.999 && (contour_on || ring_count > 0) && (CAMERA_VISIBLE_LAYERS & uint(overlay_layers)) != 0u) {
 		vec3 eye = CAMERA_POSITION_WORLD;
 		float k_ray = 1.0 / max(eye.y - world_pos.y, 1e-4);
 		float gy = max(base_y, water_level);

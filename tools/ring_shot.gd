@@ -10,7 +10,7 @@ extends Node
 ## Кадри імпульсу на 0.15 / 0.35 / 0.55 / 0.75 с — справжні твіни кілець на паузі, прокручені вручну — і кінцевий.
 ## Рядок RINGDC <map> z<zoom> off=… on=… tris_off=… tris_mid=… tris_on=…: медіана 9 кадрів без кілець,
 ## посеред імпульсу (0.35 с) і після нього, в тому ж процесі. RINGMESH — час побудови сітки круга дрона
-## й смуги його межі.
+## й смуги його межі. Кадр «_nolines» — кінцевий без ліній під кронами.
 ## Кадри тримаються в пам'яті й пишуться в кінці: save_png блокує ~1 с.
 
 const WINDOW: Vector2i = Vector2i(1600, 900)
@@ -93,7 +93,7 @@ func _ready() -> void:
 			# Сама сітка круга дрона (імпульс) і смуги його межі — без огляду core/.
 			var c3: Vector3 = IsoCameraRig.cell_to_world(squad.pos)
 			var t1: int = Time.get_ticks_usec()
-			var disk: ArrayMesh = bv.call("_ring_grid_mesh", c3, Vector2(0.0, 5.0 + BoardView.RING_OUTER))
+			var disk: ArrayMesh = bv.call("_ring_grid_mesh", c3, Vector2(0.0, 5.0 + BoardView.RING_OUTER), 5.0 - BoardView.RING_OUTER)
 			var t2: int = Time.get_ticks_usec()
 			bv.call("_ring_grid_mesh", c3, Vector2(5.0 - BoardView.RING_OUTER, 5.0 + BoardView.RING_OUTER))
 			print("RINGMESH %s disk=%.1f ms (%d tris) band=%.1f ms" % [map, (t2 - t1) / 1000.0,
@@ -128,6 +128,13 @@ func _ready() -> void:
 			var on: Vector2i = await _median_frame()
 			print("RINGDC %s z%d off=%d on=%d tris_off=%d tris_mid=%d tris_on=%d" % [map, int(z), off.x, on.x, off.y, mid.y, on.y])
 			shots.append([name, get_viewport().get_texture().get_image()])
+			# Той самий кадр без ліній під кронами: що на кронах від ліній, а що — самого лісу.
+			bv.forest().set_contour_edges(null)
+			bv.forest().set_contour_rings(PackedVector4Array(), PackedColorArray())
+			for f in 3:
+				await get_tree().process_frame
+			await RenderingServer.frame_post_draw
+			shots.append([name + "_nolines", get_viewport().get_texture().get_image()])
 			controller.end_peek()
 		screen.free()
 		await get_tree().process_frame
