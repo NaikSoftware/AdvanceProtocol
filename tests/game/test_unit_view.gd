@@ -1245,7 +1245,8 @@ func test_unit_on_a_bridge_stands_level_on_the_deck() -> void:
 
 
 ## Тіла на мосту — на висоті настилу, між поручнями (найвужча проїжджа частина — 0,46) і в межах свого тайла;
-## не шеренгою: одне-два лежать уздовж настилу, одне головою в інший бік, проміжки між сусідами різні.
+## не шеренгою й не колоною посередині: одне-два лежать уздовж настилу, одне головою в інший бік, кожне
+## зсунуте вбік на 0,06–0,12 (чи впритул до поручня), одне — впритул до поручня, сусідні проміжки — вдвічі.
 func test_bodies_on_a_bridge_lie_along_the_deck_at_its_height() -> void:
 	var t := _relief()
 	TerrainHeight.active = t
@@ -1265,6 +1266,7 @@ func test_bodies_on_a_bridge_lie_along_the_deck_at_its_height() -> void:
 			var b := Casualties.Body.new(7 + facing * 3 + seq, bridge, 0, 0, facing, 0, 4)
 			b.seq = seq
 			var strips: Array = []  # [середина вздовж настилу, смуга]
+			var at_rail: int = 0
 			for slot in 4:
 				var xf: Transform3D = WreckLayer.body_transform(b, slot, _river_board)
 				var mid: float = Vector2(xf.origin.x - bridge.x, xf.origin.z - bridge.y).dot(along)
@@ -1276,6 +1278,10 @@ func test_bodies_on_a_bridge_lie_along_the_deck_at_its_height() -> void:
 				# поперек настилу: половина довжини тіла вздовж його осі й половина ширини впоперек — у межах поручнів
 				var half_across: float = 0.5 * (WreckLayer.BODY_LENGTH * off + WreckLayer.BODY_WIDTH * sqrt(maxf(1.0 - off * off, 0.0)))
 				assert_lte(across + half_across, 0.23, "тіло між поручнями (поперек %.3f)" % across)
+				var limit: float = 0.23 - WreckLayer.BODY_DECK_RAIL_GAP - half_across
+				assert_gte(across, minf(0.06, limit) - 0.0001, "тіло зсунуте з осі настилу (%.3f)" % across)
+				if across + half_across >= 0.23 - WreckLayer.BODY_DECK_RAIL_GAP - 0.0001:
+					at_rail += 1
 				# поперек настилу під кутом: уздовж нього займає ширину й частку довжини
 				var span: float = WreckLayer.BODY_WIDTH * off + WreckLayer.BODY_LENGTH * sqrt(maxf(1.0 - off * off, 0.0))
 				strips.append([mid, span])
@@ -1288,7 +1294,10 @@ func test_bodies_on_a_bridge_lie_along_the_deck_at_its_height() -> void:
 			for i in range(1, strips.size()):
 				gaps.append(strips[i][0] - strips[i - 1][0] - (strips[i][1] + strips[i - 1][1]) * 0.5)
 			assert_gte(gaps.min(), 0.02 - 0.0001, "тіла на настилі не налягають (проміжок від 0,16 м)")
-			assert_gte(gaps.max() - gaps.min(), 0.03, "проміжки різні, а не рівний крок")
+			for i in range(1, gaps.size()):
+				var ratio: float = maxf(gaps[i], gaps[i - 1]) / minf(gaps[i], gaps[i - 1])
+				assert_gte(ratio, 2.0 - 0.01, "сусідні проміжки різняться щонайменше вдвічі")
+			assert_gt(at_rail, 0, "одне тіло лежить упритул до поручня")
 	assert_gt(widest, deg_to_rad(75.0), "одне-два тіла лежать уздовж настилу")
 	assert_gt(flipped, 0, "одне тіло лежить головою в інший бік")
 
@@ -1326,7 +1335,9 @@ func test_bodies_sit_on_sloped_ground_and_stay_out_of_the_water() -> void:
 
 
 ## Тіло не лягає під ноги тим, хто ще стоїть: від прямокутника тіла до середини кожного стоячого бійця (місця
-## 0..first−1, у світі) — щонайменше BODY_SLOT_CLEAR (0,3 м землі й пів ступні), на полі й біля води.
+## 0..first−1, у світі) — щонайменше BODY_SLOT_CLEAR (0,3 м землі й пів ступні), на полі, біля води й на мосту.
+## Біля води жоден кут тіла не далі за 0,3 від середини клітинки — і тоді, коли стоячі виштовхують тіло на
+## дальші кільця.
 func test_bodies_lie_clear_of_the_standing_figures() -> void:
 	var shore := Vector2i(-1, -1)
 	var field := Vector2i(-1, -1)
@@ -1344,8 +1355,15 @@ func test_bodies_lie_clear_of_the_standing_figures() -> void:
 			if not wet and field.x < 0:
 				field = p
 	assert_ne(shore, Vector2i(-1, -1), "передумова: поле над водою")
+	var bridge := Vector2i(-1, -1)
+	for y in _river_board.height:
+		for x in _river_board.width:
+			if _river_board.kind_at(Vector2i(x, y)) == Terrain.Kind.BRIDGE:
+				bridge = Vector2i(x, y)
+	assert_ne(bridge, Vector2i(-1, -1), "передумова: на Річці є міст")
 	var worst: float = INF
-	for cell: Vector2i in [field, shore]:
+	var outer: int = 0
+	for cell: Vector2i in [field, shore, bridge]:
 		for unit_id in range(1, 25):
 			for facing in 8:
 				for first in range(1, 4):
@@ -1356,10 +1374,18 @@ func test_bodies_lie_clear_of_the_standing_figures() -> void:
 						var v: Vector3 = UnitSilhouettes._slot(layout, i)
 						standing.append(Vector3(cell.x + v.x, 0.0, cell.y + v.y))
 					for slot in range(first, 4):
-						var clear: float = WreckLayer.body_clearance(WreckLayer.body_transform(b, slot, _river_board), standing)
+						var xf: Transform3D = WreckLayer.body_transform(b, slot, _river_board)
+						var clear: float = WreckLayer.body_clearance(xf, standing)
 						worst = minf(worst, clear)
 						assert_gte(clear, WreckLayer.BODY_SLOT_CLEAR - 0.0001, "%s юніт %d напрям %d місце %d: тіло під ногами стоячого" % [cell, unit_id, facing, slot])
-	gut.p("найменший проміжок тіло–стоячий: %.3f" % worst)
+						if cell == shore:
+							var centre := Vector3(cell.x, 0.0, cell.y)
+							var reach: float = WreckLayer.corner_reach(xf, centre)
+							assert_lte(reach, 0.3 + 0.0001, "%s юніт %d напрям %d місце %d: кут тіла у воді (%.3f)" % [cell, unit_id, facing, slot, reach])
+							if Vector2(xf.origin.x - cell.x, xf.origin.z - cell.y).length() > WreckLayer.BODY_RING_WATER + 0.02:
+								outer += 1
+	assert_gt(outer, 0, "передумова: стоячі виштовхують тіла біля води на дальші кільця")
+	gut.p("найменший проміжок тіло–стоячий: %.3f, біля води на дальшому кільці: %d" % [worst, outer])
 
 
 ## Два записи на тому самому тайлі й місці (влучання, лікування, знову влучання) лягають не одне на одному.
@@ -1516,10 +1542,19 @@ func test_squad_figures_turn_mid_path_not_at_the_end() -> void:
 			checked += 1
 			assert_eq(view._built_face, south, "на південній ділянці фігури вже дивляться на південь")
 			assert_ne(hull.mesh, east_mesh, "сітку перебудовано посеред руху")
-			# фігура в світі повернута на південь (± поворот місця в розкладці)
-			var fig: Basis = hull.global_transform.basis * UnitSilhouettes.model_figure_transform(0, view._layout, deg_to_rad(UnitView._degrees_for_facing(4))).basis
-			var yaw: float = rad_to_deg(atan2(fig.z.x, fig.z.z))
-			var want: float = rad_to_deg(atan2(view.global_transform.basis.z.x, view.global_transform.basis.z.z))
-			assert_almost_eq(absf(wrapf(yaw - want, -180.0, 180.0)), 0.0, 45.0, "фігура — за напрямом руху")
+			# на вузлі — та сама сітка, що кешована для напряму на південь (сітки кешуються за напрямом)
+			var south_mesh: ArrayMesh = UnitSilhouettes.merged_mesh(0, view._standing, view._set_id(), view._drones_left, view._layout, 4)
+			assert_eq(hull.mesh, south_mesh, "фігури — з сітки напряму на південь")
 	assert_gt(checked, 0, "передумова: кадри на південній ділянці")
+	UnitSilhouettes.use_models({})
+
+
+## Після bind сітки фігур усіх 8 напрямів уже в кеші: поворот посеред руху бере готову, а не зливає нову.
+func test_bind_warms_figure_meshes_for_every_facing() -> void:
+	UnitSilhouettes.use_models({0: UnitModelFixture.soldier(), 1: UnitModelFixture.tube_soldier()})
+	view.bind(_unit(0))
+	var cached: int = UnitSilhouettes._merged_meshes.size()
+	for f in 8:
+		UnitSilhouettes.merged_mesh(0, view._standing, view._set_id(), view._drones_left, view._layout, f)
+	assert_eq(UnitSilhouettes._merged_meshes.size(), cached, "жодної нової сітки — усі 8 напрямів злиті при bind")
 	UnitSilhouettes.use_models({})

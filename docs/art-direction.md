@@ -156,13 +156,15 @@ falls back to the box placeholder, so a model may land one type at a time.
   a destroyed squad on the edge of its scorch), with a fixed seeded shift of up to 0.3 m and turn,
   its long axis at least 35° off the camera's view (along it, a body foreshortens into a standing
   shape). It keeps at least 0.3 m of bare ground between itself and the feet of every soldier
-  still standing on the tile: when the seeded spot is too close, the body moves round the tile
-  or further out. Next to water the ring tightens so no body reaches the water, which comes to
-  0.3 tile from a land cell's centre. On a bridge the bodies lie at deck height in a row through
-  the deck, not a parade: most lie across it within 3° of square and up to 0.3 m off its axis,
-  one or two lie along it (80–90°, up to 0.8 m off the axis, still inside the railings; the
-  narrowest roadway is 0.46 tile), one lies head the other way, and the gaps between neighbours
-  differ (0.16, 0.4 and 0.56 m), the row within its tile.
+  still standing on the tile, on a bridge too: when the seeded spot is too close, the body moves
+  round the tile or further out. Next to water no corner of a body passes 0.3 tile from the cell's
+  centre, where visible water may begin. On a bridge the bodies lie at deck height through the
+  deck, neither a parade nor a single file down its middle: most lie across it within 3° of
+  square, one or two along it (80–90°), one head the other way; each sits 0.5–1 m to one side of
+  the deck's axis and one against a railing, always inside the railings (the narrowest roadway is
+  0.46 tile); the gaps between neighbours are 0.16, 0.32 and 0.64 m in a seeded order, so next
+  gaps differ at least twofold, and the row stays within its tile. With soldiers still standing
+  on the bridge, each body moves to the nearest spot on the deck that keeps them clear.
 - **Contact under soldiers.** Each standing soldier has his own contact shadow, a 0.9 m quad
   (about 0.6 m of visible core) under his feet at a fixed opacity of 0.39 under overcast and 0.65
   of that under sun, where he also casts a real shadow: the ground under him drops 5–10 L*, never

@@ -898,8 +898,14 @@ func test_unit_screen_box_skips_a_squad_with_no_one_standing() -> void:
 	view.global_position = IsoCameraRig.cell_to_world(u.pos)
 	view._set_standing(0)
 	var box: Rect2 = UnitScreenBox.of(view, rig)
-	assert_false(box.has_point(Vector2.ZERO), "порожня сітка не тягне рамку до кута екрана")
-	assert_true(box.has_point(rig.unproject(view.get_node("HpBar").global_position)), "смуга HP лишається в рамці")
+	# порожня сітка бійців не додає до рамки нічого: та сама рамка, що й зі схованою сіткою
+	var hull := view.get_node("Silhouette/Hull") as Node3D
+	hull.visible = false
+	var want: Rect2 = UnitScreenBox.of(view, rig)
+	hull.visible = true
+	assert_almost_eq(box.position, want.position, Vector2(0.01, 0.01), "порожня сітка не розширює рамку")
+	assert_almost_eq(box.size, want.size, Vector2(0.01, 0.01), "порожня сітка не розширює рамку")
+	assert_true(box.encloses(UnitScreenBox.part_rect(view.get_node("HpBar"), rig)), "смуга HP — у рамці")
 	UnitSilhouettes.use_models({})
 
 

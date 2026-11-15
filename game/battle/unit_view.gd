@@ -226,6 +226,7 @@ func bind(unit: Unit) -> void:
 	_pose(position)
 	set_hp(unit.hp, unit.max_hp())
 	set_drones(unit.drones_left)
+	_warm_faces()
 	# Свіжий (чи перебудований) вузол не є ціллю жодного прев'ю: прев'ю живе в
 	# InputController і перебудову не переживає — лишити приціл увімкненим
 	# означало б показувати намір, якого вже немає.
@@ -699,6 +700,15 @@ func _set_standing(count: int) -> void:
 	var hull := _silhouette.get_node("Hull") as MeshInstance3D
 	hull.mesh = UnitSilhouettes.merged_mesh(_type_id, count, _set_id(), _drones_left, _layout, _face_index_of(_built_face))
 	_hold_slots()
+
+
+## Сітки фігур усіх 8 напрямів — у кеш одразу (UnitSilhouettes.merged_mesh кешує за напрямом): інакше перший
+## поворот у новий бік зливав би фігури посеред руху, саме тоді, коли кадр мусить бути рівним.
+func _warm_faces() -> void:
+	if not _has_figures():
+		return
+	for f in 8:
+		UnitSilhouettes.merged_mesh(_type_id, _standing, _set_id(), _drones_left, _layout, f)
 
 
 ## Бійці місць `from .. to - 1` перекидаються навзнак довкола ступень за FALL_TIP_SEC; тіло на землі з'являється

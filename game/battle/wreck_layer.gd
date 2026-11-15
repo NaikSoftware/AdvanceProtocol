@@ -671,9 +671,11 @@ const BODY_RING_SCORCH: float = 0.33
 ## Біля води кільце тісніше: видима вода підходить до 0,3 тайла від середини клітинки суші, і тіло (0,225
 ## завдовжки) не сміє в неї зайти — ціле тіло лишається в межах 0,3.
 const BODY_RING_WATER: float = 0.16
-## Друге кільце біля води, якщо на першому тіло лягло б під ноги стоячому: кути тіла (0,225 × 0,19) на ньому
-## ще в межах 0,3 від середини, куди видима вода не заходить.
+## Друге кільце біля води, якщо на першому тіло лягло б під ноги стоячому. Із зсувом, поворотом і половиною
+## тіла кут на ньому може сягнути 0,33, тож пошук відкидає кожне місце, де кут виходить за WATER_REACH.
 const BODY_RING_WATER_FAR: float = 0.19
+## Видима вода підходить до 0,3 тайла від середини клітинки суші: біля води жоден кут тіла не далі.
+const WATER_REACH: float = 0.3
 ## Від тіла до середини стоячого бійця — щонайменше 0,3 м вільної землі плюс пів ступні (0,025): біля води
 ## живий ступав просто на тіло.
 const BODY_SLOT_CLEAR: float = 0.0625
@@ -685,17 +687,19 @@ const BODY_VIEW_MIN: float = 0.6109
 ## На мосту тіла лежать поперек настилу, а одне-два — уздовж нього (BODY_DECK_ALONG_TURN ≈ 90°), одне головою
 ## в інший бік: рівним рядом однаково повернутих тіл міст читався як шеренга. Поперек тіло займає вздовж
 ## настилу свою ширину (0,19), уздовж — довжину (0,225), тож поворот на 90° коштує лише 0,035, а переворот
-## на 180° — нічого. Тіла поперек зсунуті вбік до BODY_DECK_ACROSS (0,3 м), уздовж — до BODY_DECK_ACROSS_ALONG
-## (0,8 м): уздовж тіло займає поперек лише 0,095 і з таким зсувом лишається між поручнями (найвужча
-## проїжджа частина 0,46). Проміжки вздовж настилу різні (BODY_DECK_GAPS), а ряд — у межах BODY_DECK_ROW тайла.
-const BODY_DECK_ACROSS: float = 0.0375
-const BODY_DECK_ACROSS_ALONG: float = 0.10
+## на 180° — нічого. Кожне тіло зсунуте вбік на BODY_DECK_SHIFT (0,5–1 м, бік за сідом), але не за поручні
+## (найвужча проїжджа частина 0,46, з запасом BODY_DECK_RAIL_GAP), а одне лежить упритул до поручня:
+## тіла посередині настилу читались однією колоною. Проміжки вздовж настилу різні, сусідні — щонайменше
+## вдвічі (BODY_DECK_GAPS), а ряд — у межах BODY_DECK_ROW тайла.
+const BODY_DECK_SHIFT: Vector2 = Vector2(0.06, 0.12)
+const BODY_DECK_HALF_ROAD: float = 0.23
+const BODY_DECK_RAIL_GAP: float = 0.005
 const BODY_DECK_ALONG_TURN: float = PI * 0.5
 ## Розкид кута «уздовж»: одне таке тіло — 80–90°, двоє — майже рівно 90°, бо двоє скоса ряду не вміщають.
 const BODY_DECK_ALONG_SPREAD: float = deg_to_rad(10.0)
 ## Решта тіл — до ±3° від поперек.
 const BODY_DECK_TURN: float = deg_to_rad(3.0)
-const BODY_DECK_GAPS: Array[float] = [0.02, 0.05, 0.07]
+const BODY_DECK_GAPS: Array[float] = [0.02, 0.04, 0.08]
 const BODY_DECK_ROW: float = 0.98
 ## Ширина тіла разом із гвинтівкою обіч (поперек його довгої осі) і довжина.
 const BODY_WIDTH: float = 0.19
@@ -710,28 +714,17 @@ static func body_transform(b: Casualties.Body, slot: int, board: Board = null) -
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash([b.unit_id, b.pos, b.seq, b.first, slot])
 	var centre: Vector3 = IsoCameraRig.cell_to_world(b.pos)
+	# Стоячі на мить загибелі (місця 0..first−1, у світі — UnitSilhouettes._slot): тіло не лягає їм під ноги —
+	# ні на полі, ні на мосту.
+	var standing: Array[Vector3] = []
+	var layout: int = UnitSilhouettes.pick_layout(b.unit_id)
+	for i in b.first:
+		var v: Vector3 = UnitSilhouettes._slot(layout, i)
+		standing.append(centre + Vector3(v.x, 0.0, v.y))
 	if board != null and board.kind_at(b.pos) == Terrain.Kind.BRIDGE:
 		# Міст іде між двома берегами: уздовж нього — та вісь, з боків якої нема води.
 		var along_z: bool = _is_water(board, b.pos + Vector2i(1, 0)) or _is_water(board, b.pos + Vector2i(-1, 0))
-		var along := Vector3(0.0, 0.0, 1.0) if along_z else Vector3(1.0, 0.0, 0.0)
-		var across := Vector3(along.z, 0.0, along.x)
-		var deck: Dictionary = _deck_layout(b)
-		var turns: PackedFloat32Array = deck["turns"]
-		var gaps: Array = deck["gaps"]
-		var spans := PackedFloat32Array()
-		var row: float = 0.0
-		for k in turns.size():
-			spans.append(deck_span(turns[k]))
-			row += spans[k] + (float(gaps[k]) if k < gaps.size() else 0.0)
-		var pos: float = -row * 0.5 + spans[slot] * 0.5
-		for k in slot:
-			pos += spans[k] + float(gaps[k])
-		var reach: float = BODY_DECK_ACROSS_ALONG if absf(turns[slot]) > PI * 0.25 else BODY_DECK_ACROSS
-		var at: Vector3 = centre + along * pos + across * rng.randf_range(-reach, reach)
-		var flip: float = PI if slot == int(deck["flip"]) else 0.0
-		var heading: float = (PI * 0.5 if along_z else 0.0) + turns[slot] + flip
-		at.y = _body_ground(b.pos, at)
-		return Transform3D(Basis(Vector3.UP, heading), at)
+		return _deck_body(b, slot, along_z, standing)
 	var near_water: bool = false
 	if board != null:
 		for dy in range(-1, 2):
@@ -748,33 +741,55 @@ static func body_transform(b: Casualties.Body, slot: int, board: Board = null) -
 		ring = BODY_RING_SCORCH
 	var s: Vector3 = UnitSilhouettes.figure_transform(slot, true).origin
 	var ang: float = atan2(s.z, s.x) + r_ang
-	# Стоячі на мить загибелі (місця 0..first−1, у світі — UnitSilhouettes._slot): тіло не лягає їм під ноги.
-	# Якщо сідове місце надто близько, перебираємо кут довкола тайла й кільце — перше вільне, інакше найвільніше.
-	var standing: Array[Vector3] = []
-	var layout: int = UnitSilhouettes.pick_layout(b.unit_id)
-	for i in b.first:
-		var v: Vector3 = UnitSilhouettes._slot(layout, i)
-		standing.append(centre + Vector3(v.x, 0.0, v.y))
+	# Якщо сідове місце надто близько до стоячих, перебираємо кут довкола тайла й кільце — перше вільне, інакше
+	# найвільніше. Біля води місце, де кут тіла виходить за WATER_REACH від середини, не годиться зовсім.
 	var rings: Array[float] = [ring]
 	if near_water:
-		rings.append_array([(BODY_RING_WATER + BODY_RING_WATER_FAR) * 0.5, BODY_RING_WATER_FAR])
+		# далі й ближче за перше кільце, якщо стоячі займають його: кути відсіює WATER_REACH
+		rings.append_array([(BODY_RING_WATER + BODY_RING_WATER_FAR) * 0.5, BODY_RING_WATER_FAR, 0.205, 0.13, 0.10])
 	else:
 		rings.append_array([0.3, BODY_RING_MAX])
+	# (поворот, зсув): сідові, тоді уздовж кільця; біля води — ще й скоса й без сідового зсуву
+	var tries: Array = [[r_turn, jit], [0.0, jit]]
+	if near_water:
+		for t: float in [r_turn, 0.0, 0.4, -0.4, 0.8, -0.8, 1.2, -1.2, PI * 0.5]:
+			tries.append([t, jit])
+			tries.append([t, Vector3.ZERO])
 	var best := Transform3D()
 	var best_clear: float = -INF
+	var driest := Transform3D()
+	var driest_reach: float = INF
 	for step in 49:
 		var a_try: float = ang + float((step + 1) / 2) * (1.0 if step % 2 == 1 else -1.0) * PI / 24.0
 		for r_try: float in rings:
-			# сідовий поворот тіла, а якщо з ним не вміщається — уздовж кільця
-			for t_try: float in [r_turn, 0.0]:
-				var xf: Transform3D = _field_body(b, centre, a_try, r_try, jit, near_water, t_try)
+			for tj: Array in tries:
+				var xf: Transform3D = _field_body(b, centre, a_try, r_try, tj[1], near_water, tj[0])
+				if near_water:
+					var reach: float = corner_reach(xf, centre)
+					if reach < driest_reach:
+						driest_reach = reach
+						driest = xf
+					if reach > WATER_REACH:
+						continue
 				var clear: float = body_clearance(xf, standing)
 				if clear > best_clear:
 					best_clear = clear
 					best = xf
 				if clear >= BODY_SLOT_CLEAR:
 					return xf
-	return best
+	# біля води жодне місце не тримало кути на суші — найсухіше (на практиці перше кільце завжди вміщається)
+	return best if best_clear > -INF else driest
+
+
+## Найдальший від середини тайла кут тіла (прямокутник BODY_LENGTH × BODY_WIDTH) у площині землі.
+static func corner_reach(xf: Transform3D, centre: Vector3) -> float:
+	var long := Vector3(xf.basis.z.x, 0.0, xf.basis.z.z).normalized() * BODY_LENGTH * 0.5
+	var wide := Vector3(xf.basis.x.x, 0.0, xf.basis.x.z).normalized() * BODY_WIDTH * 0.5
+	var far: float = 0.0
+	for c: Vector3 in [long + wide, long - wide, -long + wide, -long - wide]:
+		var q: Vector3 = xf.origin + c - centre
+		far = maxf(far, Vector2(q.x, q.z).length())
+	return far
 
 
 ## Тіло на полі за кутом `ang` (у системі відділення) і кільцем `ring` довкола середини тайла.
@@ -810,6 +825,103 @@ static func body_clearance(xf: Transform3D, points: Array[Vector3]) -> float:
 	return best
 
 
+## Розклад записів на мосту, де ще хтось стоїть: [юніт, тайл, запис, перше місце, вісь] -> {місце: Transform3D}.
+## Місце кожного тіла залежить від попередніх у записі, тож рахується раз на запис, а не на кожне тіло.
+static var _deck_cache: Dictionary = {}
+
+
+## Тіло на мосту. Без стоячих — сідовий ряд (_deck_pref). Якщо хтось ще стоїть, тіла цього запису (місця first..3)
+## лягають по черзі кожне на найближче до свого сідового місце настилу (сітка 0,02), де до стоячих щонайменше
+## BODY_SLOT_CLEAR, до вже покладених тіл — 0,02 (0,16 м), а все тіло — між поручнями й у межах тайла; стоячі
+## займають середину настилу до ±0,15, тож одне сідове зміщення вбік їх не обходило.
+static func _deck_body(b: Casualties.Body, slot: int, along_z: bool, standing: Array[Vector3]) -> Transform3D:
+	var centre: Vector3 = IsoCameraRig.cell_to_world(b.pos)
+	var along := Vector3(0.0, 0.0, 1.0) if along_z else Vector3(1.0, 0.0, 0.0)
+	var across := Vector3(along.z, 0.0, along.x)
+	var deck: Dictionary = _deck_layout(b)
+	if standing.is_empty():
+		var p: Dictionary = _deck_pref(b, slot, deck, along_z)
+		return _deck_xf(b, centre, along, across, p["a"], p["c"], p["heading"])
+	var key: Array = [b.unit_id, b.pos, b.seq, b.first, along_z]
+	if not _deck_cache.has(key):
+		var placed: Dictionary = {}
+		var rects: Array = []  # [a, c, пів уздовж, пів поперек]
+		for k in range(b.first, 4):
+			var p: Dictionary = _deck_pref(b, k, deck, along_z)
+			var ha: float = deck_span(p["turn"]) * 0.5
+			var hc: float = deck_half_across(p["turn"])
+			var limit: float = BODY_DECK_HALF_ROAD - BODY_DECK_RAIL_GAP - hc
+			var best_a: float = p["a"]
+			var best_c: float = p["c"]
+			var best_cost: float = INF
+			var fallback_clear: float = -INF
+			for ia in range(-25, 26):
+				var a_try: float = float(ia) * 0.02
+				if absf(a_try) + ha > 0.5:
+					continue
+				var steps: int = int(limit / 0.02)
+				for ic in range(-steps - 1, steps + 2):
+					var c_try: float = clampf(float(ic) * 0.02, -limit, limit)
+					var free: bool = true
+					for r: Array in rects:
+						if absf(a_try - float(r[0])) < ha + float(r[2]) + 0.02 and absf(c_try - float(r[1])) < hc + float(r[3]) + 0.02:
+							free = false
+							break
+					if not free:
+						continue
+					var clear: float = body_clearance(_deck_xf(b, centre, along, across, a_try, c_try, p["heading"]), standing)
+					var cost: float = Vector2(a_try - float(p["a"]), c_try - float(p["c"])).length_squared()
+					if clear >= BODY_SLOT_CLEAR and cost < best_cost:
+						best_cost = cost
+						best_a = a_try
+						best_c = c_try
+					elif best_cost == INF and clear > fallback_clear:
+						fallback_clear = clear
+						best_a = a_try
+						best_c = c_try
+			rects.append([best_a, best_c, ha, hc])
+			placed[k] = _deck_xf(b, centre, along, across, best_a, best_c, p["heading"])
+		_deck_cache[key] = placed
+	return _deck_cache[key][slot]
+
+
+## Сідове місце тіла `slot` на мосту: `a` — уздовж настилу від середини тайла, `c` — убік, `turn` — кут до
+## поперек, `heading` — світовий курс. Ряд — за _deck_layout; убік — BODY_DECK_SHIFT у межах поручнів, а
+## місце `rail` — упритул до поручня.
+static func _deck_pref(b: Casualties.Body, slot: int, deck: Dictionary, along_z: bool) -> Dictionary:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([b.unit_id, b.pos, b.seq, b.first, slot])
+	var turns: PackedFloat32Array = deck["turns"]
+	var gaps: Array = deck["gaps"]
+	var spans := PackedFloat32Array()
+	var row: float = 0.0
+	for k in turns.size():
+		spans.append(deck_span(turns[k]))
+		row += spans[k] + (float(gaps[k]) if k < gaps.size() else 0.0)
+	var pos: float = -row * 0.5 + spans[slot] * 0.5
+	for k in slot:
+		pos += spans[k] + float(gaps[k])
+	var flip: float = PI if slot == int(deck["flip"]) else 0.0
+	var limit: float = BODY_DECK_HALF_ROAD - BODY_DECK_RAIL_GAP - deck_half_across(turns[slot])
+	var side: float = 1.0 if rng.randf() < 0.5 else -1.0
+	var shift: float = side * minf(rng.randf_range(BODY_DECK_SHIFT.x, BODY_DECK_SHIFT.y), limit)
+	if slot == int(deck["rail"]):
+		shift = side * limit
+	return {"a": pos, "c": shift, "turn": turns[slot], "heading": (PI * 0.5 if along_z else 0.0) + turns[slot] + flip}
+
+
+static func _deck_xf(b: Casualties.Body, centre: Vector3, along: Vector3, across: Vector3, a: float, c: float,
+		heading: float) -> Transform3D:
+	var at: Vector3 = centre + along * a + across * c
+	at.y = _body_ground(b.pos, at)
+	return Transform3D(Basis(Vector3.UP, heading), at)
+
+
+## Скільки займає поперек настилу (від своєї середини в один бік) тіло під кутом `turn` до поперек.
+static func deck_half_across(turn: float) -> float:
+	return 0.5 * (BODY_LENGTH * absf(cos(turn)) + BODY_WIDTH * absf(sin(turn)))
+
+
 ## Скільки займає вздовж настилу тіло, що лежить поперек нього під кутом `turn`.
 static func deck_span(turn: float) -> float:
 	return BODY_WIDTH * cos(turn) + BODY_LENGTH * sin(absf(turn))
@@ -817,7 +929,8 @@ static func deck_span(turn: float) -> float:
 
 ## Розклад тіл на мосту для всіх чотирьох місць відділення на цьому тайлі (місце кожного залежить від сусідів;
 ## сід — юніт і тайл, тож записи одного відділення лягають в один ряд, а не одне на одне): кути до напряму
-## поперек настилу (`turns`), проміжки між сусідами (`gaps`) і місце, що лежить головою в інший бік (`flip`).
+## поперек настилу (`turns`), проміжки між сусідами (`gaps`), місце, що лежить головою в інший бік (`flip`),
+## і те, що лежить упритул до поручня (`rail`).
 static func _deck_layout(b: Casualties.Body) -> Dictionary:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash([b.unit_id, b.pos, &"deck"])
@@ -855,7 +968,7 @@ static func _deck_layout(b: Casualties.Body) -> Dictionary:
 				turns[k] = signf(turns[k]) * lerpf(absf(turns[k]), BODY_DECK_ALONG_TURN, 0.5)
 			else:
 				turns[k] *= 0.5
-	return {"turns": turns, "gaps": gaps, "flip": order[3]}
+	return {"turns": turns, "gaps": gaps, "flip": order[3], "rail": order[2]}
 
 
 ## Поза тіла (`UnitSilhouettes.BODY_POSES`) за тим самим сідом, що й місце: те саме тіло щоразу в тій самій позі.

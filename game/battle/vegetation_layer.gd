@@ -804,14 +804,16 @@ func set_crushed(cells: Array[Vector2i]) -> void:
 ## Клітинки юнітів: рослина, чия крона над такою клітинкою або між нею й камерою (ті самі
 ## сусіди, що й у PropLayer.REVEAL_OFFSETS), стає напівпрозорою.
 func set_reveal_cells(cells: Array[Vector2i]) -> void:
+	var units_changed: bool = cells != _reveal_units
 	_reveal_units = cells.duplicate()
 	var next: Dictionary = {}
 	for c in cells:
 		for o in PropLayer.REVEAL_OFFSETS:
 			next[c + o] = true
 	if next == _reveal:
-		# ті самі рослини розчинені, але юніти могли переставитись усередині тих самих сусідств
-		_update_fade_points()
+		# ті самі рослини розчинені; точки — лише якщо юніти переставились усередині тих самих сусідств
+		if units_changed:
+			_update_fade_points()
 		return
 	_reveal = next
 	_refade()

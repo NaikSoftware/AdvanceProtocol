@@ -33,8 +33,10 @@ const float TREAD_STRIP = 0.0625;
 // (FALLEN_FILL) підіймає тіньовий бік: без нього затінена половина тіла сідала в чорне.
 // Під похмурим небом (River) світло рівне, а мокра рілля темна й сіра: тіло з тими самими множниками
 // читалось сірою грудкою (насиченість ~4, тон зсунутий у зелень, перепад усередині тіла 7 L*). Там свої
-// значення (`_OVERCAST`, змішуються за sky_clear): темніє менше, тепліший хакі, верх не приглушений, а
-// грані, звернені вбік і вниз, темнішають (FALLEN_SIDE_OVERCAST) — перепад тримають складки, не підсвітка.
+// значення (`_OVERCAST`, змішуються за sky_clear): насиченість 0,7 замість половинної, тепліший хакі
+// (FALLEN_MUD_OVERCAST), а грані до неба не приглушені, а підняті (FALLEN_TOP_OVERCAST 1,15) — перепад
+// усередині тіла тримають вони. Множник потемніння трохи нижчий за сонячний (0,22), щоб із піднятим верхом
+// середина тіла не світлішала за ріллю.
 const float FALLEN_DARK = 0.25;
 const float FALLEN_DARK_OVERCAST = 0.22;
 const float FALLEN_SAT = 1.0;
@@ -43,7 +45,6 @@ const vec3 FALLEN_MUD = vec3(1.03, 1.0, 0.96);
 const vec3 FALLEN_MUD_OVERCAST = vec3(1.07, 1.0, 0.88);
 const float FALLEN_TOP = 0.8;
 const float FALLEN_TOP_OVERCAST = 1.15;
-const float FALLEN_SIDE_OVERCAST = 1.0;
 const float FALLEN_FILL = 0.45;
 // Найтемніше на тілі (гвинтівка) — темно-сіре, не чорна діра: власне світло пропорційне кольору її не підіймає.
 const float FALLEN_FLOOR = 0.004;
@@ -85,8 +86,7 @@ void fragment() {
 		vec3 mud = mix(FALLEN_MUD_OVERCAST, FALLEN_MUD, sun);
 		float dark = mix(FALLEN_DARK_OVERCAST, FALLEN_DARK, sun);
 		float top = mix(FALLEN_TOP_OVERCAST, FALLEN_TOP, sun);
-		float side = mix(mix(FALLEN_SIDE_OVERCAST, 1.0, sky), 1.0, sun);
-		col = max(mix(vec3(y), col, sat), vec3(0.0)) * mud * dark * mix(1.0, top, sky) * side;
+		col = max(mix(vec3(y), col, sat), vec3(0.0)) * mud * dark * mix(1.0, top, sky);
 		// Лише під ясним небом: там сонце лишає тіньовий бік у чорному. Під похмурим (River) світло й так
 		// рівне, а ґрунт темний — підсвічене тіло читалось би світлішим за ріллю й зсувало тон.
 		EMISSION = (col * FALLEN_FILL + vec3(FALLEN_FLOOR)) * sun;
