@@ -164,7 +164,13 @@ falls back to the box placeholder, so a model may land one type at a time.
   the deck's axis and one against a railing, always inside the railings (the narrowest roadway is
   0.46 tile); the gaps between neighbours are 0.16, 0.32 and 0.64 m in a seeded order, so next
   gaps differ at least twofold, and the row stays within its tile. With soldiers still standing
-  on the bridge, each body moves to the nearest spot on the deck that keeps them clear.
+  on the bridge, or bodies already lying on that tile, each new body moves to the nearest spot on
+  the deck that keeps clear of both, on the other side of the deck from the body before it, and
+  still not a file: at least 0.3 m of scatter off the line through them and gaps at least 20 %
+  apart. Earlier bodies never move for later ones; when the deck has no free spot left, the new
+  body takes the one it overlaps least. Anywhere, a body avoids the strip right behind a standing
+  soldier as seen from the camera, where it would read as a lump behind him; next to water that is
+  a preference, not a rule.
 - **Contact under soldiers.** Each standing soldier has his own contact shadow, a 0.9 m quad
   (about 0.6 m of visible core) under his feet at a fixed opacity of 0.39 under overcast and 0.65
   of that under sun, where he also casts a real shadow: the ground under him drops 5–10 L*, never

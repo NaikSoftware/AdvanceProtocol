@@ -1350,7 +1350,7 @@ func _on_figures_fell(body: Casualties.Body) -> void:
 	if view != null and is_instance_valid(view):
 		var targets: Dictionary = {}
 		for slot in range(body.first, body.first + body.count):
-			targets[slot] = WreckLayer.body_transform(body, slot, _state().board)
+			targets[slot] = WreckLayer.body_transform(body, slot, _state().board, WreckLayer.earlier_on_tile(_state().bodies, body))
 		view.aim_tips(targets)
 	# Тіло лягає, коли фігура вже перекинулась (UnitView._tip_over).
 	get_tree().create_timer(UnitView.FALL_TIP_SEC).timeout.connect(_land_body.bind(body.unit_id, body.seq, _fall_run))

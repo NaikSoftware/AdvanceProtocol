@@ -201,6 +201,21 @@ static func _merged_mat() -> StandardMaterial3D:
 ## Труб дрона на відділенні стільки, скільки дронів лишилось (§3.9, число публічне), і несуть їх
 ## перші стоячі місця — вони падають останніми; решта — простий боєць (`PLAIN_FIGURE`). Модель із
 ## трубою має той самий атлас, що й простий боєць, тож обидва малює її матеріал одним викликом.
+## Ключ кешу злитих сіток (merged_mesh): набір, тип, стоячі, труби, розкладка, напрям.
+static func _merged_key(type_id: int, standing: int, set_id: int, drones: int, layout: int, face: int) -> String:
+	var has_figures: bool = (spec(type_id, set_id).extras as Array).has(&"figures")
+	var up: int = _FIGURE_SLOTS.size() if standing < 0 else clampi(standing, 0, _FIGURE_SLOTS.size())
+	var model: ArrayMesh = model_mesh(type_id, set_id)
+	var plain: ArrayMesh = model_mesh(PLAIN_FIGURE, set_id) if model != null else null
+	var tubes: int = clampi(drones, 0, up) if plain != null and plain != model else 0
+	return "%d:%d:%s:%d:%d:%d:%d" % [_resolved_set(type_id, set_id), type_id, "model" if model != null else "box", up if has_figures else 0, tubes, layout, face if has_figures else 0]
+
+
+## Чи сітка вже злита (кеш merged_mesh): тоді виклик нічого не будує.
+static func merged_cached(type_id: int, standing: int, set_id: int, drones: int, layout: int, face: int) -> bool:
+	return _merged_meshes.has(_merged_key(type_id, standing, set_id, drones, layout, face))
+
+
 ## `face` — напрям відділення (0–7): сітка будується у світових осях (вузол відділення повертають назад), і в
 ## неї вписаний поворот самих фігур.
 static func merged_mesh(type_id: int, standing: int = -1, set_id: int = 0, drones: int = 0, layout: int = 0, face: int = 0) -> ArrayMesh:
@@ -211,7 +226,7 @@ static func merged_mesh(type_id: int, standing: int = -1, set_id: int = 0, drone
 		return model
 	var plain: ArrayMesh = model_mesh(PLAIN_FIGURE, set_id) if model != null else null
 	var tubes: int = clampi(drones, 0, up) if plain != null and plain != model else 0
-	var key := "%d:%d:%s:%d:%d:%d:%d" % [_resolved_set(type_id, set_id), type_id, "model" if model != null else "box", up if has_figures else 0, tubes, layout, face if has_figures else 0]
+	var key: String = _merged_key(type_id, standing, set_id, drones, layout, face)
 	if _merged_meshes.has(key):
 		return _merged_meshes[key]
 	if model != null:

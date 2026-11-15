@@ -226,7 +226,10 @@ func bind(unit: Unit) -> void:
 	_pose(position)
 	set_hp(unit.hp, unit.max_hp())
 	set_drones(unit.drones_left)
-	_warm_faces()
+	# Лише коли сітки цього складу (стоячі, труби, розкладка) ще не злиті, і кадром пізніше: перебудова
+	# виглядів іде після кожного пакета, і злиття восьми сіток просто в мить падіння бійця — зайвий ривок.
+	if _has_figures() and not UnitSilhouettes.merged_cached(_type_id, _standing, _set_id(), _drones_left, _layout, posmod(_built_face + 4, 8)):
+		_warm_faces.call_deferred()
 	# Свіжий (чи перебудований) вузол не є ціллю жодного прев'ю: прев'ю живе в
 	# InputController і перебудову не переживає — лишити приціл увімкненим
 	# означало б показувати намір, якого вже немає.
@@ -702,7 +705,7 @@ func _set_standing(count: int) -> void:
 	_hold_slots()
 
 
-## Сітки фігур усіх 8 напрямів — у кеш одразу (UnitSilhouettes.merged_mesh кешує за напрямом): інакше перший
+## Сітки фігур усіх 8 напрямів — у кеш заздалегідь (UnitSilhouettes.merged_mesh кешує за напрямом): інакше перший
 ## поворот у новий бік зливав би фігури посеред руху, саме тоді, коли кадр мусить бути рівним.
 func _warm_faces() -> void:
 	if not _has_figures():
