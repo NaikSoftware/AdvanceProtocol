@@ -308,9 +308,9 @@ anyone else. A mine on a bridge sits on the deck. All mines of one model are one
 all rings one mesh, so the worst case (own and enemy on soil and on hard ground: four models plus the
 rings) is five draw calls, however many mines there are. A found mine also fades roofs and crowns
 above it, like a unit. Tapping a visible mine shows a
-caption (“Your mine” / “Enemy mine”): a tag in the unit-tag style near the mine's tile, placed like the unit tag, with the
-name in the owner's HP colour and no silhouette or pips; a tap on an unfound mine behaves
-exactly as on empty ground.
+caption (“Your mine” / “Enemy mine”): a tag in the unit-tag style near the mine's tile, placed
+like the unit tag, with the name in the owner's HP colour and no silhouette or pips; a tap on an
+unfound mine behaves exactly as on empty ground.
 
 **Drone.** A tube-launched loitering munition at **real size: 1.2 m long, 0.1 m body diameter,
 0.7 m wingspan** (folded-out wings, tail fin, pusher propeller). It is not upscaled; it reads

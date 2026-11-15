@@ -666,8 +666,6 @@ func _on_mine_caption(owner: int, cell: Vector2i) -> void:
 	if owner < 0:
 		_hide_mine_caption()
 		return
-	if cell != _mine_cell:
-		_mine_has_offset = false
 	_mine_cell = cell
 	_mine_spot_ok = true
 	_mine_tag.show_mine(_state != null and owner == _state.active_player, owner)

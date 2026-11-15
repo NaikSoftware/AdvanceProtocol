@@ -329,7 +329,7 @@ func arm_engineer(action: int) -> void:
 	if tiles.is_empty():
 		action_refused.emit(status["reason"])
 		return
-	# Підпис знімається до _clear_pending(): скидання прев'ю перекладає HUD, а підпис уже зайвий.
+	# Підпис знімається до `_clear_pending()`: скидання прев'ю перерозкладає HUD, а підпис уже зайвий.
 	mine_caption.emit(-1, _selected_unit.pos)
 	_clear_pending()
 	_armed_action = action
