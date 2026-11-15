@@ -245,6 +245,10 @@ func test_ordinary_crowns_draw_after_the_fade_depth_on_every_renderer() -> void:
 	assert_false(gl.contains("ALPHA_SCISSOR_THRESHOLD"), "Compatibility: поріг альфи зробив би крону непрозорою")
 	assert_true(gl.contains("if (t.a < cut) { discard; }\n\tALPHA = 1.0;"), "Compatibility: та сама вирізка, прозорий прохід")
 	assert_true(gl.contains("render_mode cull_disabled, depth_draw_always, skip_vertex_transform;"), "Compatibility: прозора крона пише глибину")
+	# Злита крона — один меш на всю дошку, і за відстанню до його центру дим перед лісом сортувався б
+	# під крони за ним: у Compatibility крона малюється одразу після маски, раніше за дим і наліпки.
+	assert_eq(ForestLayer.batch_priority("mobile"), 0, "Mobile: пріоритет без змін")
+	assert_eq(ForestLayer.batch_priority("gl_compatibility"), ForestLayer.FOREST_PRIORITY + 1, "Compatibility: між маскою й димом")
 	var f := _ring_layer()
 	var depth_priority: int = (f._fade_mat.values()[0] as ShaderMaterial).render_priority
 	var drawn := _drawn(f)
@@ -253,6 +257,7 @@ func test_ordinary_crowns_draw_after_the_fade_depth_on_every_renderer() -> void:
 		var mat := (n as GeometryInstance3D).material_override as ShaderMaterial
 		assert_eq(mat.shader.code, ForestLayer.batch_code(RenderingServer.get_current_rendering_method()), "%s: шейдер свого рендерера" % n.name)
 		assert_gt(mat.render_priority, depth_priority, "%s: після маски розчинення" % n.name)
+		assert_eq(mat.render_priority, ForestLayer.batch_priority(RenderingServer.get_current_rendering_method()), "%s: пріоритет свого рендерера" % n.name)
 
 
 ## Розчинення працює і зі злитою сіткою: розчинений екземпляр гасне в таблиці даних батча (й

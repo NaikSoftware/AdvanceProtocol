@@ -701,6 +701,7 @@ func _batch(label: String, entries: Array[Dictionary], nodes: Array[Node]) -> Ar
 		mat.set_shader_parameter("albedo_tex", atlas)
 		mat.set_shader_parameter("alpha_cutoff", _atlas_cut[atlas])
 		mat.set_shader_parameter("inst_data", batch.texture)
+		mat.render_priority = batch_priority(RenderingServer.get_current_rendering_method())
 		if _ring > 0:
 			Surroundings.apply(mat, _board.size)
 		_wire(mat)
@@ -987,6 +988,15 @@ static func batch_code(renderer: String) -> String:
 					"render_mode cull_disabled, depth_draw_always, skip_vertex_transform;"],
 			["ALPHA = t.a; ALPHA_SCISSOR_THRESHOLD = cut; ALPHA_ANTIALIASING_EDGE = a2c_edge; ALPHA_TEXTURE_COORDINATE = UV * vec2(textureSize(albedo_tex, 0));",
 					"if (t.a < cut) { discard; }\n\tALPHA = 1.0;"]])
+
+
+## Пріоритет матеріалу злитих крон для рендерера `renderer`.
+static func batch_priority(renderer: String) -> int:
+	# Прозора крона Compatibility (batch_code) — один меш на всю дошку, і за відстанню до його центру
+	# дим перед лісом сортувався б раніше за крони позаду й зникав під ними. Одразу після маски
+	# розчинення крона пише глибину раніше за дим і наліпки, а ті вже перевіряють її: дим позаду
+	# крони сховано, перед нею — видно.
+	return FOREST_PRIORITY + 1 if renderer == "gl_compatibility" else 0
 
 
 ## Шейдер розчинення збирається заміною рядків forest_crown.gdshader; заміна, що не знайшла
