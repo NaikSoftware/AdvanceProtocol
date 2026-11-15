@@ -77,8 +77,8 @@ else:
     check(abs(cxz[0]) < 0.012 and abs(cxz[1]) < 0.012, "hull footprint centred on the origin")
     check(hx <= spec["hull"][0] + 0.01 and hz <= spec["hull"][2] + 0.01, "hull inside the spec box")
 if wheeled and not cfg.get("towed"):
-    # the gun sits inside the hull outline (a short barrel on a roof mount), so the muzzle is the front-most vertex at bore
-    # height beside the centreline, not the model's front-most vertex
+    # the gun sits inside the hull outline (a short barrel on a roof mount), so the muzzle is the
+    # front-most vertex at bore height beside the centreline, not the model's front-most vertex
     sel = (np.abs(pos[:, 0]) < 0.06) & (np.abs(pos[:, 1] - (spec["hull"][1] + 0.05)) < 0.02)
     tip = pos[sel][np.argmin(pos[sel, 2])]
 else:
@@ -96,9 +96,9 @@ row = lib.set_row(cfg)
 if cfg.get("out", "").startswith("set"):
     check(row is not None, "a set model has its _SET_SPECS row")
 if row:
-    # the game reads the set's row for this model: it must describe the model as built a whole-
-    # model row is the carriage or hull alone: tests/game/test_unit_sets.gd compares it with the
-    # wheels and tracks
+    # the game reads the set's row for this model: it must describe the model as built
+    # a whole-model row is the carriage or hull alone, so it is not compared with the model's
+    # extents here: tests/game/test_unit_sets.gd compares it with the wheels and tracks
     if not cfg.get("whole_model"):
         check(abs(hx - row["hull"][0]) <= 0.002 and abs(hz - row["hull"][2]) <= 0.002, f"_SET_SPECS hull {row['hull'][0]} x {row['hull'][2]} matches the model ({hx:.4f} x {hz:.4f})")
     # a raised barrel carries its measured bore height
@@ -137,7 +137,8 @@ if not wheeled:
     print(f"     track UV2 u {u.min():.4f}..{u.max():.4f}  v {v.min():.4f}..{v.max():.4f}")
     check(u.min() > -1e-4 and v.min() > -1e-4 and v.max() < 1 + 1e-4, "track UV2 v in 0..1, u from 0")
     check(abs((u.max() / lib.TREAD_PERIOD) - round(u.max() / lib.TREAD_PERIOD)) < 1e-3, "track loop is whole tread periods")
-    # bottom run (lowest track verts): u must grow towards the front (-Z) so travel moves it rearwards
+    # bottom run (lowest track verts): u must grow towards the front (-Z) so travel moves it
+    # rearwards
     low = trk & (pos[:, 1] < 0.003)
     lz, lu = pos[low, 2], uv2[low, 0]
     check(np.corrcoef(lz, lu)[0, 1] < -0.9, f"bottom run u grows towards the front (corr {np.corrcoef(lz, lu)[0, 1]:.3f})")
@@ -149,7 +150,8 @@ check(col4.shape[1] == 4, "COLOR_0 has alpha")
 if col4.shape[1] == 4:
     rate = 2.0 * col4[whl, 3]
     road_r = cfg["gear"]["road"]["r"] * cfg["k"]
-    # every wheel vertex sits on its rim; a tyre's hub face lies inside it, so only the rim is held there
+    # every wheel vertex sits on its rim; a tyre's hub face lies inside it, so only the rim is
+    # held there
     err = abs((rate * d).max() - road_r) if wheeled else np.abs(rate * d - road_r).max()
     check(err < 0.002, f"wheel spin rate x wheel radius == road wheel radius (worst {err:.4f})")
 # the game turns wheels by travel / _SPECS.wheel, so that number must be the road wheels' radius

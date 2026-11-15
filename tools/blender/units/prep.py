@@ -43,10 +43,10 @@ def verts(m):
 
 co = verts(me)
 if cfg.get("yaw"):
-    # a generated gun is seldom square to the grid: turn the whole source about a vertical axis, in the source's own frame
-    # (before rot180), by [degrees, pivot x, pivot y]; the pivot lands on the centreline: y = 0,
-    # or x = 0 for `fwd` "y".
-    # Everything else in the config is measured after this turn.
+    # a generated gun is seldom square to the grid: turn the whole source about a vertical axis,
+    # in the source's own frame (before rot180), by [degrees, pivot x, pivot y]; the pivot lands
+    # on the centreline: y = 0, or x = 0 for `fwd` "y". Everything else in the config is measured
+    # after this turn.
     a, px, py = cfg["yaw"]
     c_, s_ = math.cos(math.radians(a)), math.sin(math.radians(a))
     dx, dy = co[:, 0] - px, co[:, 1] - py
@@ -112,8 +112,9 @@ if t:
 # moved turret); `add_boxes` adds closed cuboids (a plate closing an open bay, roof kit). Both go
 # into hi, so the heightfield and the bake see them alike.
 def src_edit():
-    # `crop` [l0, l1] drops faces whose centre lies outside the range (a thin bow sheet); `drop_low`
-    # [l0, l1, lat, h] drops faces inside |lat| < lat and below h (struts hanging under the hull belly)
+    # `crop` [l0, l1] drops faces whose centre lies outside the range (a thin bow sheet);
+    # `drop_low` [l0, l1, lat, h] drops faces inside |lat| < lat and below h (struts hanging under
+    # the hull belly)
     if cfg.get("crop") or cfg.get("drop_low"):
         n = len(me.polygons)
         c = np.empty(n * 3); me.polygons.foreach_get("center", c); c = c.reshape(-1, 3)
@@ -140,7 +141,8 @@ def src_edit():
         co[m, 2] = h + zmin
         print(f"PREP flatten {m.sum()} verts in long {l0}..{l1} to h {h}")
     for l0, l1, a0, a1, h_ref, f in cfg.get("lower", []):
-        # presses what stands above `h_ref` towards it by the factor `f` inside a box (long, signed lat): a folded arm laid lower
+        # presses what stands above `h_ref` towards it by the factor `f` inside a box (long,
+        # signed lat): a folded arm laid lower
         m = (L >= l0) & (L <= l1) & (A >= a0) & (A <= a1) & (H > h_ref)
         co[m, 2] = zmin + h_ref + (H[m] - h_ref) * f
         print(f"PREP lower {m.sum()} verts above h {h_ref} by {f}")
@@ -161,9 +163,13 @@ def src_edit():
         print(f"PREP delete_boxes: {int(kill.sum())} faces dropped")
         co = verts(me)
     if cfg.get("mirror"):
-        # `mirror` {box [l0, l1, a0, a1, h0, h1], keep +-1}: the faces whose centre lies in `box` (|lateral| a0..a1,
-        # on the `keep` side of the centreline) are copied to the other side and the faces already there are
-        # dropped. A generated source seldom splays its two stabiliser legs alike; one good leg is mirrored
+        # `mirror` {box [l0, l1, a0, a1, h0, h1], keep +-1}: a generated source seldom splays its
+        # two stabiliser legs alike, so one good leg is mirrored. The faces whose centre lies in
+        # `box` (|lateral| a0..a1 on the `keep` side) are copied to the other side, and the faces
+        # already there are dropped. `keep` is the sign of the source lateral coordinate (x for
+        # `fwd` "y", y for `fwd` "x"). In the model that is -X for `fwd` "y" and +X for `fwd` "x",
+        # since the model's X is the negated source y. The copies share one welded vertex per
+        # source vertex and take the smoothing and material of their source face.
         mb = cfg["mirror"]; l0, l1, a0, a1, h0, h1 = mb["box"]; ks = mb["keep"]
         li = 1 if cfg["fwd"] == "x" else 0
         n = len(me.polygons)
@@ -175,22 +181,28 @@ def src_edit():
         drop = inb & (ks * c[:, li] <= -a0) & (ks * c[:, li] >= -a1)
         bm = bmesh.new(); bm.from_mesh(me); bm.faces.ensure_lookup_table()
         uvl = bm.loops.layers.uv.active
-        copies = []
-        for i in np.nonzero(keep)[0]:
-            f = bm.faces[i]
+        keep_faces = [bm.faces[i] for i in np.nonzero(keep)[0]]
+        drop_faces = [bm.faces[i] for i in np.nonzero(drop)[0]]
+        mirrored = {}
+        made = 0
+        for f in keep_faces:
             vs = []
             for v in f.verts:
-                q = v.co.copy(); q[li] = -q[li]
-                vs.append(bm.verts.new(q))
+                if v not in mirrored:
+                    q = v.co.copy(); q[li] = -q[li]
+                    mirrored[v] = bm.verts.new(q)
+                vs.append(mirrored[v])
             uvs = [lp[uvl].uv.copy() for lp in f.loops]
-            copies.append((vs[::-1], uvs[::-1]))
-        bmesh.ops.delete(bm, geom=[bm.faces[i] for i in np.nonzero(drop)[0]], context='FACES')
-        for vs, uvs in copies:
-            nf = bm.faces.new(vs)
-            for lp, uv in zip(nf.loops, uvs):
+            try:
+                nf = bm.faces.new(vs[::-1], f)
+            except ValueError:
+                continue          # an identical face already exists
+            for lp, uv in zip(nf.loops, uvs[::-1]):
                 lp[uvl].uv = uv
+            made += 1
+        bmesh.ops.delete(bm, geom=drop_faces, context='FACES')
         bm.to_mesh(me); bm.free(); me.update()
-        print(f"PREP mirror: {int(keep.sum())} faces copied, {int(drop.sum())} dropped")
+        print(f"PREP mirror: {made} faces copied, {len(drop_faces)} dropped")
         co = verts(me)
     if not cfg.get("add_boxes") and not cfg.get("add_cyls") and not cfg.get("add_discs"):
         return
@@ -256,8 +268,9 @@ def src_edit():
 
 
 if cfg.get("plough"):
-    # a plough wider than the hull (units.json plough [from_long, lateral factor]): what stands ahead of `from_long` is
-    # stretched across about the centreline, so it overhangs the tracks as the real blade does
+    # a plough wider than the hull (units.json plough [from_long, lateral factor]): what stands
+    # ahead of `from_long` is stretched across about the centreline, so it overhangs the tracks as
+    # the real blade does
     pl0, plk = cfg["plough"]
     co = verts(me)
     Lp = co[:, 0] if cfg["fwd"] == "x" else co[:, 1]
@@ -308,13 +321,15 @@ def face_src(obj):
 G = cfg["gear"]
 lng, lat, h, _, _ = face_src(hi)
 if G.get("kind") == "wheels":
-    # Tyres, hubs and the suspension arms they hang on go; the procedural wheels (assemble.py) replace them. A face
-    # belongs to an axle when its centre lies in the disc around the axle (`cut_r` x the source tyre radius) and outboard of
-    # `cut_lat`; the hull's own wheel arch is wider than the tyre, so it stays.
+    # Tyres, hubs and the suspension arms they hang on go; the procedural wheels (assemble.py)
+    # replace them. A face belongs to an axle when its centre lies in the disc around the axle
+    # (`cut_r` x the source tyre radius) and outboard of `cut_lat`; the hull's own wheel arch is
+    # wider than the tyre, so it stays.
     rd = G["road"]
     gear = np.zeros(len(lng), bool)
     for cl in rd["long"]:
-        # `src_r`/`src_h`: the source tyre when the procedural wheel (`r`, `h`) is drawn smaller than it
+        # `src_r`/`src_h`: the source tyre when the procedural wheel (`r`, `h`) is drawn smaller
+        # than it
         gear |= (lat >= G["cut_lat"]) & (np.hypot(lng - cl, h - rd.get("src_h", rd["h"])) <= rd.get("src_r", rd["r"]) * G.get("cut_r", 1.05))
 else:
     cut = cfg["cut"]
@@ -333,7 +348,8 @@ gun = cfg.get("gun")      # an engineer vehicle has none
 if gun:
     y0, az, sp, cp = lib.gun_axis(cfg)
     co = verts(me)
-    # s: distance along the gun axis from the breech point, v: across it in the YZ plane (an untilted axis makes these y - y0 and z - az)
+    # s: distance along the gun axis from the breech point, v: across it in the YZ plane (an
+    # untilted axis makes these y - y0 and z - az)
     s_ = (co[:, 1] - y0) * cp + (co[:, 2] - az) * sp
     v_ = (co[:, 2] - az) * cp - (co[:, 1] - y0) * sp
     sel = (s_ > 0) & (np.hypot(co[:, 0], v_) < lib.m_len(cfg, gun["clear_r"]))
@@ -415,7 +431,8 @@ b = np.where(hit, bot, -1.0)
 bot_side = np.where(hit, np.minimum(close1d(b, 0), top), np.nan)
 bot_end = np.where(hit, np.minimum(close1d(b, 1), top), np.nan)
 if cfg.get("end_floor"):
-    # the bow and tail walls end at the plate's lower edge; tow shackles and hooks below it show as teeth along the bottom
+    # the bow and tail walls end at the plate's lower edge; tow shackles and hooks below it show
+    # as teeth along the bottom
     floored = np.minimum(np.maximum(bot_end, lib.m_len(cfg, cfg["end_floor"])), top)
     if cfg.get("end_floor_rear_only"):
         # a bow that reaches the ground on purpose (a mine plough): only the tail plate is held up
@@ -423,9 +440,10 @@ if cfg.get("end_floor"):
     bot_end = np.where(hit, floored, np.nan)
 SR = cfg.get("side_reach", 0)
 if SR:
-    # a flared hull is widest above its lower sides, so the outermost column's underside is the flare's: the wall would stop
-    # there and leave the lower side open. Take the lowest underside within `side_reach` cells across, so the wall runs down to
-    # the sill (wheel arches stay: the arch ceiling is the lowest thing across them too).
+    # a flared hull is widest above its lower sides, so the outermost column's underside is the
+    # flare's: the wall would stop there and leave the lower side open. Take the lowest underside
+    # within `side_reach` cells across, so the wall runs down to the sill (wheel arches stay: the
+    # arch ceiling is the lowest thing across them too).
     pb = np.pad(np.where(hit, bot_side, np.inf), [(0, 0), (SR, SR)], constant_values=np.inf)
     low = np.min([pb[:, SR + k:SR + k + hit.shape[1]] for k in range(-SR, SR + 1)], 0)
     low = close1d(np.where(hit, low, -1.0), 0)           # the lowest-across profile is ragged where the sill steps: close it along the wall
@@ -447,7 +465,8 @@ edges = [e for e in bm.edges if e.is_boundary]
 ret = bmesh.ops.extrude_edge_only(bm, edges=edges)
 for v in ret["geom"]:
     if isinstance(v, bmesh.types.BMVert):
-        # the new vertex sits where its source was; find the cell and drop it to that column's underside
+        # the new vertex sits where its source was; find the cell and drop it to that column's
+        # underside
         jj, ii = int(round((v.co.y - ys[0]) / g)), int(round((v.co.x - xs[0]) / g))
         end = not (hit[max(jj - 1, 0), ii] and hit[min(jj + 1, hit.shape[0] - 1), ii])
         v.co.z = min((bot_end if end else bot_side)[jj, ii], v.co.z)
