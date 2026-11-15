@@ -19,6 +19,8 @@ var eliminated: Array[bool] = []
 var winner: int = NO_WINNER
 var mines: Array[Mines.Mine] = []
 var wrecks: Array[Wrecks.Wreck] = []
+## Тіла бійців (Casualties): лише для вигляду, правила їх не читають.
+var bodies: Array[Casualties.Body] = []
 ## Просіки (§3.2): Vector2i -> true, ПРАВДА про те, де танк повалив ліс. Живе тут, а не
 ## на Board, навмисно: дошку читають і вигляд, і зони в InputController, і кожен з них
 ## без жодного зусилля отримав би всезнання. Звідси правду бере лише сам хід
@@ -274,6 +276,7 @@ func begin_turn() -> Array[Events.BattleEvent]:
 func refresh_vision(player: int) -> Array[Events.BattleEvent]:
 	## §3.5: перерахунок з нуля, ніколи не переносити чужу видимість у рендерер.
 	var revealed: Array[Vector2i] = vision[player].recompute(board, alive_units(), player)
+	Casualties.reveal(self, player)
 	if revealed.is_empty():
 		return []
 	return [Events.TileRevealed.new(player, revealed)] as Array[Events.BattleEvent]

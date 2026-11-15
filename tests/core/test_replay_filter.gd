@@ -429,6 +429,42 @@ func test_three_players_unseen_shooter_on_visible_unit_has_no_shooter_appeared()
 	assert_eq(r.beats[0].focus, Vector2i(9, ROAD_Y), "камера — на цілі, не на стрільці")
 
 
+## Бійці, що впали від влучання на розвіданому глядачем, падають і на повторі; на нерозвіданому — нічого.
+## Видимість — з копії стану після команди: тіла з прогону несуть біти показу кінця проміжку.
+func test_figures_fall_in_replay_only_where_the_viewer_sees_the_tile() -> void:
+	for seen_target: bool in [true, false]:
+		journal = ReplayLog.new()
+		var s: BattleState = _state(3)
+		_anchor(s)
+		var target_x: int = 9 if seen_target else 13
+		var shooter_x: int = 13 if seen_target else 9
+		var a: Unit = s.add_unit(5, 1, Vector2i(shooter_x, ROAD_Y), 2)
+		var b: Unit = s.add_unit(0, 2, Vector2i(target_x, ROAD_Y), 6)
+		b.hp = 30  # дві фігури: будь-яке влучання (щонайменше 10) валить одну
+		# Танк глядача по діагоналі від цілі: у дальності відділення (8 ≤ 9), але тайла цілі не бачить (ромб 4 > 3).
+		var c: Unit = s.add_unit(5, 0, Vector2i(target_x - 2, ROAD_Y + 2), 0)
+		_open(s, _cols(0, 10))
+		_play(s, FireCommand.create(a.id, b.id))
+		_end(s)
+		if not seen_target:
+			# Пізніший такт того самого проміжку: ціль стріляє в танк глядача, і влучання відкриває її тайл.
+			# Об'єкт тіла з прогону вже має біт глядача; рішення — з копії стану після пострілу, де його нема.
+			assert_false(s.vision[0].is_seen(b.pos), "передумова: тайл цілі ще нерозвіданий")
+			_play(s, FireCommand.create(b.id, c.id))
+			assert_true(s.vision[0].is_seen(b.pos), "передумова: влучання відкрило тайл цілі")
+		_end(s)
+		var raw: Array[Events.BattleEvent] = []
+		for en in journal.rerun(0):
+			raw.append_array(en["events"])
+		assert_true(_has(raw, Events.FiguresFell), "передумова: прогін повалив бійця")
+		var r: ReplayFilter.Result = _build()
+		var ev: Array[Events.BattleEvent] = _all(r) if r != null else [] as Array[Events.BattleEvent]
+		# перше падіння (запис 0) — від пострілу по цілі; відповідь танка глядача пізніше валить її вже на видноті
+		var first_fall: bool = ev.any(func(e: Events.BattleEvent) -> bool:
+				return e is Events.FiguresFell and (e as Events.FiguresFell).body.unit_id == b.id and (e as Events.FiguresFell).body.seq == 0)
+		assert_eq(first_fall, seen_target, "падіння на %s тайлі" % ("розвіданому" if seen_target else "нерозвіданому"))
+
+
 func test_ap_changed_never_kept() -> void:
 	var s: BattleState = _state()
 	_anchor(s)

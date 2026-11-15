@@ -1,5 +1,15 @@
 {
   "_doc": "Per-unit build config, read by tools/blender/units/*.py. Every length is in SOURCE units (the generated GLB as imported), long axis on `fwd`, `h` = height above the source's lowest vertex; measure with measure_source.py. `ends_bottom_h` [rear, front] is the bottom edge of the rear plate and the bow (0 = no bow beyond the track), which verify_glb.py keeps every body vertex above. `type_id` picks the hull box from game/battle/unit_silhouettes.gd _SPECS, which fixes the uniform scale and the muzzle. `fwd` \"-y\" is a source whose nose points to -Y (prep.py turns it half a turn about Z). `gear.kind` \"wheels\" replaces the track loop with tyres: `road` {r, h, long[]} is the axle discs in SOURCE units, `cut_lat`/`cut_r` what prep removes around them, `wheel_lat` the procedural tyre's lateral span, `hub` and `bevel` its shape; no `cut`, `track_*`, `sprocket`, `idler` or `ends_bottom_h`.",
+  "rifle_soldier": {
+    "source": "~/.local/share/advance-protocol/unit-sources/rifle_soldier.glb",
+    "figure": {"yaw": 90, "tris": 800, "tex": 512,
+               "paint": {"uniform": [153, 147, 93], "helmet": [153, 147, 93], "kit": [118, 113, 61], "gun": [30, 31, 31], "boots": [48, 46, 40], "skin": [146, 110, 88], "top_lift": 0.7, "top_fade": 0.0, "rough": 0.95},
+               "variants": {"assault_soldier": {"tube": {"length_m": 1.52, "diameter_m": 0.19, "bottom_m": 0.88, "side_m": 0.1, "tilt_deg": 12, "colour": [150, 142, 100], "cap": [60, 60, 50]}},
+                            "rifle_soldier_crouch": {"crouch": {"hip_m": 0.95, "knee_m": 0.5, "thigh_deg": 72, "shin_deg": 125}},
+                            "rifle_soldier_body": {"body": {"knee_m": 0.5, "knee_deg": 50, "roll_deg": 75, "rifle_r_m": 0.2, "rifle_at_m": [0.45, 0.2], "rifle_yaw_deg": 10}},
+                            "rifle_soldier_body_prone": {"body": {"knee_m": 0.5, "knee_deg": 15, "roll_deg": 8, "rifle_r_m": 0.2, "rifle_at_m": [0.35, -0.3], "rifle_yaw_deg": -25}},
+                            "rifle_soldier_body_back": {"body": {"knee_m": 0.5, "knee_deg": 40, "roll_deg": 175, "rifle_r_m": 0.2, "rifle_at_m": [0.4, 0.5], "rifle_yaw_deg": 40}}}}
+  },
   "heavy_tank": {
     "source": "~/.local/share/advance-protocol/unit-sources/heavy_tank.glb",
     "type_id": 8,

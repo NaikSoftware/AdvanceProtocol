@@ -3397,7 +3397,7 @@ class FallLog:
 	func on_hit(at: Vector3, top: Vector3, debris: int, live: bool, pole: bool, span: Vector3) -> void:
 		hits.append([at, top, debris, live, pole, span])
 
-	func on_land(a: Vector3, b: Vector3, debris: int, live: bool, pole: bool) -> void:
+	func on_land(a: Vector3, b: Vector3, debris: int, live: bool, pole: bool, _cell: Vector2i) -> void:
 		lands.append([a, b, debris, live, pole])
 
 

@@ -398,8 +398,9 @@ texture and effect from real metres.
 
 Budget on a mid-range phone at 60 fps: **under ~100 draw calls and ~150k triangles on screen.**
 Bake static terrain lighting. One directional light: it casts real shadows from units on every
-map and from the board's buildings on sunny maps; units also add a contact shadow on every map,
-centred under the hull when overcast; forest shadows are baked, and under River's overcast the
+map and from the board's buildings on sunny maps; vehicles also add a hull-sized contact shadow on
+every map, centred under the hull when overcast, and each standing soldier a small soft one under
+his feet; forest shadows are baked, and under River's overcast the
 light's shadows are faint and blurred
 ([details](docs/art-direction.md#rendering-and-mobile-budget)). No SSAO, no SSR, no volumetric
 fog. **Persistent battle scars** — wrecks, the scorch under them, lingering smoke, ruts — are the

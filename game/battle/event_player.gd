@@ -23,6 +23,9 @@ signal playback_finished
 ## малювати, вигляд бере з BattleState.known_broken_map(глядача), а не з події.
 signal forest_changed
 
+## Бійці впали й лягли на тайлі (Casualties.Body). Чи бачить їх той, хто перед екраном, вирішує екран.
+signal figures_fell(body: Casualties.Body)
+
 ## Крок руху юніта тайл за тайлом (§1.4 — атмосфера читається, не
 ## пролітає повз). Той самий порядок величини, що й FACE_TURN_DURATION у
 ## UnitView.
@@ -122,6 +125,16 @@ func play(events: Array[Events.BattleEvent]) -> void:
 	playback_finished.emit()
 
 
+## Чи перекидається зараз боєць цього відділення: падіння малює хтось, і подія просто перед ним — влучання в
+## це відділення (core/ подає FiguresFell одразу за DamageDealt). Здача теж кладе тіла, але без влучання —
+## там ніхто не перекидається, і чекати нічого.
+func _tips(unit_id: int) -> bool:
+	if figures_fell.get_connections().is_empty() or _batch_index < 1:
+		return false
+	var e: Events.BattleEvent = _batch[_batch_index - 1]
+	return e is Events.DamageDealt and (e as Events.DamageDealt).unit_id == unit_id
+
+
 ## Пропуск повтору: поточний play() кінчається одразу, без playback_finished, і програвач придатний
 ## для наступного. Чекати кінця анімації не можна: екран звільняє вузол, чий твін вона чекає, а
 ## вбитий твін finished не подає.
@@ -196,6 +209,11 @@ func _dispatch(event: Events.BattleEvent) -> Variant:
 		return _handle_drone_launched(event)
 	elif event is Events.DamageDealt:
 		return _handle_damage_dealt(event)
+	elif event is Events.FiguresFell:
+		figures_fell.emit((event as Events.FiguresFell).body)
+		# Пакет чекає, доки боєць перекинеться (якщо падіння хтось малює): перебудова юнітів
+		# після пакета інакше обриває його на першому кадрі.
+		return _pause(UnitView.FALL_TIP_SEC) if _tips((event as Events.FiguresFell).body.unit_id) else null
 	elif event is Events.UnitDestroyed:
 		return _handle_unit_destroyed(event)
 	elif event is Events.WreckLeft:

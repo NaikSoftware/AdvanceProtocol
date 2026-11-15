@@ -83,6 +83,7 @@ static func step_on(state: BattleState, unit: Unit) -> Array[Events.BattleEvent]
 	var applied: int = mini(DAMAGE_BASE + Rules.roll(state.rng, DAMAGE_ROLL), unit.hp)
 	unit.hp -= applied
 	out.append(Events.DamageDealt.new(unit.id, applied, unit.hp))
+	out.append_array(Casualties.record(state, unit, unit.hp + applied))
 	if not unit.is_alive():
 		out.append(Events.UnitDestroyed.new(unit.id, unit.pos))
 		out.append_array(Wrecks.leave(state, unit))

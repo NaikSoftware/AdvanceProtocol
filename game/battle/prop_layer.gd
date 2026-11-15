@@ -624,7 +624,9 @@ signal topple_hit(at: Vector3, top: Vector3, debris: int, live_wire: bool, is_po
 ## Вал опори ліг на паркан і зламав його: початок екземпляра — ключ для правди екрана (переживає пакети й гейт).
 signal secondary_broke(origin: Vector3)
 ## Повалене вдарилося об землю й зникло: a→b — відрізок на землі, який воно накрило.
-signal topple_landed(a: Vector3, b: Vector3, debris: int, live_wire: bool, is_pole: bool)
+## `cell` — клітинка, з якої пропс повалено (в'їзд техніки): з неї видно падіння, тож слід на землі
+## показується лише глядачеві, що її розвідав.
+signal topple_landed(a: Vector3, b: Vector3, debris: int, live_wire: bool, is_pole: bool, cell: Vector2i)
 
 ## Пропси (крім мостів) кидають тінь сонця. Без неї на сонячній карті дім, тюк чи опора висять
 ## над землею; ставити до build().
@@ -1837,7 +1839,7 @@ func _land_pole(b: Dictionary) -> void:
 			_start_fall(fi, f["dir"], b["cell"])
 	var fp: Array[Vector3] = _fall_footprint(f)
 	_guy_valid = false
-	topple_landed.emit(fp[0], fp[1], b["debris"], b["live"], true)
+	topple_landed.emit(fp[0], fp[1], b["debris"], b["live"], true, b["cell"])
 
 
 ## Кінець показу: прибрати вузол уламків. cancel — передача ходу: усе повертається, як було (далі _apply).
@@ -1897,7 +1899,7 @@ func _step_burst(b: Dictionary) -> void:
 	if touched and not b["landed"] and not _is_pole_burst(b):
 		b["landed"] = true
 		var fp: Array[Vector3] = _fall_footprint(b["f"])
-		topple_landed.emit(fp[0], fp[1], b["debris"], false, false)
+		topple_landed.emit(fp[0], fp[1], b["debris"], false, false, b["cell"])
 
 
 func _is_pole_burst(b: Dictionary) -> bool:
@@ -2718,6 +2720,10 @@ func _fade_material(m: StringName, info: Dictionary, haze: bool, solid: bool) ->
 		depth.shader = _depth_shader()
 		depth.render_priority = FADE_DEPTH_PRIORITY
 		mat.render_priority = FADE_DEPTH_PRIORITY + 1
+		# Тут next_pass лишається, на відміну від крон: розчинений дім — один вузол із кількома поверхнями, і
+		# окремі вузли кольору подвоїли б вузли й виклики кожної будівлі. next_pass малюється одразу за своєю
+		# глибиною, тож два розчинені дахи, що налягають на екрані, дали б два шари, — але будівля стоїть по
+		# одній на клітинці, і над одним юнітом це рідкість, а крони в лісі налягають завжди.
 		depth.next_pass = mat
 		mat = depth
 	_fade_materials[key] = mat

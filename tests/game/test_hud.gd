@@ -10,6 +10,7 @@ const HudScene := preload("res://game/ui/hud.tscn")
 const MatchServiceScript := preload("res://game/autoload/match_service.gd")
 const RigScene := preload("res://game/camera/iso_camera_rig.tscn")
 const UnitViewScene := preload("res://game/battle/unit_view.tscn")
+const UnitModelFixture := preload("res://tests/fixtures/unit_model_fixture.gd")
 
 ## Той самий прийом, що й у tests/game/test_input_controller.gd: шпигун замість справжнього
 ## ZoneOverlay, бо той тягне за собою живий BoardView із MultiMesh.
@@ -882,6 +883,49 @@ func test_unit_screen_box_contains_the_projected_unit_and_its_hp_bar() -> void:
 		"центр юніта лежить усередині його екранного прямокутника")
 	var bar: Node3D = view.get_node("HpBar")
 	assert_true(box.has_point(rig.unproject(bar.global_position)), "смуга HP — частина прямокутника юніта")
+
+
+## Відділення без стоячих (останній упав, вигляд ще не прибрано): порожня сітка бійців не дає ні помилки
+## рушія, ні рамки, що тягнеться до кута екрана.
+func test_unit_screen_box_skips_a_squad_with_no_one_standing() -> void:
+	var state: BattleState = _state()
+	var u: Unit = state.add_unit(0, 0, Vector2i(6, 6), 0)
+	var rig: IsoCameraRig = _rig_for(Vector2i(6, 6))
+	var view: UnitView = UnitViewScene.instantiate()
+	add_child_autofree(view)
+	UnitSilhouettes.use_models({0: UnitModelFixture.soldier()})
+	view.bind(u)
+	view.global_position = IsoCameraRig.cell_to_world(u.pos)
+	view._set_standing(0)
+	var box: Rect2 = UnitScreenBox.of(view, rig)
+	# порожня сітка бійців не додає до рамки нічого: та сама рамка, що й зі схованою сіткою
+	var hull := view.get_node("Silhouette/Hull") as Node3D
+	hull.visible = false
+	var want: Rect2 = UnitScreenBox.of(view, rig)
+	hull.visible = true
+	assert_almost_eq(box.position, want.position, Vector2(0.01, 0.01), "порожня сітка не розширює рамку")
+	assert_almost_eq(box.size, want.size, Vector2(0.01, 0.01), "порожня сітка не розширює рамку")
+	assert_true(box.encloses(UnitScreenBox.part_rect(view.get_node("HpBar"), rig)), "смуга HP — у рамці")
+	UnitSilhouettes.use_models({})
+
+
+## Значок дронів піднятий над числом HP власним зсувом (`offset`): його екранний прямокутник — над
+## прямокутником числа, тож тег, що обходить значок, не лягає на його точки.
+func test_drone_icon_box_sits_above_the_hp_number() -> void:
+	var state: BattleState = _state()
+	var u: Unit = state.add_unit(1, 0, Vector2i(6, 6), 0)
+	u.drones_left = 2
+	var rig: IsoCameraRig = _rig_for(Vector2i(6, 6))
+	var view: UnitView = UnitViewScene.instantiate()
+	add_child_autofree(view)
+	view.bind(u)
+	view.global_position = IsoCameraRig.cell_to_world(u.pos)
+	var icon: Sprite3D = view.get_node("DroneIcon")
+	assert_true(icon.visible, "передумова: значок видно")
+	var label: Rect2 = UnitScreenBox.label_rect(view, rig)
+	var box: Rect2 = UnitScreenBox.part_rect(icon, rig)
+	assert_lte(box.end.y, label.position.y, "значок цілком над числом HP")
+	assert_true(UnitScreenBox.of(view, rig).encloses(box), "і входить у прямокутник юніта")
 
 
 ## Смуга HP — білборд: її екранна ширина не залежить від повороту юніта й дорівнює 48 px × 0,02

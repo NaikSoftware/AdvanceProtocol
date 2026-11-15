@@ -804,11 +804,16 @@ func set_crushed(cells: Array[Vector2i]) -> void:
 ## Клітинки юнітів: рослина, чия крона над такою клітинкою або між нею й камерою (ті самі
 ## сусіди, що й у PropLayer.REVEAL_OFFSETS), стає напівпрозорою.
 func set_reveal_cells(cells: Array[Vector2i]) -> void:
+	var units_changed: bool = cells != _reveal_units
+	_reveal_units = cells.duplicate()
 	var next: Dictionary = {}
 	for c in cells:
 		for o in PropLayer.REVEAL_OFFSETS:
 			next[c + o] = true
 	if next == _reveal:
+		# ті самі рослини розчинені; точки — лише якщо юніти переставились усередині тих самих сусідств
+		if units_changed:
+			_update_fade_points()
 		return
 	_reveal = next
 	_refade()
@@ -829,8 +834,15 @@ func warm_fade(near: Vector2i) -> Vector2i:
 			cell = c
 	if cell.x >= 0:
 		_reveal = {cell: true}
+		_reveal_units = [cell]
 		_refade()
 	return cell
+
+
+## Клітинки показаних юнітів (без сусідніх, якими розширено `_reveal`): довкола них прозора розчинена рослина.
+var _reveal_units: Array[Vector2i] = []
+## Юніти, над якими останній перерахунок розчинив рослину.
+var _fading: Dictionary = {}
 
 
 func _covers(p: Dictionary) -> bool:
@@ -838,10 +850,27 @@ func _covers(p: Dictionary) -> bool:
 		return false
 	var r: float = crown_of(p["node"]) * float(p.get("scale", 1.0))
 	var q := Vector2(p["pos"].x, p["pos"].z)
-	for c: Vector2i in _reveal:
-		if _rect_dist(Rect2(Vector2(c) - Vector2(0.5, 0.5), Vector2.ONE), q) < r:
-			return true
-	return false
+	var hit: bool = false
+	# усі юніти, чиє сусідство торкає крону, а не лише перший: точка шейдера потрібна кожному
+	for u: Vector2i in _reveal_units:
+		for o in PropLayer.REVEAL_OFFSETS:
+			if _rect_dist(Rect2(Vector2(u + o) - Vector2(0.5, 0.5), Vector2.ONE), q) < r:
+				_fading[u] = true
+				hit = true
+				break
+	return hit
+
+
+## Точки розчинення (ForestLayer.set_fade_points) — юніти, над якими справді розчинена рослина — у матеріали
+## кольору розчинених вузлів.
+func _update_fade_points() -> void:
+	_fading.clear()
+	for p: Dictionary in placements:
+		if not (p["kind"] != "reed" and _crushed.has(p["cell"])):
+			_covers(p)
+	for ch in get_children():
+		if String(ch.name).ends_with("_c_faded"):
+			ForestLayer.set_fade_points((ch as GeometryInstance3D).material_override as ShaderMaterial, _fading.keys())
 
 
 func drawn_nodes() -> Array[StringName]:
@@ -946,6 +975,7 @@ func _refade() -> void:
 	var meshes: Dictionary = _meshes_of(_season)
 	var groups: Dictionary = {}
 	var touched: Dictionary = {}
+	_fading.clear()
 	for i in placements.size():
 		var p: Dictionary = placements[i]
 		var fallen: bool = p["kind"] != "reed" and _crushed.has(p["cell"])
@@ -974,12 +1004,30 @@ func _refade() -> void:
 			var p: Dictionary = list[i]
 			mm.set_instance_transform(i, Transform3D(Basis(Vector3.UP, p["yaw"]).scaled(Vector3.ONE * float(p.get("scale", 1.0))), p["pos"]))
 			mm.set_instance_color(i, Color(1, 1, 1, FADE_ALPHA))
-		var mmi := MultiMeshInstance3D.new()
-		mmi.name = "%s_faded" % node
-		mmi.multimesh = mm
-		# §8: сонце кидає тінь лише на юнітів.
-		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		add_child(mmi)
+		# Глибина й колір — окремими вузлами, не next_pass: next_pass малюється одразу за своїм проходом, і колір
+		# ближчої рослини ліг би поверх кольору дальшої (чи розчиненої крони лісу) — шари нашаровувались би.
+		var depth_mat: ShaderMaterial = (mm.mesh.surface_get_material(0) as ShaderMaterial)
+		for pass_i in 2:
+			var mmi := MultiMeshInstance3D.new()
+			mmi.name = "%s_faded" % node if pass_i == 0 else "%s_c_faded" % node
+			mmi.multimesh = mm
+			mmi.material_override = _depth_only(depth_mat) if pass_i == 0 else depth_mat.next_pass
+			# §8: сонце кидає тінь лише на юнітів.
+			mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			add_child(mmi)
+	for ch in get_children():
+		if String(ch.name).ends_with("_c_faded"):
+			ForestLayer.set_fade_points((ch as GeometryInstance3D).material_override as ShaderMaterial, _fading.keys())
+
+
+## Прохід глибини без next_pass (колір — окремим вузлом); один на матеріал.
+static var _depth_only_cache: Dictionary = {}
+static func _depth_only(m: ShaderMaterial) -> ShaderMaterial:
+	if not _depth_only_cache.has(m):
+		var d: ShaderMaterial = m.duplicate()
+		d.next_pass = null
+		_depth_only_cache[m] = d
+	return _depth_only_cache[m]
 
 
 ## Масиви поверхонь вузла бібліотеки (0 — рослина, 1 — пляма): спільні на процес.
