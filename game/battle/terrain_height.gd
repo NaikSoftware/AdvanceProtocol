@@ -365,6 +365,11 @@ func deck_y(cell: Vector2i) -> float:
 	return _deck.get(cell, at(float(cell.x), float(cell.y)))
 
 
+## Клітинка — настил мосту: контури й позначки на ній лежать на його висоті, а не на землі в руслі.
+func is_deck(cell: Vector2i) -> bool:
+	return _deck.has(cell)
+
+
 func min_height() -> float:
 	return _min
 

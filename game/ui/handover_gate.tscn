@@ -1,54 +1,258 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://game/ui/handover_gate.gd" id="1_gate"]
+[ext_resource type="Theme" path="res://game/ui/theme/hud_theme.tres" id="2_theme"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/confirm.svg" id="3_confirm"]
+[ext_resource type="Script" path="res://game/ui/gate_strength.gd" id="4_strength"]
+
+[sub_resource type="StyleBoxFlat" id="keyline"]
+bg_color = Color(0, 0, 0, 0)
+draw_center = false
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.8902, 0.8745, 0.8275, 0.22)
 
 [node name="HandoverGate" type="Control"]
+visible = false
+layout_mode = 3
+anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 0
-visible = false
+theme = ExtResource("2_theme")
 script = ExtResource("1_gate")
 
 [node name="Panel" type="ColorRect" parent="."]
 unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 0
-color = Color(0.03, 0.03, 0.04, 1.0)
+color = Color(0.050980393, 0.0627451, 0.07450981, 1)
 
-[node name="Content" type="CenterContainer" parent="."]
+[node name="Plate" type="TextureRect" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-mouse_filter = 1
-
-[node name="Body" type="VBoxContainer" parent="Content"]
-theme_override_constants/separation = 24
-alignment = 1
 mouse_filter = 2
+expand_mode = 1
+stretch_mode = 6
 
-[node name="Caption" type="Label" parent="Content/Body"]
+[node name="Body" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_right = -24.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/separation = 0
+alignment = 1
+
+[node name="Caption" type="Label" parent="Body"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"HudGateCaption"
 horizontal_alignment = 1
 text = "handover_pass_device"
 
-[node name="PlayerRow" type="HBoxContainer" parent="Content/Body"]
-alignment = 1
-theme_override_constants/separation = 8
+[node name="Gap1" type="Control" parent="Body"]
+custom_minimum_size = Vector2(0, 16)
+layout_mode = 2
 mouse_filter = 2
 
-[node name="PlayerCaption" type="Label" parent="Content/Body/PlayerRow"]
-text = "handover_incoming_player"
+[node name="NameRow" type="Control" parent="Body"]
+custom_minimum_size = Vector2(0, 84)
+layout_mode = 2
+mouse_filter = 2
 
-[node name="PlayerValue" type="Label" parent="Content/Body/PlayerRow"]
+[node name="Horizon" type="ColorRect" parent="Body/NameRow"]
 unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 14
+anchor_top = 0.5
+anchor_right = 1.0
+anchor_bottom = 0.5
+offset_top = -0.5
+offset_bottom = 0.5
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.6471, 0.2902, 0.2275, 0.7)
 
-[node name="ConfirmButton" type="Button" parent="Content/Body"]
+[node name="NameCenter" type="CenterContainer" parent="Body/NameRow"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="NameSlide" type="Control" parent="Body/NameRow/NameCenter"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(240, 64)
+custom_minimum_size = Vector2(400, 84)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Nameplate" type="PanelContainer" parent="Body/NameRow/NameCenter/NameSlide"]
+unique_name_in_owner = true
+texture_filter = 1
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_type_variation = &"HudPlateSolid"
+
+[node name="KeylineMargin" type="MarginContainer" parent="Body/NameRow/NameCenter/NameSlide/Nameplate"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 4
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 4
+theme_override_constants/margin_bottom = 10
+
+[node name="Keyline" type="Panel" parent="Body/NameRow/NameCenter/NameSlide/Nameplate/KeylineMargin"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("keyline")
+
+[node name="PlayerValue" type="Label" parent="Body/NameRow/NameCenter/NameSlide/Nameplate"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"HudGatePlayer"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="RuleTop" type="ColorRect" parent="Body/NameRow/NameCenter/NameSlide"]
+unique_name_in_owner = true
+layout_mode = 1
+anchor_right = 1.0
+offset_bottom = 6.0
+mouse_filter = 2
+color = Color(0.6471, 0.2902, 0.2275, 1)
+
+[node name="RuleBottom" type="ColorRect" parent="Body/NameRow/NameCenter/NameSlide"]
+unique_name_in_owner = true
+layout_mode = 1
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -6.0
+mouse_filter = 2
+color = Color(0.6471, 0.2902, 0.2275, 1)
+
+[node name="Gap2" type="Control" parent="Body"]
+custom_minimum_size = Vector2(0, 20)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="InfoPlate" type="PanelContainer" parent="Body"]
+unique_name_in_owner = true
+texture_filter = 1
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
 size_flags_horizontal = 4
+mouse_filter = 2
+theme_type_variation = &"HudPlateSolid"
+
+[node name="Pad" type="MarginContainer" parent="Body/InfoPlate"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_right = 14
+
+[node name="Cells" type="HBoxContainer" parent="Body/InfoPlate/Pad"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 9
+
+[node name="TurnCell" type="HBoxContainer" parent="Body/InfoPlate/Pad/Cells"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_constants/separation = 6
+alignment = 1
+
+[node name="TurnCaption" type="Label" parent="Body/InfoPlate/Pad/Cells/TurnCell"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"HudCaption"
+vertical_alignment = 1
+text = "hud_turn"
+
+[node name="TurnValue" type="Label" parent="Body/InfoPlate/Pad/Cells/TurnCell"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"HudMenuNumber"
+vertical_alignment = 1
+text = "1"
+
+[node name="Div1" type="ColorRect" parent="Body/InfoPlate/Pad/Cells"]
+custom_minimum_size = Vector2(1, 22)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+color = Color(0.2275, 0.2510, 0.2627, 1)
+
+[node name="MapCell" type="HBoxContainer" parent="Body/InfoPlate/Pad/Cells"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_constants/separation = 6
+alignment = 1
+
+[node name="MapCaption" type="Label" parent="Body/InfoPlate/Pad/Cells/MapCell"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"HudCaption"
+vertical_alignment = 1
+text = "hud_map"
+
+[node name="MapValue" type="Label" parent="Body/InfoPlate/Pad/Cells/MapCell"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"HudMenuLabel"
+vertical_alignment = 1
+
+[node name="Gap3" type="Control" parent="Body"]
+custom_minimum_size = Vector2(0, 24)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="ConfirmButton" type="Button" parent="Body"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(240, 56)
+layout_mode = 2
+size_flags_horizontal = 4
+theme_type_variation = &"HudPrimaryButtonLarge"
 text = "handover_confirm"
+icon = ExtResource("3_confirm")
+
+[node name="Strength" type="Control" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("4_strength")

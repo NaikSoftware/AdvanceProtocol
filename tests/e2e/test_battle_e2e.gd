@@ -143,7 +143,7 @@ func _sector_case(attacker_cell: Vector2i, attacker_facing_after: int, sector: i
 	_e2e.tap(target_cell)
 	# прев'ю до підтвердження: сектор і межі, жодних змін стану
 	assert_eq((_e2e.hud().get_node("%PreviewSectorValue") as Label).text,
-		tr(UnitInspector.SECTOR_KEYS[sector]))
+		tr(HudKit.SECTOR_KEYS[sector]))
 	assert_eq((_e2e.hud().get_node("%PreviewDamageValue") as Label).text, "%d–%d" % [lo, hi])
 	assert_eq(target.hp, 400)
 	# Власник 2026-10-18: тап по цілі вже повертає стрільця до неї; сектор у прев'ю
@@ -255,7 +255,7 @@ func test_walk_stops_before_enemy_the_planner_could_not_see() -> void:
 
 	_e2e.tap(Vector2i(0, 1))
 	_e2e.tap(Vector2i(6, 1))
-	assert_eq((_e2e.hud().get_node("%PreviewApValue") as Label).text, "8", "план: 6 доріг по 10, лишається 8")
+	assert_false((_e2e.hud().get_node("%PreviewPlate") as Control).visible, "прев'ю руху — без плити")
 	await _e2e.confirm()
 
 	var car: Unit = _unit(1)
@@ -454,19 +454,16 @@ func test_cancelled_touch_is_not_a_tap() -> void:
 
 ## Зміна мови з паузи (Налаштування) лишала підписи бою старою мовою: tr() викликався раз.
 ## Локаль ставимо напряму, а не кліком по кнопці: SettingsService.save() пише в реальний user://settings.cfg.
-func test_locale_change_refreshes_hud_and_inspector_labels() -> void:
+func test_locale_change_refreshes_hud_labels() -> void:
 	await _two_riflemen()
 	var prev: String = TranslationServer.get_locale()
 	_e2e.tap(Vector2i(0, 1))
 	var hud: Hud = _e2e.hud()
-	var ground_key: String = Hud.GROUND_STATE_KEYS[Terrain.GroundState.DRY]
-	var name_key: String = _unit(1).type()["name_key"]
 	var texts: Dictionary = {}
 	for loc: String in ["uk", "en"]:
 		TranslationServer.set_locale(loc)
-		texts[loc] = [tr(ground_key), tr(name_key)]
-		assert_eq(hud._ground_label.text, texts[loc][0], "підпис ґрунту: %s" % loc)
-		assert_eq(hud._inspector._name_label.text, texts[loc][1], "назва юніта в інспекторі: %s" % loc)
+		texts[loc] = ["%s 1" % tr("hud_player")]
+		assert_eq((hud.get_node("%PlayerValue") as Label).text, texts[loc][0], "чип гравця: %s" % loc)
 	assert_ne(texts["uk"], texts["en"], "передумова: переклади справді різні")
 	TranslationServer.set_locale(prev)
 

@@ -32,6 +32,18 @@ const MatchServiceScript := preload("res://game/autoload/match_service.gd")
 
 const LOCALES: Array[String] = ["en", "uk"]
 
+## Шпигун замість справжнього ZoneOverlay (той тягне живий BoardView із MultiMesh).
+class SpyZoneOverlay extends ZoneOverlay:
+	func _init() -> void:
+		pass
+
+	func show_for(_unit: Unit, _zones: Pathing.Zones) -> void:
+		pass
+
+	func clear() -> void:
+		pass
+
+
 var _service: Node
 var _orig_locale: String
 
@@ -93,71 +105,110 @@ func test_screens_fit_phone_pc_tablet(p = use_parameters(_cases())) -> void:
 	assert_eq(LayoutProbe.small_targets(root), [] as Array[String], where)
 
 
-func test_hud_bars_do_not_overlap_at_any_size(p = use_parameters(LayoutProbe.SIZES)) -> void:
+## Крайні плити (чип, пауза, «Завершити хід») стоять по кутах і не налазять одна на одну. Тап-ціль
+## 48 dp, малюнок 40: запас іде до краю екрана (униз для «Завершити хід», угору й праворуч для паузи).
+func test_hud_corner_chrome_does_not_overlap_at_any_size(p = use_parameters(LayoutProbe.SIZES)) -> void:
 	var size: Vector2i = p
 	var root: Control = await _mount("res://game/ui/hud.tscn", size)
-	var bars: Array[Control] = [root.get_node("SafeArea/Layout/TopBar"), root.get_node("%BottomBar")]
-	assert_eq(LayoutProbe.overlapping(bars), [] as Array[String], str(p))
+	var chrome: Array[Control] = [root.get_node("%Chip"), root.get_node("%PauseButton"), root.get_node("%EndTurnButton")]
+	assert_eq(LayoutProbe.overlapping(chrome), [] as Array[String], str(p))
+	var chip: Rect2 = (root.get_node("%Chip") as Control).get_global_rect()
+	assert_eq(chip.position, Vector2(24, 12), "чип: (24, 12)")
+	assert_eq(chip.size.y, 32.0, "чип 32 dp заввишки")
+	assert_eq((root.get_node("%PauseButton") as Control).get_global_rect(),
+		Rect2(size.x - 64.0, 0.0, 48.0, 48.0), "пауза: тап-ціль 48 × 48 у куті, малюнок 40 × 40 на (право 24, верх 8)")
+	assert_eq((root.get_node("%EndTurnButton") as Control).get_global_rect(),
+		Rect2(24.0, size.y - 52.0, 136.0, 48.0), "кінець ходу: тап-ціль 136 × 48, малюнок 136 × 40 над нижнім полем 12")
 
 
-## Task 9: рядок меж ремонту при згорнутій панелі інженера влізає на кожен розмір
-## обома мовами, а HUD не виходить за екран.
-func test_hud_repair_preview_fits_with_collapsed_panel(p = use_parameters(_repair_cases())) -> void:
+## Кластер «плита прев'ю + ряд» на кожному розмірі: ряд спільної ширини (252) унизу праворуч, плита над
+## ним на 8 dp, «Скасувати» 104 і основна 136 із проміжком 12, ніщо не налазить на кутові плити.
+func test_hud_cluster_docks_bottom_right_and_fits(p = use_parameters(_repair_cases())) -> void:
 	TranslationServer.set_locale(p[1])
-	var root: Control = await _mount("res://game/ui/hud.tscn", p[0])
+	var size: Vector2i = p[0]
+	var root: Control = await _mount("res://game/ui/hud.tscn", size)
 	var hud := root as Hud
-	hud.show_selection(_service.state.add_unit(11, 0, Vector2i(4, 4), 0))
-	(root.get_node("%EngineerPanel") as EngineerPanel).set_armed(true)
-	hud.show_preview({"type": InputController.ActionType.ENGINEER, "unit_id": 1,
-		"action": EngineerCommand.Action.REPAIR_UNIT, "target": Vector2i(4, 3), "heal_min": 20, "heal_max": 43})
+	hud.show_preview({"type": InputController.ActionType.SHOT, "unit_id": 1, "target_id": 2,
+		"sector": 1, "min": 120, "max": 180, "armour_ignored": true, "in_cover": false})
 	await LayoutProbe.settle(self)
 	var where: String = "%s %s" % p
-	assert_true((root.get_node("%PreviewRepairBox") as Control).is_visible_in_tree(), where)
+	var plate: Control = root.get_node("%PreviewPlate")
+	var row: Control = root.get_node("%ActionRow")
+	var cancel: Control = root.get_node("%CancelButton")
+	var confirm: Control = root.get_node("%ConfirmButton")
+	assert_eq(hud.cluster_name(), "a", where)
+	assert_eq(row.get_global_rect(), Rect2(size.x - 24.0 - 252.0, size.y - 52.0, 252.0, 48.0), where)
+	assert_eq(plate.get_global_rect().end.y + 8.0, row.get_global_rect().position.y, "плита над рядом на 8 dp: " + where)
+	assert_eq(plate.size.x, 252.0, where)
+	assert_eq(cancel.size, Vector2(104.0, 48.0), where)
+	assert_eq(confirm.size, Vector2(136.0, 48.0), where)
+	assert_eq(confirm.position.x - cancel.get_rect().end.x, 12.0, "Cancel ↔ Confirm 12: " + where)
 	assert_eq(LayoutProbe.overflowing(root, p[0]), [] as Array[String], where)
 	assert_eq(LayoutProbe.small_targets(root), [] as Array[String], where)
-	assert_eq(LayoutProbe.overlapping([root.get_node("SafeArea/Layout/TopBar"), root.get_node("%BottomBar")] as Array[Control]),
-		[] as Array[String], where)
+	for n: String in ["%Chip", "%PauseButton", "%EndTurnButton"]:
+		var corner: Rect2 = (root.get_node(n) as Control).get_global_rect()
+		assert_false(plate.get_global_rect().intersects(corner), "%s %s" % [n, where])
+		assert_false(row.get_global_rect().intersects(corner), "%s %s" % [n, where])
 
 
-## Task 10: озброєний дрон — кнопка, межі шкоди, радіус і причина відмови разом —
-## влазить на кожен розмір обома мовами, кнопка ≥ 48 і не налазить на сусідні.
-func test_hud_drone_controls_fit(p = use_parameters(_repair_cases())) -> void:
+## Усі види плити прев'ю влазять у спільну ширину обома мовами й не роздувають плиту.
+func test_hud_preview_plate_content_fits_the_shared_width_for_every_type(p = use_parameters(_repair_cases())) -> void:
 	TranslationServer.set_locale(p[1])
 	var root: Control = await _mount("res://game/ui/hud.tscn", p[0])
 	var hud := root as Hud
-	hud.show_preview({"type": InputController.ActionType.DRONE, "unit_id": 1, "target_id": 2, "min": 120, "max": 180})
-	hud._show_drone_range()
-	hud._show_drone_reason("ERR_DRONE_CANNOT_TARGET_INFANTRY")
+	var previews: Array[Dictionary] = [
+		{"type": InputController.ActionType.MOVE, "unit_id": 1, "target": Vector2i(4, 5),
+			"path": [Vector2i(4, 5)] as Array[Vector2i], "ap_left": 28},
+		{"type": InputController.ActionType.SHOT, "unit_id": 1, "target_id": 2, "sector": 1,
+			"min": 120, "max": 180, "armour_ignored": true, "in_cover": true},
+		{"type": InputController.ActionType.DRONE, "unit_id": 1, "target_id": 2, "min": 120, "max": 180},
+		{"type": InputController.ActionType.ENGINEER, "unit_id": 1, "action": EngineerCommand.Action.REPAIR_UNIT,
+			"target": Vector2i(4, 3), "heal_min": 20, "heal_max": 43},
+		{"type": InputController.ActionType.ENGINEER, "unit_id": 1, "action": EngineerCommand.Action.DEMOLISH_BRIDGE,
+			"target": Vector2i(4, 3)},
+	]
+	var plate: Control = root.get_node("%PreviewPlate")
+	for i in previews.size():
+		hud.show_preview(previews[i])
+		await LayoutProbe.settle(self)
+		var where: String = "%s %s #%d" % [p[0], p[1], i]
+		# Рух і верби без чисел (розмінувати, ремонт/підрив мосту) показують лише ряд дій, без плити.
+		var plateless: bool = int(previews[i]["type"]) == InputController.ActionType.MOVE \
+			or (int(previews[i]["type"]) == InputController.ActionType.ENGINEER \
+			and int(previews[i]["action"]) != EngineerCommand.Action.REPAIR_UNIT)
+		if plateless:
+			assert_false(plate.visible, "без чисел — без плити: " + where)
+			assert_true((root.get_node("%ConfirmButton") as Control).is_visible_in_tree(), "лише ряд дій: " + where)
+			continue
+		assert_true(plate.is_visible_in_tree(), where)
+		assert_eq(plate.size.x, 252.0, "ширина плити не росте від вмісту: " + where)
+		assert_eq(LayoutProbe.overflowing(root, p[0]), [] as Array[String], where)
+		assert_lte(plate.get_combined_minimum_size().x, 252.0, "вміст не ширший за плиту: " + where)
+
+
+## Озброєний дрон: смужка [Скасувати] [озброєно] 252 × 48 унизу праворуч — на місці ряду дій, без накладання.
+func test_hud_drone_strip_fits(p = use_parameters(_repair_cases())) -> void:
+	TranslationServer.set_locale(p[1])
+	var size: Vector2i = p[0]
+	var root: Control = await _mount("res://game/ui/hud.tscn", size)
+	var hud := root as Hud
+	var state: BattleState = _service.state
+	var squad: Unit = state.units.values()[0]
+	state.add_unit(5, 1, squad.pos + Vector2i(0, 3), 0)
+	_service.begin()
+	_service.take_events()
+	var controller := InputController.new(_service, SpyZoneOverlay.new())
+	hud.attach_controller(controller)
+	controller.select_unit(squad)
+	controller.arm_drone()
 	await LayoutProbe.settle(self)
 	var where: String = "%s %s" % p
-	var drone: Control = root.get_node("%DroneButton")
-	assert_true(drone.is_visible_in_tree(), where)
-	for n: String in ["%PreviewDroneBox", "%DroneRangeLabel", "%DroneReasonLabel"]:
-		assert_true((root.get_node(n) as Control).is_visible_in_tree(), "%s %s" % [n, where])
-	assert_true(drone.size.x >= 48.0 and drone.size.y >= 48.0, where)
-	assert_eq(LayoutProbe.overflowing(root, p[0]), [] as Array[String], where)
+	var strip: ArmedStrip = root.get_node("%DroneStrip")
+	assert_true(strip.is_visible_in_tree(), where)
+	assert_eq(strip.get_global_rect(), Rect2(size.x - 24.0 - 252.0, size.y - 52.0, 252.0, 48.0), where)
+	assert_eq(LayoutProbe.overflowing(root, size), [] as Array[String], where)
 	assert_eq(LayoutProbe.small_targets(root), [] as Array[String], where)
-	assert_eq(LayoutProbe.overlapping([root.get_node("SafeArea/Layout/TopBar"), root.get_node("%BottomBar")] as Array[Control]),
-		[] as Array[String], where)
-	assert_eq(LayoutProbe.overlapping([drone, root.get_node("%CancelButton"), root.get_node("%ConfirmButton"),
-		root.get_node("%EndTurnButton"), root.get_node("%EngineerPanel")] as Array[Control]), [] as Array[String], where)
-
-
-## Task 14: рядок «прогноз — нижня межа» поряд з озброєним дроном (найтісніший
-## нижній рядок) влазить на кожен розмір обома мовами.
-func test_hud_threat_floor_fits(p = use_parameters(_repair_cases())) -> void:
-	TranslationServer.set_locale(p[1])
-	var root: Control = await _mount("res://game/ui/hud.tscn", p[0])
-	var hud := root as Hud
-	hud.show_preview({"type": InputController.ActionType.DRONE, "unit_id": 1, "target_id": 2, "min": 120, "max": 180})
-	hud._show_drone_range()
-	hud._show_threat_floor(true)
-	await LayoutProbe.settle(self)
-	var where: String = "%s %s" % [p[0], p[1]]
-	assert_true((root.get_node("%ThreatFloorLabel") as Control).is_visible_in_tree(), where)
-	assert_eq(LayoutProbe.overflowing(root, p[0]), [] as Array[String], where)
-	assert_eq(LayoutProbe.overlapping([root.get_node("SafeArea/Layout/TopBar"), root.get_node("%BottomBar")] as Array[Control]),
-		[] as Array[String], where)
+	assert_false(strip.get_global_rect().intersects((root.get_node("%EndTurnButton") as Control).get_global_rect()), where)
 
 
 func _repair_cases() -> Array:
@@ -175,25 +226,6 @@ func test_menu_content_capped_on_wide(p = use_parameters(CAPPED_CONTENT.keys()))
 	var wide: Control = await _mount(scene, LayoutProbe.WIDE)
 	var on_wide: Vector2 = (wide.get_node(CAPPED_CONTENT[scene]) as Control).size
 	assert_eq(on_wide.x, on_pc.x, scene)
-
-
-## ПК зберігає нинішній вигляд — прев'ю й кнопки одним рядком; на малому
-## телефоні кнопки переносяться під прев'ю цілим блоком, а не по одній.
-func test_hud_bottom_bar_wraps_only_when_it_must(p = use_parameters(
-		[[LayoutProbe.PC, true], [LayoutProbe.TABLET, true], [LayoutProbe.PHONE_SMALL, false]])) -> void:
-	var size: Vector2i = p[0]
-	var one_row: bool = p[1]
-	TranslationServer.set_locale("uk")
-	var root: Control = await _mount("res://game/ui/hud.tscn", size)
-	var bar: Control = root.get_node("%BottomBar")
-	var buttons: Control = root.get_node("%BottomBar/ButtonRow")
-	assert_eq(bar.size.y, 48.0 if one_row else 48.0 + 8.0 + _info_row_height(root), str(size))
-	assert_eq(buttons.get_global_rect().end.x, bar.get_global_rect().end.x, "кнопки праворуч: %s" % size)
-
-
-func _info_row_height(root: Control) -> float:
-	return maxf((root.get_node("%SelectionRow") as Control).size.y,
-		(root.get_node("%PreviewShotBox") as Control).size.y)
 
 
 func _primary_cases() -> Array:

@@ -129,7 +129,7 @@ func _focus_camera(cell: Vector2i) -> void:
 
 
 func _confirm_action() -> void:
-	_e2e.press(_e2e.hud().get_node("%ConfirmButton"))
+	await _e2e.confirm()
 	await _wait_idle()
 	await _pause(0.25, 0.05)
 
@@ -223,6 +223,7 @@ func _pass_turn() -> void:
 	assert_true(_e2e.gate().visible, "гейт передачі ходу видимий після EndTurn")
 	assert_ne(_state().active_player, prev_player, "активний гравець змінився")
 	await _pause(0.65, 0.14)
+	_e2e.gate().entrance_tween.custom_step(HandoverGate.ENTRANCE_S + 0.01)
 	_e2e.press(_e2e.gate().get_node("%ConfirmButton"))
 	await _wait_idle()
 	assert_false(_e2e.gate().visible, "гейт сховано після підтвердження")

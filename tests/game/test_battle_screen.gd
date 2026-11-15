@@ -49,6 +49,12 @@ func after_each() -> void:
 	UnitSilhouettes.reset_models()
 
 
+## Твін входу гейта (350 мс) докручуємо вручну: «Готово» до його кінця не реагує.
+func _press_gate_confirm(gate: Control) -> void:
+	(gate as HandoverGate).entrance_tween.custom_step(HandoverGate.ENTRANCE_S + 0.01)
+	(gate.get_node("%ConfirmButton") as Button).pressed.emit()
+
+
 func _screen() -> Node3D:
 	var screen: Node3D = BattleScreenScene.instantiate()
 	add_child_autofree(screen)
@@ -180,8 +186,7 @@ func test_handover_rebuilds_units_and_recenters_camera_before_gate_lifts() -> vo
 		observation["gate_was_visible"] = gate.visible
 	units_container.child_entered_tree.connect(watcher)
 
-	var confirm_button: Button = gate.get_node("%ConfirmButton")
-	confirm_button.pressed.emit()
+	_press_gate_confirm(gate)
 
 	assert_true(observation["observed"], "перебудова мусить справді додати хоч один вузол юніта гравця 1")
 	assert_true(observation["gate_was_visible"],
@@ -213,7 +218,7 @@ func test_handover_batches_track_exactly_the_incoming_players_known_units() -> v
 	screen.setup(m, 2, 1, service)
 	WeatherRig.unit_contact = 0.6
 	screen.get_node("%Hud").get_node("%EndTurnButton").pressed.emit()
-	screen.get_node("%HandoverGate").get_node("%ConfirmButton").pressed.emit()
+	_press_gate_confirm(screen.get_node("%HandoverGate"))
 	var known: int = service.state.known_occupied_map(service.state.active_player).size()
 	assert_gt(known, 0, "передумова: гравець, що заходить, знає юнітів")
 	assert_eq(screen._hp_bars.count(), known, "смуги HP — рівно відомі юніти")
@@ -906,8 +911,7 @@ func test_gate_recenter_never_animates_even_across_later_frames() -> void:
 	var end_turn_button: Button = screen.get_node("%Hud").get_node("%EndTurnButton")
 	end_turn_button.pressed.emit()
 	var gate: Control = screen.get_node("%HandoverGate")
-	var confirm_button: Button = gate.get_node("%ConfirmButton")
-	confirm_button.pressed.emit()
+	_press_gate_confirm(gate)
 
 	var target: Vector3 = IsoCameraRig.cell_to_world(service.state.units_of(1)[0].pos)
 	assert_eq(camera.global_position, target, "передумова: рецентрування вже на цілі одразу після confirmed")
@@ -1041,7 +1045,7 @@ func test_move_preview_does_not_mark_anyone() -> void:
 ## юнітом і не накриває ні його, ні кнопки) тримає tests/game/test_hud.gd на
 ## ригу, яким сам і керує; тут лишається рівно те, чого немає більше ніде —
 ## факт, що сцена бою звела ріг із HUD.
-func test_inspector_follows_the_camera_because_setup_wires_it() -> void:
+func test_hud_follows_the_camera_because_setup_wires_it() -> void:
 	var service: Node = MatchServiceScript.new()
 	add_child_autofree(service)
 	var m: MapData = _map(12, 12)
@@ -1142,7 +1146,7 @@ func test_handover_redraws_wrecks_from_the_incoming_players_seen() -> void:
 	assert_null(layer.wreck_at(p1_only), "за гейтом ще світ гравця 0 — розвідане гравця 1 не малюється")
 	assert_not_null(layer.wreck_at(p0_only))
 
-	gate.get_node("%ConfirmButton").pressed.emit()
+	_press_gate_confirm(gate)
 	assert_eq(layer.wreck_count(), 1)
 	assert_not_null(layer.wreck_at(p1_only))
 	assert_null(layer.wreck_at(p0_only), "уламки над нерозвіданим гравцем 1 — донос про чужий бій")
@@ -1182,7 +1186,7 @@ func test_resume_draws_wrecks_already_in_state_only_on_seen_ground() -> void:
 	var screen: Node3D = _screen()
 	screen.resume(service)
 	var gate: Control = screen.get_node("%HandoverGate")
-	gate.get_node("%ConfirmButton").pressed.emit()
+	_press_gate_confirm(gate)
 	var layer: WreckLayer = screen.get_node("%WreckLayer")
 	assert_eq(layer.wreck_count(), 1)
 	assert_not_null(layer.wreck_at(_first_tile(state, 0, 1)))
@@ -1314,7 +1318,7 @@ func test_resume_warms_up_fx_on_the_first_gate_confirm() -> void:
 	screen.resume(service)
 	var units: Node3D = screen.get_node("%Units")
 	assert_eq(units.find_children("Explosion*", "", false, false).size(), 0, "за гейтом камера ще ніде")
-	screen.get_node("%HandoverGate").get_node("%ConfirmButton").pressed.emit()
+	_press_gate_confirm(screen.get_node("%HandoverGate"))
 	assert_eq(units.find_children("Explosion*", "", false, false).size(), 1)
 	assert_true((screen.get_node("%WreckLayer") as WreckLayer).is_warming())
 	_finish_all_processed_tweens()
@@ -1368,7 +1372,7 @@ func _assert_confirmed_mid_warm_up(pair: Array) -> void:
 	await wait_frames(3)
 	assert_true(gate.visible, "об'їзд іде під гейтом")
 	assert_eq(_unit_view_nodes(screen), 0, "юнітів під гейтом ще нема")
-	gate.get_node("%ConfirmButton").pressed.emit()
+	_press_gate_confirm(gate)
 	await wait_frames(WARM_FRAMES)
 	assert_false(gate.visible)
 	assert_true(_camera_at_first_unit(screen, service), "камера на першому юніті гравця")
@@ -1437,7 +1441,7 @@ func test_confirm_after_a_finished_warm_up_builds_the_units_once() -> void:
 	var pair: Array = _launched_with_warm_up()
 	var screen: Node3D = pair[0]
 	await wait_frames(WARM_FRAMES)
-	screen.get_node("%HandoverGate").get_node("%ConfirmButton").pressed.emit()
+	_press_gate_confirm(screen.get_node("%HandoverGate"))
 	assert_true(_camera_at_first_unit(screen, pair[1]))
 	assert_eq(_unit_view_nodes(screen), screen._unit_views.size())
 	assert_gt(screen._unit_views.size(), 0)
@@ -1481,7 +1485,7 @@ func test_handover_draws_roof_fade_of_the_incoming_player_at_once() -> void:
 	var props: PropLayer = (screen.get_node("%BoardView") as BoardView).props()
 	var gate: Control = screen.get_node("%HandoverGate")
 	(screen.get_node("%Hud").get_node("%EndTurnButton") as Button).pressed.emit()
-	(gate.get_node("%ConfirmButton") as Button).pressed.emit()
+	_press_gate_confirm(gate)
 	var faded: Array = props._fade_target.keys().filter(func(i: int) -> bool: return props._fade_target[i] == 1.0)
 	assert_false(faded.is_empty(), "передумова: дах над юнітом гравця 1")
 	for i: int in faded:
@@ -1489,7 +1493,7 @@ func test_handover_draws_roof_fade_of_the_incoming_player_at_once() -> void:
 		assert_true((props._fade_nodes[props._instances[i]["model"]] as MultiMeshInstance3D).visible)
 	assert_false(props.is_processing())
 	(screen.get_node("%Hud").get_node("%EndTurnButton") as Button).pressed.emit()
-	(gate.get_node("%ConfirmButton") as Button).pressed.emit()
+	_press_gate_confirm(gate)
 	for i: int in faded:
 		assert_eq(float(props._fade_level.get(i, 0.0)), 0.0, "у гравця 0 дах суцільний одразу")
 	assert_false(props.is_processing())
@@ -1515,7 +1519,7 @@ func test_handover_forest_shows_only_what_incoming_player_knows() -> void:
 	state.broken_forest = {Vector2i(1, 1): true, Vector2i(2, 1): true, Vector2i(8, 8): true}
 	_rebase_replay(service)
 	(screen.get_node("%Hud").get_node("%EndTurnButton") as Button).pressed.emit()
-	(screen.get_node("%HandoverGate").get_node("%ConfirmButton") as Button).pressed.emit()
+	_press_gate_confirm(screen.get_node("%HandoverGate"))
 	assert_eq(state.active_player, 1, "передумова: хід гравця 1")
 	var forest: ForestLayer = (screen.get_node("%BoardView") as BoardView).forest()
 	var known: Dictionary = state.known_broken_map(1)
@@ -1579,7 +1583,7 @@ func _screen_after_enemy_turn(service: Node) -> Node3D:
 
 
 func _confirm_gate(screen: Node3D) -> void:
-	(screen.get_node("%HandoverGate").get_node("%ConfirmButton") as Button).pressed.emit()
+	_press_gate_confirm(screen.get_node("%HandoverGate"))
 
 
 func _overlay(screen: Node3D) -> Control:

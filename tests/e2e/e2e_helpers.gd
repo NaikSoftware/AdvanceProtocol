@@ -229,7 +229,10 @@ func _mouse_button(p: Vector2, pressed: bool) -> void:
 
 
 func confirm() -> void:
-	press(hud().get_node("%ConfirmButton"))
+	# Підтвердження оживає, щойно плита прев'ю запеклася (сектор до кроку, §3.4).
+	var button: Button = hud().get_node("%ConfirmButton")
+	await wait_until(func() -> bool: return not button.disabled, "плита прев'ю запеклася")
+	press(button)
 	await settle()
 
 
@@ -239,6 +242,8 @@ func end_turn() -> void:
 
 
 func confirm_gate() -> void:
+	# «Готово» ігнорує ввід до кінця вхідного твіну гейта; докручуємо його, не чекаючи реального часу.
+	gate().entrance_tween.custom_step(HandoverGate.ENTRANCE_S + 0.01)
 	press(gate().get_node("%ConfirmButton"))
 	await settle()
 
