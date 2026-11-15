@@ -61,6 +61,7 @@ func _init() -> void:
 ## own — свій юніт активного гравця: чужий тег натомість має смужку кольору власника.
 ## Лічильник дронів публічний (§3.9), тож показується завжди, поки в типу є дрони.
 func show_unit(unit: Unit, own: bool) -> void:
+	# Скидання підпису міни: той самий екземпляр тега показує то юніта, то міну.
 	_sil.visible = true
 	name_label.remove_theme_color_override("font_color")
 	name_label.text = tr(String(unit.type()["name_key"]))

@@ -19,7 +19,7 @@ const STATES: Array[String] = [
 	"squad_to_drone", "hold_cluster", "engineer_to_armed", "shot_cover", "shot_infantry_armour_ignored",
 	"engineer_clear", "engineer_repair_bridge", "engineer_demolish_bridge", "hold_engineer",
 	"handover_2p_hurt", "handover_3p", "handover_3p_eliminated", "handover_3p_even",
-	"handover_default", "mine_caption",
+	"handover_default", "mine_caption", "mine_caption_selected",
 ]
 const SETTLE_FRAMES: int = 90
 const STATE_FRAMES: int = 20
@@ -41,6 +41,8 @@ const OFF_ENEMY_CAR := Vector2i(3, 2)
 const OFF_ENEMY_SQUAD := Vector2i(2, -2)
 ## Клітинка, куди тапається рух: у зоні танка, не на лінії вогню.
 const OFF_MOVE := Vector2i(-1, 1)
+## Тайл поза зоною танка для підпису міни при вибраному юніті.
+const MINE_FAR := Vector2i(-7, -3)
 
 var _screen: BattleScreen = null
 var _state: BattleState = null
@@ -285,7 +287,9 @@ func _enter_state(st: String) -> bool:
 			_ctrl.select_unit(_state.get_unit(_ids["engineer"]))
 			_press_verb(EngineerCommand.Action.CLEAR_MINE)
 			_ctrl.tap_cell(_spot["target"])
-		"mine_caption":
+		"mine_caption", "mine_caption_selected":
+			if st == "mine_caption_selected":
+				_ctrl.select_unit(tank)
 			_ctrl.tap_cell(_spot["target"])
 		"engineer_repair_bridge", "engineer_demolish_bridge":
 			_ctrl.select_unit(_state.get_unit(_ids["engineer"]))
@@ -367,7 +371,7 @@ func _enter_state(st: String) -> bool:
 			ok = ctrl_state["pending"] and ctrl_state["armed"]
 		"engineer_armed", "drone", "engineer_to_armed":
 			ok = ctrl_state["armed"]
-		"mine_caption":
+		"mine_caption", "mine_caption_selected":
 			ok = ((_screen.get_node("%Hud") as Hud).get("_mine_tag") as Control).visible
 		"hold_cluster":
 			ok = ((_screen.get_node("%Hud") as Hud).hold_card() as Control).visible
@@ -426,8 +430,9 @@ func _reset_cast(st: String) -> void:
 			var mine_cell: Vector2i = _state.get_unit(_ids["engineer"]).pos + Vector2i(1, 0)
 			Mines.place(_state, mine_cell, 0)
 			_spot["target"] = mine_cell
-		"mine_caption":
-			var own_mine: Vector2i = _site + Vector2i(1, 2)
+		"mine_caption", "mine_caption_selected":
+			# Для вибраного танка міна мусить лежати поза його зоною: у зоні тап — це прев'ю руху.
+			var own_mine: Vector2i = _site + (Vector2i(1, 2) if st == "mine_caption" else MINE_FAR)
 			Mines.place(_state, own_mine, 0)
 			_spot["target"] = own_mine
 		"engineer_repair_bridge", "engineer_demolish_bridge":

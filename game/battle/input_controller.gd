@@ -41,7 +41,8 @@ signal inspected(inspection: Dictionary)
 
 ## Тап по міні, яку активний гравець бачить (своя чи знайдена ворожа), що не збігся з жодною
 ## іншою дією: підпис над тайлом, як для юніта. owner -1 — підпис зняти; цей сигнал іде на
-## кожен тап першим, тож нерозкрита міна нічим не відрізняється від порожньої землі.
+## кожен звичайний тап першим, тож нерозкрита міна нічим не відрізняється від порожньої землі.
+## Озброєння дрона чи верби теж знімає підпис: у режимі дії тап підпису не дає.
 signal mine_caption(owner: int, cell: Vector2i)
 
 ## Тип очікуваної на підтвердження дії — ключ "type" у словнику нижче.
@@ -329,6 +330,7 @@ func arm_engineer(action: int) -> void:
 		action_refused.emit(status["reason"])
 		return
 	_clear_pending()
+	mine_caption.emit(-1, _selected_unit.pos)
 	_armed_action = action
 	_armed_at_ms = Time.get_ticks_msec()
 	_targets = tiles
@@ -346,6 +348,7 @@ func arm_drone() -> void:
 		action_refused.emit(reason)
 		return
 	_clear_pending()
+	mine_caption.emit(-1, _selected_unit.pos)
 	disarm()
 	_drone_armed = true
 	drone_armed.emit(_selected_unit.pos, DroneCommand.RANGE, Targeting.drone_marks(state, _selected_unit.id))

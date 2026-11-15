@@ -1013,6 +1013,25 @@ func _mine_tag() -> UnitTag:
 	return hud._mine_tag
 
 
+func _tag_rect(t: Control) -> Rect2:
+	return Rect2(t.position, t.size)
+
+
+## HUD з камерою на (6, 6) і видимим UnitView юніта; розмір екрана — SCREEN.
+func _hud_with_view(state: BattleState, u: Unit) -> IsoCameraRig:
+	var rig: IsoCameraRig = _rig_for(Vector2i(6, 6))
+	var view: UnitView = UnitViewScene.instantiate()
+	add_child_autofree(view)
+	view.bind(u)
+	view.global_position = IsoCameraRig.cell_to_world(u.pos)
+	hud.bind(state)
+	hud.attach_camera(rig)
+	hud.attach_unit_views(func() -> Dictionary: return {u.id: view})
+	hud.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	hud.size = rig.get_viewport().get_visible_rect().size
+	return rig
+
+
 func test_mine_caption_is_a_tag_naming_whose_mine_it_is_in_the_owner_colour() -> void:
 	var state: BattleState = _state()
 	hud.bind(state)
@@ -1021,6 +1040,7 @@ func test_mine_caption_is_a_tag_naming_whose_mine_it_is_in_the_owner_colour() ->
 	assert_eq(_mine_tag().name_label.text, tr("mine_own"))
 	assert_eq(_mine_tag().name_label.get_theme_color("font_color"), UnitView.hp_fill_color(0))
 	hud._on_mine_caption(1, Vector2i(5, 5))
+	assert_true(_mine_tag().visible)
 	assert_eq(_mine_tag().name_label.text, tr("mine_enemy"))
 	assert_eq(_mine_tag().name_label.get_theme_color("font_color"), UnitView.hp_fill_color(1))
 	assert_false(_mine_tag().pips.is_visible_in_tree(), "у міни нема дронів")
@@ -1028,32 +1048,41 @@ func test_mine_caption_is_a_tag_naming_whose_mine_it_is_in_the_owner_colour() ->
 	assert_false(_mine_tag().visible, "наступний тап знімає підпис")
 
 
-func test_mine_caption_stands_over_its_cell_and_follows_the_camera() -> void:
+func test_mine_caption_stands_near_its_tile_clear_of_chrome_and_follows_the_camera() -> void:
 	var state: BattleState = _state()
 	hud.bind(state)
 	var rig: IsoCameraRig = _rig_for(Vector2i(6, 6))
 	hud.attach_camera(rig)
 	hud.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	hud.size = Vector2(1280, 720)
-	hud._on_mine_caption(0, Vector2i(6, 6))
-	var tag: UnitTag = _mine_tag()
+	hud.size = rig.get_viewport().get_visible_rect().size
 	var cell := Vector2i(6, 6)
-	var anchor: Vector2 = rig.unproject(IsoCameraRig.cell_to_world(cell))
-	assert_eq(tag.position, Vector2(anchor.x - tag.size.x * 0.5, anchor.y - tag.size.y - Hud.MINE_TAG_LIFT).round())
+	hud._on_mine_caption(0, cell)
+	var tag: UnitTag = _mine_tag()
+	assert_true(tag.visible)
+	var box: Rect2 = UnitScreenBox.cell_rect(cell, rig)
+	assert_true(Rect2(Vector2.ZERO, hud.size).encloses(_tag_rect(tag)), "підпис у межах екрана")
+	assert_false(_tag_rect(tag).intersects(box), "підпис не накриває тайл міни")
+	for c: Rect2 in hud._chrome_rects():
+		assert_false(_tag_rect(tag).intersects(c), "підпис не накриває хром")
+	var before: Vector2 = tag.position
+	var box_before: Vector2 = box.position
 	rig.center_on(Vector2i(8, 6))
 	hud._on_view_changed()
-	anchor = rig.unproject(IsoCameraRig.cell_to_world(cell))
-	assert_eq(tag.position, Vector2(anchor.x - tag.size.x * 0.5, anchor.y - tag.size.y - Hud.MINE_TAG_LIFT).round())
+	var moved: Vector2 = UnitScreenBox.cell_rect(cell, rig).position - box_before
+	assert_ne(moved, Vector2.ZERO, "камера справді зсунула тайл")
+	assert_eq(tag.position, before + moved.round())
 
 
-func test_mine_caption_does_not_leak_into_the_unit_tag() -> void:
+func test_a_new_selection_clears_the_mine_caption() -> void:
 	var state: BattleState = _state()
 	var u: Unit = state.add_unit(5, 0, Vector2i(3, 3), 0)
 	hud.bind(state)
 	hud._on_mine_caption(0, Vector2i(4, 4))
+	assert_true(_mine_tag().visible)
 	hud.show_selection(u)
 	assert_false(_mine_tag().visible, "новий вибір знімає підпис міни")
 	hud._on_mine_caption(0, Vector2i(4, 4))
+	assert_true(_mine_tag().visible)
 	hud.show_selection(null)
 	assert_false(_mine_tag().visible)
 
@@ -1062,6 +1091,7 @@ func test_mine_caption_does_not_survive_the_handover() -> void:
 	var state: BattleState = _state()
 	hud.bind(state)
 	hud._on_mine_caption(0, Vector2i(4, 4))
+	assert_true(_mine_tag().visible)
 	hud.set_active_player(1)
 	assert_false(_mine_tag().visible, "підпис своєї міни не лишається наступному гравцеві")
 
@@ -1076,16 +1106,18 @@ func test_a_real_tap_captions_a_known_mine_and_an_unknown_enemy_mine_gives_nothi
 	Mines.place(state, Vector2i(10, 10), 1)
 	state.mines[2].known_to[0] = true
 	controller.tap_cell(Vector2i(8, 8))
+	assert_true(_mine_tag().visible)
 	assert_eq(_mine_tag().name_label.text, tr("mine_own"))
 	controller.tap_cell(Vector2i(9, 9))
 	assert_false(_mine_tag().visible, "нерозкрита ворожа міна — як порожня земля")
 	controller.tap_cell(Vector2i(10, 10))
+	assert_true(_mine_tag().visible)
 	assert_eq(_mine_tag().name_label.text, tr("mine_enemy"))
 	controller.tap_cell(Vector2i(11, 11))
 	assert_false(_mine_tag().visible)
 
 
-## Юніт вибрано, тап за зоною: контролер міг би подати поворот, а події перемальовують вибір, —
+## Юніт вибрано, тап за зоною: контролер подає поворот на місці, події перемальовують вибір, —
 ## підпис мусить пережити і це, і кілька кадрів.
 func test_caption_survives_a_tap_with_a_unit_selected() -> void:
 	var state: BattleState = _state()
@@ -1096,5 +1128,91 @@ func test_caption_survives_a_tap_with_a_unit_selected() -> void:
 	controller.select_unit(u)
 	controller.tap_cell(Vector2i(10, 2))
 	await wait_frames(3)
+	assert_eq(u.facing, 2, "тап справді повернув юніта на схід")
 	assert_true(_mine_tag().visible)
 	assert_eq(_mine_tag().name_label.text, tr("mine_own"))
+
+
+func test_the_hold_card_hides_the_mine_caption_and_releasing_brings_it_back() -> void:
+	var state: BattleState = _state()
+	var u: Unit = state.add_unit(5, 0, Vector2i(6, 6), 0)
+	var rig: IsoCameraRig = _hud_with_view(state, u)
+	var cell := Vector2i(9, 6)
+	hud._on_mine_caption(0, cell)
+	assert_true(_mine_tag().visible, "передумова: підпис на екрані")
+	hud._on_inspected({"unit_id": u.id, "center": u.pos, "radius": 0, "drone_radius": 0, "marked": [], "drone_marked": [], "is_floor": false})
+	assert_true(hud.hold_card().visible)
+	assert_false(_mine_tag().visible, "під карткою утримання підпис схований")
+	hud._on_inspected({})
+	assert_false(hud.hold_card().visible)
+	assert_true(_mine_tag().visible, "після відпускання підпис повертається")
+	assert_not_null(rig)
+
+
+func test_arming_a_drone_or_a_verb_takes_the_caption_down() -> void:
+	var state: BattleState = _state()
+	var sq: Unit = state.add_unit(1, 0, Vector2i(3, 3), 0)
+	var eng: Unit = state.add_unit(11, 0, Vector2i(5, 8), 0)
+	state.add_unit(5, 1, Vector2i(6, 3), 0)
+	var controller: InputController = _ctl(state)
+	Mines.place(state, Vector2i(9, 9), 0)
+	controller.select_unit(sq)
+	controller.tap_cell(Vector2i(9, 9))
+	assert_true(_mine_tag().visible, "передумова: підпис на екрані")
+	controller.arm_drone()
+	assert_false(_mine_tag().visible, "озброєний дрон знімає підпис")
+	controller.select_unit(eng)
+	controller.tap_cell(Vector2i(9, 9))
+	assert_true(_mine_tag().visible, "передумова: підпис на екрані")
+	controller.arm_engineer(EngineerCommand.Action.LAY_MINE)
+	assert_false(_mine_tag().visible, "озброєна верба знімає підпис")
+
+
+## Тег вибраного юніта й підпис міни стоять разом і не накладаються; другий обходить перший.
+func test_a_selected_units_tag_and_a_mine_caption_never_overlap() -> void:
+	var state: BattleState = _state()
+	var u: Unit = state.add_unit(5, 0, Vector2i(6, 6), 0)
+	_hud_with_view(state, u)
+	hud.show_selection(u)
+	await wait_frames(3)
+	var unit_tag: UnitTag = hud.unit_tag()
+	assert_true(unit_tag.visible, "передумова: тег юніта на екрані")
+	for cell: Vector2i in [Vector2i(6, 5), Vector2i(7, 6), Vector2i(5, 6), Vector2i(6, 7)]:
+		hud._on_mine_caption(0, cell)
+		await wait_frames(3)
+		assert_true(_mine_tag().visible, "підпис на %s є" % cell)
+		assert_true(unit_tag.visible, "тег юніта на місці")
+		assert_false(_tag_rect(unit_tag).intersects(_tag_rect(_mine_tag())), "теги не накладаються біля %s" % cell)
+
+
+## Тайл біля краю екрана: підпис не лягає ні на «Завершити хід», ні на «Підтвердити».
+func test_a_caption_near_the_screen_edge_keeps_off_end_turn_and_confirm() -> void:
+	var state: BattleState = _state()
+	var u: Unit = state.add_unit(5, 0, Vector2i(6, 6), 0)
+	var rig: IsoCameraRig = _hud_with_view(state, u)
+	var row := hud.get_node("%ActionRow") as Control
+	row.visible = true
+	row.size = Vector2(252.0, 48.0)
+	row.position = hud.size - row.size - Vector2(24.0, 12.0)
+	var end_turn := hud.get_node("%EndTurnButton") as Control
+	var confirm := hud.get_node("%ConfirmButton") as Control
+	var shown: int = 0
+	for cell: Vector2i in [Vector2i(10, 10), Vector2i(2, 10), Vector2i(10, 2), Vector2i(2, 2), Vector2i(11, 6)]:
+		hud._on_mine_caption(0, cell)
+		if not _mine_tag().visible:
+			continue
+		shown += 1
+		var r: Rect2 = _tag_rect(_mine_tag())
+		assert_true(Rect2(Vector2.ZERO, hud.size).encloses(r), "підпис у межах екрана біля %s" % cell)
+		assert_false(r.intersects(hud._local_rect(end_turn)), "не на «Завершити хід» біля %s" % cell)
+		assert_false(r.intersects(hud._local_rect(confirm)), "не на «Підтвердити» біля %s" % cell)
+		assert_false(r.intersects(hud._local_rect(row)), "не на ряді дій біля %s" % cell)
+		# Ряд дій стає саме туди, де підпис щойно стояв: другий підпис мусить піти геть від нього.
+		row.position = r.get_center() - row.size * 0.5
+		hud._on_mine_caption(0, cell)
+		if _mine_tag().visible:
+			assert_false(_tag_rect(_mine_tag()).intersects(hud._local_rect(row)), "обходить ряд, що став на його місце, біля %s" % cell)
+			assert_ne(_mine_tag().position, r.position, "підпис зрушив з зайнятого місця біля %s" % cell)
+		row.position = hud.size - row.size - Vector2(24.0, 12.0)
+	assert_gt(shown, 0, "хоч один підпис показано")
+	assert_not_null(rig)
