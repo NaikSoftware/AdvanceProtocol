@@ -172,7 +172,7 @@ var _fire_mat: ShaderMaterial
 var _timer: Timer
 var _frame: int = 0
 var _warm: MeshInstance3D = null
-## Тіла бійців (Casualties), показані глядачу, і їхні сітки: одна на вигляд (набір, тип).
+## Тіла бійців (Casualties), показані глядачу, і їхні меші: один на вигляд (набір, тип).
 var _bodies: Array[Casualties.Body] = []
 ## Усі записи стану в його порядку, показані й ні: раніші записи тайла займають місця на мосту однаково для всіх
 ## глядачів, тож тіло не пересувається, коли глядачеві показують інше.
@@ -639,6 +639,13 @@ static var _body_contact_mat: ShaderMaterial
 var _body_contacts: MultiMeshInstance3D = null
 
 
+## Пляма контакту під тілом, що лежить у `spot` (body_transform): під видимою серединою тіла, а не під півотом — меш
+## лежить на BODY_VISIBLE_SHIFT убік гвинтівки.
+static func contact_transform(spot: Transform3D) -> Transform3D:
+	var size := Basis.from_scale(Vector3(BODY_CONTACT_SIZE.x, 1.0, BODY_CONTACT_SIZE.y))
+	return Transform3D(spot.basis * size, body_centre(spot) + Vector3(0.0, 0.01, 0.0))
+
+
 func _contact_patches(spots: Array[Transform3D]) -> MultiMeshInstance3D:
 	if _body_contact_mat == null:
 		_body_contact_mat = ShaderMaterial.new()
@@ -660,8 +667,7 @@ func _contact_patches(spots: Array[Transform3D]) -> MultiMeshInstance3D:
 	mm.instance_count = spots.size()
 	var k: float = clampf(BODY_CONTACT_ALPHA / WeatherRig.unit_contact, 0.0, 1.0)
 	for i in spots.size():
-		var size := Basis.from_scale(Vector3(BODY_CONTACT_SIZE.x, 1.0, BODY_CONTACT_SIZE.y))
-		mm.set_instance_transform(i, Transform3D(spots[i].basis * size, spots[i].origin + Vector3(0.0, 0.01, 0.0)))
+		mm.set_instance_transform(i, contact_transform(spots[i]))
 		mm.set_instance_custom_data(i, Color(0.0, k, 0.0, 0.0))
 	var mi := MultiMeshInstance3D.new()
 	mi.name = "BodyContacts"
@@ -703,7 +709,7 @@ const BODY_JITTER: float = 0.0375
 const BODY_TURN: float = 0.8
 ## Довга вісь тіла — не ближче за 35° до погляду камери: уздовж погляду тіло скорочується в стоячу фігуру.
 const BODY_VIEW_MIN: float = 0.6109
-## На мосту тіла лежать поперек настилу, а одне-два — уздовж нього (BODY_DECK_ALONG_TURN ≈ 90°), одне головою
+## На мосту тіла лежать поперек настилу, а одне — уздовж нього (BODY_DECK_ALONG_TURN ≈ 90°), одне головою
 ## в інший бік: рівним рядом однаково повернутих тіл міст читався як шеренга. Поперек тіло займає вздовж
 ## настилу свою ширину (0,19), уздовж — довжину (0,225), тож поворот на 90° коштує лише 0,035, а переворот
 ## на 180° — нічого. Кожне тіло зсунуте вбік на BODY_DECK_SHIFT (0,5–1 м, бік за сідом), але не за поручні
@@ -714,12 +720,13 @@ const BODY_DECK_SHIFT: Vector2 = Vector2(0.06, 0.12)
 const BODY_DECK_HALF_ROAD: float = 0.23
 const BODY_DECK_RAIL_GAP: float = 0.005
 const BODY_DECK_ALONG_TURN: float = PI * 0.5
-## Розкид кута «уздовж»: одне таке тіло — 80–90°, двоє — майже рівно 90°, бо двоє скоса ряду не вміщають.
+## Розкид кута «уздовж»: 80–90°; двоє «уздовж» ряд у тайлі вміщав би лише майже рівно на 90° і з меншими проміжками.
 const BODY_DECK_ALONG_SPREAD: float = deg_to_rad(10.0)
 ## Решта тіл — до ±3° від поперек.
 const BODY_DECK_TURN: float = deg_to_rad(3.0)
-const BODY_DECK_GAPS: Array[float] = [0.02, 0.04, 0.08]
-const BODY_DECK_ROW: float = 0.98
+## Найменший проміжок — 0,22 м між видимими краями: на 0,16 м голова одного тіла торкалась тулуба сусіда.
+const BODY_DECK_GAPS: Array[float] = [0.028, 0.056, 0.112]
+const BODY_DECK_ROW: float = 0.995
 ## Тіло, ближче за BODY_DECK_SIDE_APART убік до попереднього, коштує BODY_DECK_SIDE_COST (у квадратах відстані
 ## від сідового місця): сусіди лягають по різні боки настилу, а не однією колоною.
 const BODY_DECK_SIDE_APART: float = 0.06
@@ -749,7 +756,7 @@ const BODY_WIDTH: float = 0.19
 const BODY_LENGTH: float = 0.225
 
 
-## Де й як лежить тіло місця `slot` запису `b` (без пози сітки). Сід — юніт, тайл, номер запису й місце,
+## Де й як лежить тіло місця `slot` запису `b` (без пози меша). Сід — юніт, тайл, номер запису й місце,
 ## тож те саме тіло лягає однаково щоразу, а два записи на одному тайлі — не одне на одному. Висота — ґрунт
 ## під ним, на мосту — настил. `board` (як у стані) — щоб на мосту лягти рядом через настил, а біля води
 ## не зайти у воду; без нього — як на полі. `earlier` — записи, що лягли на цей тайл раніше (earlier_on_tile):
@@ -826,7 +833,15 @@ static func body_transform(b: Casualties.Body, slot: int, board: Board = null, e
 					best_clear = clear
 					best = xf
 				if clear >= BODY_SLOT_CLEAR:
-					# не за стоячим від камери — одразу; за ним — найменш сховане, якщо кращого не знайдеться
+					# Не сховане за стоячим (body_hidden: середина чи обидва кінці) — одразу. Біля води такого місця
+					# може не бути: там серед схованих — найменш сховане (hidden_parts), а цілком видне — одразу.
+					if not near_water:
+						if not body_hidden(xf, standing):
+							return xf
+						if hidden_least == 99:
+							hidden_least = 0
+							hidden = xf
+						continue
 					var parts: int = hidden_parts(xf, standing)
 					if parts == 0:
 						return xf
@@ -943,7 +958,7 @@ static func _crew_body(b: Casualties.Body, slot: int, centre: Vector3, near_wate
 	return null
 
 
-## Видима середина тіла: сітка лежить не на півоті, а зсунута в бік гвинтівки (+x тіла) на BODY_VISIBLE_SHIFT —
+## Видима середина тіла: меш лежить не на півоті, а зсунута в бік гвинтівки (+x тіла) на BODY_VISIBLE_SHIFT —
 ## прямокутник тіла (BODY_LENGTH × BODY_WIDTH) стоїть тут, і відстані між тілами око міряє від неї.
 static func body_centre(xf: Transform3D) -> Vector3:
 	return xf.origin + Vector3(xf.basis.x.x, 0.0, xf.basis.x.z).normalized() * BODY_VISIBLE_SHIFT
@@ -1050,8 +1065,7 @@ static func _deck_body(b: Casualties.Body, slot: int, along_z: bool, standing: A
 		var placed_score: float = -INF
 		for attempt in BODY_DECK_ATTEMPTS:
 			var tried: Dictionary = _deck_place(b, deck, along_z, standing, rects, attempt)
-			# спроба, де якесь тіло лягло під ноги чи на інше, гірша за будь-яку чисту
-			var score: float = deck_spread_score(tried["mine"]) + (0.0 if tried["clean"] else -100.0)
+			var score: float = _attempt_score(tried)
 			if score > placed_score:
 				placed_score = score
 				placed = tried["placed"]
@@ -1180,6 +1194,12 @@ static func _deck_targets(b: Casualties.Body, deck: Dictionary, along_z: bool, a
 	return out
 
 
+## Оцінка спроби розкладу (_deck_place): розкид тіл (deck_spread_score), а спроба, де якесь тіло лягло під ноги чи на
+## інше (`clean` — ні), гірша за будь-яку чисту, хай який у неї розкид.
+static func _attempt_score(tried: Dictionary) -> float:
+	return deck_spread_score(tried["mine"]) + (0.0 if tried["clean"] else -100.0)
+
+
 ## Наскільки тіла одного запису на мосту не колона (1 і більше — досить), за видимими серединами: убік вони займають
 ## щонайменше BODY_DECK_SPAN чистої ширини настилу, троє й більше — ще й обидві крайні третини, а сусідні проміжки між
 ## серединами вздовж настилу різняться щонайменше в BODY_DECK_GAP_RATIO раза. Одне тіло — завжди 1.
@@ -1304,20 +1324,26 @@ static func _deck_layout(b: Casualties.Body) -> Dictionary:
 		var tmp: int = order[k]
 		order[k] = order[j]
 		order[j] = tmp
-	var two: bool = rng.randf() < 0.5
+	var gaps_sum: float = 0.0
+	for g: float in BODY_DECK_GAPS:
+		gaps_sum += g
+	# двоє «уздовж» — лише якщо ряд із ними вміщається в тайл (з нинішніми проміжками — ні, тож одне)
+	var two: bool = rng.randf() < 0.5 and BODY_LENGTH * 2.0 + BODY_WIDTH * 2.0 + gaps_sum <= BODY_DECK_ROW
 	var turns := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
 	for k in 4:
 		turns[k] = rng.randf_range(-BODY_DECK_TURN, BODY_DECK_TURN)
 	var sign: float = 1.0 if rng.randf() < 0.5 else -1.0
-	turns[order[0]] = sign * (BODY_DECK_ALONG_TURN - rng.randf_range(0.0, BODY_DECK_ALONG_SPREAD))
+	# Тіло «уздовж» — з краю ряду, і найбільший проміжок — з його боку: голова в нього дивиться вздовж настилу, і
+	# посеред ряду вона впиралась у тулуб сусіда.
+	var along_slot: int = 0 if rng.randf() < 0.5 else 3
+	turns[along_slot] = sign * (BODY_DECK_ALONG_TURN - rng.randf_range(0.0, BODY_DECK_ALONG_SPREAD))
 	if two:
-		turns[order[1]] = -sign * BODY_DECK_ALONG_TURN
-	var gaps: Array = BODY_DECK_GAPS.duplicate()
-	for k in range(gaps.size() - 1, 0, -1):
-		var j: int = rng.randi_range(0, k)
-		var tmp: float = gaps[k]
-		gaps[k] = gaps[j]
-		gaps[j] = tmp
+		turns[order[1] if order[1] != along_slot else order[2]] = -sign * BODY_DECK_ALONG_TURN
+	var rest: Array = BODY_DECK_GAPS.slice(0, BODY_DECK_GAPS.size() - 1)
+	if rng.randf() < 0.5:
+		rest.reverse()
+	var widest: float = BODY_DECK_GAPS[-1]
+	var gaps: Array = [widest] + rest if along_slot == 0 else rest + [widest]
 	# ряд, що не вміщається в тайл, стискається: «уздовж» тіла — ближче до рівно 90°, решта — до поперек
 	for _i in 12:
 		var row: float = 0.0

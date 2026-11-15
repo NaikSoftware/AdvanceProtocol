@@ -28,7 +28,7 @@ static func of(view: Node3D, rig: IsoCameraRig) -> Rect2:
 	return box
 
 
-## Сітка без поверхонь (відділення, в якого не лишилось стоячих): на екрані нічого, а опукла оболонка
+## Меш без поверхонь (відділення, в якого не лишилось стоячих): на екрані нічого, а опукла оболонка
 ## порожнього мешу — помилка рушія.
 static func _empty_mesh(vi: VisualInstance3D) -> bool:
 	return vi is MeshInstance3D and ((vi as MeshInstance3D).mesh == null or (vi as MeshInstance3D).mesh.get_surface_count() == 0)

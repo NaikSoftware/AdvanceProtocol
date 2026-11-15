@@ -1269,7 +1269,7 @@ func test_unit_on_a_bridge_stands_level_on_the_deck() -> void:
 
 
 ## Тіла на мосту — на висоті настилу, між поручнями (найвужча проїжджа частина — 0,46) і в межах свого тайла;
-## не шеренгою й не колоною посередині: одне-два лежать уздовж настилу, одне головою в інший бік, кожне
+## не шеренгою й не колоною посередині: одне лежить уздовж настилу, одне головою в інший бік, кожне
 ## зсунуте вбік на 0,06–0,12 (чи впритул до поручня), одне — впритул до поручня, сусідні проміжки — вдвічі.
 func test_bodies_on_a_bridge_lie_along_the_deck_at_its_height() -> void:
 	var t := _relief()
@@ -1318,12 +1318,12 @@ func test_bodies_on_a_bridge_lie_along_the_deck_at_its_height() -> void:
 			var gaps: Array[float] = []
 			for i in range(1, strips.size()):
 				gaps.append(strips[i][0] - strips[i - 1][0] - (strips[i][1] + strips[i - 1][1]) * 0.5)
-			assert_gte(gaps.min(), 0.02 - 0.0001, "тіла на настилі не налягають (проміжок від 0,16 м)")
+			assert_gte(gaps.min(), 0.028 - 0.0001, "голова не торкається сусіда (проміжок від 0,22 м)")
 			for i in range(1, gaps.size()):
 				var ratio: float = maxf(gaps[i], gaps[i - 1]) / minf(gaps[i], gaps[i - 1])
 				assert_gte(ratio, 2.0 - 0.01, "сусідні проміжки різняться щонайменше вдвічі")
 			assert_gt(at_rail, 0, "одне тіло лежить упритул до поручня")
-	assert_gt(widest, deg_to_rad(75.0), "одне-два тіла лежать уздовж настилу")
+	assert_gt(widest, deg_to_rad(75.0), "одне тіло лежить уздовж настилу")
 	assert_gt(flipped, 0, "одне тіло лежить головою в інший бік")
 
 
@@ -1552,7 +1552,7 @@ func test_tipping_figure_ends_where_its_body_lies() -> void:
 
 
 ## Посеред руху бійці дивляться туди, куди йде відділення, а не тримають старий напрям до кінця шляху:
-## після повороту на південь, поки твін ще йде, сітка фігур уже побудована на південь.
+## після повороту на південь, поки твін ще йде, меш фігур уже побудований на південь.
 func test_squad_figures_turn_mid_path_not_at_the_end() -> void:
 	UnitSilhouettes.use_models({0: UnitModelFixture.soldier(), 1: UnitModelFixture.tube_soldier()})
 	view.bind(_unit(0, 0, Vector2i(0, 0), 2))  # на схід
@@ -1568,15 +1568,15 @@ func test_squad_figures_turn_mid_path_not_at_the_end() -> void:
 		if IsoCameraRig.world_to_cell(view.position) == Vector2i(2, 2) and tween.is_running():
 			checked += 1
 			assert_eq(view._built_face, south, "на південній ділянці фігури вже дивляться на південь")
-			assert_ne(hull.mesh, east_mesh, "сітку перебудовано посеред руху")
-			# на вузлі — та сама сітка, що кешована для напряму на південь (сітки кешуються за напрямом)
+			assert_ne(hull.mesh, east_mesh, "меш перебудовано посеред руху")
+			# на вузлі — той самий меш, що кешований для напряму на південь (меші кешуються за напрямом)
 			var south_mesh: ArrayMesh = UnitSilhouettes.merged_mesh(0, view._standing, view._set_id(), view._drones_left, view._layout, 4)
-			assert_eq(hull.mesh, south_mesh, "фігури — з сітки напряму на південь")
+			assert_eq(hull.mesh, south_mesh, "фігури — з меша напряму на південь")
 	assert_gt(checked, 0, "передумова: кадри на південній ділянці")
 	UnitSilhouettes.use_models({})
 
 
-## Кадром після bind сітки фігур усіх 8 напрямів уже в кеші: поворот посеред руху бере готову, а не зливає нову.
+## Кадром після bind меші фігур усіх 8 напрямів уже в кеші: поворот посеред руху бере готову, а не зливає нову.
 ## Повторний bind того самого складу нічого не зливає й не планує.
 func test_bind_warms_figure_meshes_for_every_facing() -> void:
 	UnitSilhouettes.use_models({0: UnitModelFixture.soldier(), 1: UnitModelFixture.tube_soldier()})
@@ -1591,7 +1591,7 @@ func test_bind_warms_figure_meshes_for_every_facing() -> void:
 	var cached: int = UnitSilhouettes._merged_meshes.size()
 	for f in 8:
 		UnitSilhouettes.merged_mesh(0, view._standing, view._set_id(), view._drones_left, view._layout, f)
-	assert_eq(UnitSilhouettes._merged_meshes.size(), cached, "жодної нової сітки — усі 8 напрямів злиті при bind")
+	assert_eq(UnitSilhouettes._merged_meshes.size(), cached, "жодного нового меша — усі 8 напрямів злиті при bind")
 	UnitSilhouettes.use_models({})
 
 
@@ -1789,3 +1789,24 @@ func test_field_bodies_do_not_hide_behind_standing_soldiers() -> void:
 				for slot in range(first, 4):
 					var xf: Transform3D = WreckLayer.body_transform(b, slot, _river_board)
 					assert_false(WreckLayer.body_hidden(xf, standing), "юніт %d напрям %d місце %d: тіло за стоячим" % [unit_id, facing, slot])
+
+
+## Пляма контакту під тілом лежить під його видимою серединою (меш зсунутий від півота в бік гвинтівки), а не під
+## півотом.
+func test_body_contact_patch_sits_under_the_visible_centre() -> void:
+	var spot := Transform3D(Basis(Vector3.UP, 0.7), Vector3(4.0, 0.02, 1.0))
+	var at: Vector3 = WreckLayer.contact_transform(spot).origin
+	var want: Vector3 = WreckLayer.body_centre(spot)
+	assert_almost_eq(Vector2(at.x, at.z), Vector2(want.x, want.z), Vector2(0.0001, 0.0001), "пляма — під видимою серединою")
+	assert_gt(Vector2(at.x - spot.origin.x, at.z - spot.origin.z).length(), 0.03, "а не під півотом")
+
+
+## Спроба розкладу, де тіло лягло під ноги стоячому чи на інше тіло, програє будь-якій чистій — навіть тоді, коли в неї
+## ідеальний розкид, а в чистої — колона.
+func test_a_clean_deck_attempt_beats_an_unclean_one() -> void:
+	var spread: Array = [[-0.3, -0.11, 0.095, 0.1125], [0.0, 0.0, 0.095, 0.1125], [0.4, 0.11, 0.095, 0.1125]]
+	var file: Array = [[-0.3, 0.0, 0.095, 0.1125], [0.0, 0.0, 0.095, 0.1125], [0.3, 0.0, 0.095, 0.1125]]
+	var unclean: Dictionary = {"placed": {}, "mine": spread, "clean": false}
+	var clean: Dictionary = {"placed": {}, "mine": file, "clean": true}
+	assert_gt(WreckLayer.deck_spread_score(spread), WreckLayer.deck_spread_score(file), "передумова: розкид кращий у нечистої")
+	assert_gt(WreckLayer._attempt_score(clean), WreckLayer._attempt_score(unclean), "чиста спроба виграє")

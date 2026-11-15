@@ -160,10 +160,11 @@ falls back to the box placeholder, so a model may land one type at a time.
   round the tile or further out. Next to water no corner of a body passes 0.3 tile from the cell's
   centre, where visible water may begin. On a bridge the bodies lie at deck height through the
   deck, neither a parade nor a single file down its middle: most lie across it within 3° of
-  square, one or two along it (80–90°), one head the other way; each sits 0.5–1 m to one side of
-  the deck's axis and one against a railing, always inside the railings (the narrowest roadway is
-  0.46 tile); the gaps between neighbours are 0.16, 0.32 and 0.64 m in a seeded order, so next
-  gaps differ at least twofold, and the row stays within its tile. With soldiers still standing
+  square, one along it (80–90°; two along it no longer fit the tile with these gaps), one head the
+  other way; each sits 0.5–1 m to one side of the deck's axis and one against a railing, always
+  inside the railings (the narrowest roadway is 0.46 tile); the gaps between neighbours' visible
+  edges are 0.22, 0.45 and 0.9 m in a seeded order, so next gaps differ at least twofold and no
+  head touches the next torso, and the row stays within its tile. With soldiers still standing
   on the bridge, or bodies already lying on that tile, each new body moves to the nearest spot on
   the deck that keeps clear of both, preferably on the other side of the deck from the body before
   it, and the bodies of one hit still do not form a file. Measured on each body's visible centre
