@@ -366,9 +366,10 @@ static func _slot(layout: int, i: int) -> Vector3:
 	return _layouts[layout][i]
 
 
-## Найменший проміжок між першими `up` стоячими поперек погляду камери, коли відділення повернуте на `yaw`:
-## менший за ширину бійця — і з камери двоє зливаються в одну фігуру з двома головами.
-static func screen_gap(layout: int, _yaw: float, up: int) -> float:
+## Найменший проміжок між першими `up` стоячими розкладки `layout` поперек погляду камери: менший за ширину
+## бійця — і з камери двоє зливаються в одну фігуру з двома головами. Напряму відділення тут нема — місця
+## стоять у світі, повертаються лише фігури.
+static func screen_gap(layout: int, up: int) -> float:
 	var cam: float = deg_to_rad(IsoCameraRig.YAW_DEGREES)
 	var across := Vector2(cos(cam), -sin(cam))
 	var xs: Array[float] = []
@@ -382,16 +383,16 @@ static func screen_gap(layout: int, _yaw: float, up: int) -> float:
 	return gap
 
 
-## Розкладка відділення `seed` (id юніта), поверненого на `yaw`: перша, починаючи від сіда, де жодні два з
+## Розкладка відділення `seed` (id юніта): перша, починаючи від сіда, де жодні два з
 ## чотирьох не стоять один за одним уздовж погляду; коли такої нема — найкраща. Обирається за всіма чотирма,
 ## тож годиться для будь-якої кількості стоячих: коли фігура падає, решта не перескакує.
-static func pick_layout(seed: int, yaw: float) -> int:
+static func pick_layout(seed: int) -> int:
 	var up: int = _FIGURE_SLOTS.size()
 	var best: int = 1
 	var best_gap: float = -1.0
 	for n in LAYOUT_COUNT - 1:
 		var k: int = 1 + posmod(seed + n, LAYOUT_COUNT - 1)
-		var gap: float = screen_gap(k, yaw, up)
+		var gap: float = screen_gap(k, up)
 		if gap >= MIN_SCREEN_GAP:
 			return k
 		if gap > best_gap:

@@ -281,18 +281,49 @@ func test_crown_on_higher_ground_covers_a_slot_it_would_miss_on_flat() -> void:
 	assert_true(ForestLayer.covers_slots(p, 0.5, 0.44, u, dir, slope, 0.15), "кущ на 1,2 м вище — закриває")
 
 
-## Розчинена крона прозора лише довкола показаних юнітів: матеріал кольору отримує їхні точки (клітинка на висоті
-## середини фігури) і їх кількість; без юнітів — жодної, і розчинена крона непрозора.
-func test_fade_colour_gets_the_shown_unit_points() -> void:
+## Розчинена крона прозора лише довкола юнітів під нею: матеріал кольору отримує їхні точки (клітинка на
+## висоті середини фігури) — лише тих, над ким крону справді розчинено; юніт у полі точки не займає.
+func test_fade_colour_gets_only_the_units_under_a_faded_crown() -> void:
 	var f := _layer(&"summer")
-	f.set_reveal_cells([Vector2i(5, 5), Vector2i(6, 5)] as Array[Vector2i])
+	f.set_reveal_cells([Vector2i(5, 5), Vector2i(-40, -40)] as Array[Vector2i])
+	assert_true(f._fading.has(Vector2i(5, 5)), "передумова: над (5, 5) крону розчинено")
+	assert_false(f._fading.has(Vector2i(-40, -40)), "далеко від лісу — нічого не розчинено")
 	for m: ShaderMaterial in f._fade_color.values():
-		assert_eq(m.get_shader_parameter("fade_count"), 2)
+		assert_eq(m.get_shader_parameter("fade_count"), f._fading.size())
 		var pts: PackedVector4Array = m.get_shader_parameter("fade_points")
 		assert_eq(pts[0], Vector4(5.0, ForestLayer.FIGURE_MID_Y, 5.0, 0.0), "середина фігури над клітинкою")
 	f.set_reveal_cells([] as Array[Vector2i])
 	for m: ShaderMaterial in f._fade_color.values():
 		assert_eq(m.get_shader_parameter("fade_count"), 0)
+
+
+## Наближення через DETAIL_ZOOM навіть на крок, менший за FADE_ZOOM_STEP, перераховує розчинення: підлісок,
+## пропущений далі за DETAIL_ZOOM, мусить розчинитись над юнітом, щойно з'являється.
+func test_crossing_detail_zoom_refades_even_on_a_small_step() -> void:
+	var f := _layer(&"summer")
+	var step: float = ForestLayer.FADE_ZOOM_STEP * 0.25
+	f.set_zoom(ForestLayer.DETAIL_ZOOM + step)
+	f.set_reveal_cells([Vector2i(5, 5)] as Array[Vector2i])
+	assert_almost_eq(f._fade_zoom, ForestLayer.DETAIL_ZOOM + step, 1e-6, "передумова: розчинено на дальньому зумі")
+	f.set_zoom(ForestLayer.DETAIL_ZOOM - step)
+	assert_almost_eq(f._fade_zoom, ForestLayer.DETAIL_ZOOM - step, 1e-6, "перетин DETAIL_ZOOM — перерахунок")
+	f.set_zoom(ForestLayer.DETAIL_ZOOM - step * 2.0)
+	assert_almost_eq(f._fade_zoom, ForestLayer.DETAIL_ZOOM - step, 1e-6, "малий крок без перетину — без перерахунку")
+
+
+## Юнітів під кронами більше, ніж точок у шейдері: розчинені крони гаснуть цілими до 35 % (fade_count −1),
+## а не стають непрозорими над тим, хто не вліз у список.
+func test_more_units_than_points_fade_whole_crowns_never_opaque() -> void:
+	var f := _layer(&"summer")
+	var cells: Array[Vector2i] = []
+	for y in range(1, 11):
+		for x in range(1, 11):
+			cells.append(Vector2i(x, y))
+	f.set_reveal_cells(cells)
+	assert_gt(f._fading.size(), ForestLayer.FADE_POINTS, "передумова: під кронами більше юнітів, ніж точок")
+	for m: ShaderMaterial in f._fade_color.values():
+		assert_eq(m.get_shader_parameter("fade_count"), -1, "ціла крона, а не непрозора")
+		assert_true(m.shader.code.contains("if (fade_count < 0)"), "шейдер знає про переповнення")
 
 
 ## Три юніти поряд — те саме для кожного.

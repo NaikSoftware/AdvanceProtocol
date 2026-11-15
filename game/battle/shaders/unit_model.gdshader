@@ -27,15 +27,23 @@ const float TREAD_PERIOD = 0.25;
 const float TREAD_STRIP = 0.0625;
 // Загиблий лише темніший за живого й трохи брудніший — та сама тканина, не інша форма й не мох: стоячі
 // фігури — це HP відділення, тож лежачі не сміють із ними зливатися. Тьмяніє (FALLEN_DARK, лінійний
-// множник), хрома — як у живого до потемніння (FALLEN_SAT), і лягає ледь тепліший відтінок грязюки
+// множник), насиченість — як у живого до потемніння (FALLEN_SAT), і лягає ледь тепліший відтінок грязюки
 // (FALLEN_MUD: сильніший зсував тон на 9–10° від живого, і тіла читались іншою формою). Грані, звернені
-// до неба, приглушені (FALLEN_TOP): під похмурим небом вони світліли й тіло на ріллі читалось мохом. Слабке
-// власне світло (FALLEN_FILL) підіймає тіньовий бік: без нього затінена половина тіла сідала в чорне.
+// до неба, приглушені (FALLEN_TOP): під сонцем вони світлішали за ріллю. Слабке власне світло
+// (FALLEN_FILL) підіймає тіньовий бік: без нього затінена половина тіла сідала в чорне.
+// Під похмурим небом (River) світло рівне, а мокра рілля темна й сіра: тіло з тими самими множниками
+// читалось сірою грудкою (насиченість ~4, тон зсунутий у зелень, перепад усередині тіла 7 L*). Там свої
+// значення (`_OVERCAST`, змішуються за sky_clear): темніє менше, тепліший хакі, верх не приглушений, а
+// грані, звернені вбік і вниз, темнішають (FALLEN_SIDE_OVERCAST) — перепад тримають складки, не підсвітка.
 const float FALLEN_DARK = 0.25;
+const float FALLEN_DARK_OVERCAST = 0.22;
 const float FALLEN_SAT = 1.0;
-const float FALLEN_SAT_OVERCAST = 0.5;
+const float FALLEN_SAT_OVERCAST = 0.7;
 const vec3 FALLEN_MUD = vec3(1.03, 1.0, 0.96);
+const vec3 FALLEN_MUD_OVERCAST = vec3(1.07, 1.0, 0.88);
 const float FALLEN_TOP = 0.8;
+const float FALLEN_TOP_OVERCAST = 1.15;
+const float FALLEN_SIDE_OVERCAST = 1.0;
 const float FALLEN_FILL = 0.45;
 // Найтемніше на тілі (гвинтівка) — темно-сіре, не чорна діра: власне світло пропорційне кольору її не підіймає.
 const float FALLEN_FLOOR = 0.004;
@@ -73,9 +81,12 @@ void fragment() {
 		float y = dot(col, vec3(0.2126, 0.7152, 0.0722));
 		float sky = clamp((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).y, 0.0, 1.0);
 		float sun = smoothstep(0.3, 0.7, sky_clear);
-		// Під похмурим небом хрома — FALLEN_SAT_OVERCAST: оливкове тіло на мокрій темній ріллі читалось мохом.
 		float sat = mix(FALLEN_SAT_OVERCAST, FALLEN_SAT, sun);
-		col = max(mix(vec3(y), col, sat), vec3(0.0)) * FALLEN_MUD * FALLEN_DARK * mix(1.0, FALLEN_TOP, sky);
+		vec3 mud = mix(FALLEN_MUD_OVERCAST, FALLEN_MUD, sun);
+		float dark = mix(FALLEN_DARK_OVERCAST, FALLEN_DARK, sun);
+		float top = mix(FALLEN_TOP_OVERCAST, FALLEN_TOP, sun);
+		float side = mix(mix(FALLEN_SIDE_OVERCAST, 1.0, sky), 1.0, sun);
+		col = max(mix(vec3(y), col, sat), vec3(0.0)) * mud * dark * mix(1.0, top, sky) * side;
 		// Лише під ясним небом: там сонце лишає тіньовий бік у чорному. Під похмурим (River) світло й так
 		// рівне, а ґрунт темний — підсвічене тіло читалось би світлішим за ріллю й зсувало тон.
 		EMISSION = (col * FALLEN_FILL + vec3(FALLEN_FLOOR)) * sun;

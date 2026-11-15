@@ -2186,7 +2186,9 @@ func test_a_falling_figure_survives_the_end_of_the_batch() -> void:
 	assert_true(is_instance_valid(view), "передумова: вигляд відділення ще є")
 	if is_instance_valid(view):
 		assert_gt(view._silhouette.get_node("Hull").get_child_count(), base, "передумова: боєць почав перекидатися")
-		await get_tree().create_timer(UnitView.FALL_TIP_SEC * 0.75).timeout
+		# без реального часу: усі живі твіни (пауза пакета й саме перекидання) — на три чверті перекидання
+		for t: Tween in get_tree().get_processed_tweens():
+			t.custom_step(UnitView.FALL_TIP_SEC * 0.75)
 		assert_true(is_instance_valid(view), "три чверті перекидання по тому — вигляд відділення ще є")
 		assert_true(is_instance_valid(view) and view._silhouette.get_node("Hull").get_child_count() > base, "і боєць ще перекидається")
 	UnitSilhouettes.use_models({})

@@ -466,12 +466,13 @@ func _follow(s: float, line: PackedVector2Array, acc: PackedFloat32Array, tangen
 func _process(_delta: float) -> void:
 	if rotation.y != _posed_yaw:
 		_pose(position)
+	# Фігури повертаються разом із вузлом — і посеред руху (move_along веде той самий твін), а не
+	# ривком наприкінці: щойно кут перейшов у сусідні 45°, ставимо сітку того напряму (кеш за напрямом).
+	if _has_figures() and posmod(roundi(rad_to_deg(rotation.y) / 45.0), 8) != _built_face:
+		_set_standing(_standing)
 	_hold_slots()
 	if _face_tween == null or not _face_tween.is_running():
 		set_process(false)
-		# поворот скінчився: фігури стають новим напрямом (місця — ті самі в світі)
-		if _has_figures() and posmod(roundi(rad_to_deg(rotation.y) / 45.0), 8) != _built_face:
-			_set_standing(_standing)
 
 
 ## Місця бійців стоять у світі, а не повертаються з відділенням: вузол сітки крутиться назад на кут вузла.
@@ -692,8 +693,8 @@ func _set_standing(count: int) -> void:
 	if count < _standing and is_inside_tree():
 		_tip_over(count, _standing, _layout)
 	_standing = count
-	# Розкладка — за id юніта й нинішнім напрямом: стоячі не стають один за одним уздовж погляду камери.
-	_layout = UnitSilhouettes.pick_layout(_unit_id, rotation.y)
+	# Розкладка — за id юніта: місця стоять у світі, тож від напряму не залежить і посеред руху не скаче.
+	_layout = UnitSilhouettes.pick_layout(_unit_id)
 	_built_face = posmod(roundi(rad_to_deg(rotation.y) / 45.0), 8)
 	var hull := _silhouette.get_node("Hull") as MeshInstance3D
 	hull.mesh = UnitSilhouettes.merged_mesh(_type_id, count, _set_id(), _drones_left, _layout, _face_index_of(_built_face))
@@ -719,17 +720,27 @@ func _tip_over(from: int, to: int, layout: int) -> void:
 		_tipping[i] = mi
 
 
-## Куди лягає тіло місця (світ, `WreckLayer.body_transform`): фігура, що перекидається, за той самий час
-## сповзає туди, і тіло з'являється там, де перекидання скінчилось, а не за метр від нього.
+## Де й як лягає тіло місця (світ, `WreckLayer.body_transform`): фігура, що перекидається, за той самий час
+## сповзає туди й повертається вздовж тіла, і тіло з'являється там, де перекидання скінчилось, а не за метр
+## від нього і не впоперек.
 func aim_tips(targets: Dictionary) -> void:
 	var hull := _silhouette.get_node("Hull") as Node3D
+	var hull_yaw: float = atan2(hull.global_basis.z.x, hull.global_basis.z.z)
 	for slot: int in targets:
 		var mi: MeshInstance3D = _tipping.get(slot)
 		if mi == null or not is_instance_valid(mi):
 			continue
-		var at: Vector3 = hull.global_transform.affine_inverse() * (targets[slot] as Transform3D).origin
+		var xf: Transform3D = targets[slot]
+		var at: Vector3 = hull.global_transform.affine_inverse() * xf.origin
 		at.y = mi.position.y
-		mi.create_tween().tween_property(mi, "position", at, FALL_TIP_SEC)
+		# вісь тіла без напрямку: з двох протилежних кутів — ближчий, щоб фігура не крутилась на півоберта
+		var yaw: float = atan2(xf.basis.z.x, xf.basis.z.z) - hull_yaw
+		var d: float = wrapf(yaw - mi.rotation.y, -PI, PI)
+		if absf(d) > PI * 0.5:
+			d -= signf(d) * PI
+		var tw: Tween = mi.create_tween().set_parallel()
+		tw.tween_property(mi, "position", at, FALL_TIP_SEC)
+		tw.tween_property(mi, "rotation:y", mi.rotation.y + d, FALL_TIP_SEC)
 
 
 ## Твінує _silhouette, а не self: self.scale належить play_destroyed() відділення, і два

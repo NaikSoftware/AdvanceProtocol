@@ -128,6 +128,8 @@ var _fade_mat: Dictionary = {}
 var _fade_color: Dictionary = {}
 ## Висота землі під клітинками показаних юнітів — раз на перерахунок розчинення, а не на кожну крону.
 var _reveal_ground: Dictionary = {}
+## Клітинки юнітів, над якими останній перерахунок справді розчинив крону: лише вони — точки шейдера.
+var _fading: Dictionary = {}
 var _atlas_of: Dictionary = {}
 var _arrays: Dictionary = {}
 var _ground_mesh: Mesh
@@ -214,20 +216,26 @@ func set_broken(known: Dictionary) -> void:
 func set_reveal_cells(cells: Array[Vector2i]) -> void:
 	_reveal = cells.duplicate()
 	_apply_fade()
-	for m: ShaderMaterial in _fade_color.values():
-		set_fade_points(m, _reveal)
 
 
-## Точки, довкола яких прозора розчинена крона (veg_body.gdshaderinc, VEG_FADE): клітинки показаних юнітів
-## на висоті середини фігури. Більше за 32 шейдер не бере — решта лишається під розчиненими кронами 35 %.
+## Скільки точок бере шейдер розчинення (`fade_points`).
+const FADE_POINTS: int = 32
+
+
+## Точки, довкола яких прозора розчинена крона (veg_body.gdshaderinc, VEG_FADE; `_FADE_GLSL`): клітинки
+## юнітів, над якими справді розчинено крону, на висоті середини фігури. Якщо їх більше за FADE_POINTS,
+## шейдер отримує fade_count = −1 і розчиняє кожну вибрану крону цілою до 35 %: інакше юніт поза списком
+## лишився б під непрозорою кроною.
 static func set_fade_points(m: ShaderMaterial, cells: Array) -> void:
 	var pts := PackedVector4Array()
-	for c: Vector2i in cells:
-		if pts.size() >= 32:
-			break
-		pts.append(Vector4(c.x, TerrainHeight.ground_y(c.x, c.y) + FIGURE_MID_Y, c.y, 0.0))
-	var count: int = pts.size()
-	pts.resize(32)
+	var count: int = cells.size()
+	if count > FADE_POINTS:
+		push_warning("розчинення: %d юнітів під кронами, шейдер бере %d — крони гаснуть цілими" % [count, FADE_POINTS])
+		count = -1
+	else:
+		for c: Vector2i in cells:
+			pts.append(Vector4(c.x, TerrainHeight.ground_y(c.x, c.y) + FIGURE_MID_Y, c.y, 0.0))
+	pts.resize(FADE_POINTS)
 	m.set_shader_parameter("fade_points", pts)
 	m.set_shader_parameter("fade_count", count)
 
@@ -239,7 +247,8 @@ func set_zoom(zoom: float) -> void:
 	_zoom = zoom
 	for n in _under:
 		n.visible = zoom <= DETAIL_ZOOM
-	if absf(zoom - _fade_zoom) > FADE_ZOOM_STEP:
+	# і на перетині DETAIL_ZOOM: підлісок там з'являється чи зникає, а розчинення його пропускає далі за ним
+	if absf(zoom - _fade_zoom) > FADE_ZOOM_STEP or (zoom <= DETAIL_ZOOM) != (_fade_zoom <= DETAIL_ZOOM):
 		_apply_fade()
 
 
@@ -249,6 +258,9 @@ func set_zoom(zoom: float) -> void:
 const _FADE_GLSL: String = """uniform vec4 fade_points[32];
 uniform int fade_count = 0;
 float fade_far(vec3 v, mat4 view) {
+	if (fade_count < 0) {
+		return 0.0;
+	}
 	vec2 frag = v.xy / max(-v.z, 0.001);
 	float d = 1e6;
 	for (int i = 0; i < fade_count; i++) {
@@ -795,15 +807,20 @@ func _cover(entry: Dictionary, back: Vector3) -> float:
 		var u := Vector2(c)
 		if slope <= 0.0:
 			var reach: float = FADE_MARGIN + UNIT_HALF
-			a = minf(a, smoothstep(reach, reach + FADE_SOFT, p.distance_to(u)))
+			var k: float = smoothstep(reach, reach + FADE_SOFT, p.distance_to(u))
+			if k < 0.999:
+				_fading[c] = true
+			a = minf(a, k)
 			continue
 		# дешеве відсіювання вбік — до рельєфу
 		if absf((p - u).dot(Vector2(-dir.y, dir.x))) - SLOT_SPREAD >= r:
 			continue
 		# рельєф: крона стоїть на своїй землі, юніт — на своїй (кущ на схилі до камери сягає вище в погляд)
 		var base: float = (entry["xf"] as Transform3D).origin.y - float(_reveal_ground[c])
+		# усі юніти під цією кроною, не лише перший: точка потрібна кожному
 		if covers_slots(p, r, top, u, dir, slope, base):
-			return 0.0
+			_fading[c] = true
+			a = 0.0
 	return a
 
 
@@ -832,6 +849,7 @@ func _apply_fade() -> void:
 	var back: Vector3 = cam3d.global_transform.basis.z if cam3d != null else Vector3.UP
 	var faded: Dictionary = {}  ## атлас -> Array[{mesh, xf, rgb, alpha}]
 	_reveal_ground.clear()
+	_fading.clear()
 	for c: Vector2i in _reveal:
 		_reveal_ground[c] = TerrainHeight.ground_y(c.x, c.y)
 	for g: Dictionary in _ring_fadable + _fadable:
@@ -862,6 +880,8 @@ func _apply_fade() -> void:
 	for g: Dictionary in _ring_fadable + _fadable:
 		(g["batch"] as FoliageBatch).upload()
 	_show_fade(faded)
+	for m: ShaderMaterial in _fade_color.values():
+		set_fade_points(m, _fading.keys())
 
 
 ## Прогрів за гейтом (BattleScreen._warm_board): розчинена крона кожного атласу — найближча до

@@ -157,7 +157,8 @@ void fragment() {
 		vec3 q = (VIEW_MATRIX * vec4(fade_points[i].xyz, 1.0)).xyz;
 		d = min(d, length(frag - q.xy / max(-q.z, 0.001)) * -q.z);
 	}
-	ALPHA = mix(near_a, 1.0, smoothstep(FADE_NEAR, FADE_FAR, d));
+	// fade_count < 0: юнітів під кронами більше, ніж точок, — рослина гасне цілою (ForestLayer.set_fade_points)
+	ALPHA = fade_count < 0 ? near_a : mix(near_a, 1.0, smoothstep(FADE_NEAR, FADE_FAR, d));
 #else
 	ALPHA = t.a; ALPHA_SCISSOR_THRESHOLD = cut; ALPHA_ANTIALIASING_EDGE = a2c_edge; ALPHA_TEXTURE_COORDINATE = UV * vec2(textureSize(albedo_tex, 0));
 #endif

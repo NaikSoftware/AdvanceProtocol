@@ -141,8 +141,8 @@ func test_edge_scuff_follows_its_crush_cell_not_its_pivot() -> void:
 	v.seen.fill(0)
 	v.seen[2 * 8 + 2] = 1
 	scars.show_for(v)
-	# точка падіння на межі (2,5; 2) округлюється в розвідану (2, 2), але повалено з нерозвіданої (3, 2)
-	scars.stamp_scuff(Vector3(2.5, 0, 2), Vector3(1.6, 0, 2), Vector2i(3, 2))
+	# точка падіння (2,4; 2) округлюється в розвідану (2, 2), але повалено з нерозвіданої (3, 2)
+	scars.stamp_scuff(Vector3(2.4, 0, 2), Vector3(1.6, 0, 2), Vector2i(3, 2))
 	var on_seen := Vector2i(2 * 32 + 10, 2 * 32 + 16)
 	assert_eq(scars.image().get_pixelv(on_seen).r8, 0, "з нерозвіданої клітинки — сліду нема")
 	v.seen[2 * 8 + 3] = 1
@@ -161,8 +161,8 @@ func test_painted_scuff_disappears_for_a_viewer_who_has_not_seen_its_source() ->
 	a.seen[2 * 8 + 2] = 1
 	b.seen[2 * 8 + 2] = 1
 	scars.show_for(a)
-	scars.stamp_scuff(Vector3(3, 0, 2), Vector3(2, 0, 2), Vector2i(3, 2))
-	var on_seen := Vector2i(2 * 32 + 16, 2 * 32 + 16)
+	scars.stamp_scuff(Vector3(2.4, 0, 2), Vector3(1.6, 0, 2), Vector2i(3, 2))
+	var on_seen := Vector2i(2 * 32 + 10, 2 * 32 + 16)
 	assert_gt(scars.image().get_pixelv(on_seen).r8, 0, "перший глядач бачить слід")
 	scars.show_for(b)
 	assert_eq(scars.image().get_pixelv(on_seen).r8, 0, "другий джерела не розвідав — сліду нема")

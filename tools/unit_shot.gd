@@ -52,6 +52,9 @@ func _ready() -> void:
 	if a.size() > 5 and a[5] == "facings":
 		await _facings(screen, map, out, tag)
 		return
+	if a.size() > 5 and a[5] == "walk":
+		await _walk(screen, map, out, tag)
+		return
 	if a.size() > 5 and a[5] == "squads_forest":
 		await _squads_forest(screen, map, out, tag)
 		return
@@ -672,6 +675,40 @@ func _squads(screen: BattleScreen, map: MapData, out: String, tag: String) -> vo
 
 ## Шостий аргумент squads_forest: стрілецьке відділення на тайлі лісу (крона над ним гасне) і штурмове на полі поруч,
 ## з того боку лісу, куди падає тінь від сонця (у тіні крон). Кадри _forest_z6 і _forest_z20.
+## Шостий аргумент walk: стрілецьке відділення йде на схід два тайли, тоді на південь три (вигляд, move_along
+## як у грі), на зумі 8. Кадри _walk_start (стоїть на схід) і _walk_mid (посеред південної ділянки: бійці
+## мусять дивитись на південь, а не тримати схід до кінця шляху).
+func _walk(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
+	var m: MapData = map.duplicate(true)
+	m.take_over_path(map.resource_path)
+	var need: Array[Vector2i] = [Vector2i.ZERO, Vector2i(1, 0), Vector2i(2, 0), Vector2i(2, 1), Vector2i(2, 2), Vector2i(2, 3)]
+	var c: Vector2i = _field_near_centre(m, false, need)
+	m.spawns = [{"type_id": 0, "owner": 0, "pos": c, "facing": 2}]
+	screen.setup(m, 2, 1)
+	var view: UnitView = screen._unit_views[MatchService.state.unit_at(c).id]
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	rig.center_on(c + Vector2i(1, 1))
+	rig.zoom_by(8.0 / rig.zoom_level)
+	for f in SETTLE_FRAMES * 2:
+		await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	var start: Image = get_viewport().get_texture().get_image()
+	var path: Array[Vector2i] = [c + Vector2i(1, 0), c + Vector2i(2, 0), c + Vector2i(2, 1), c + Vector2i(2, 2), c + Vector2i(2, 3)]
+	view.move_along(path, 0.6)
+	var mid: Image = null
+	var t0: int = Time.get_ticks_msec()
+	while mid == null and Time.get_ticks_msec() - t0 < 8000:
+		await RenderingServer.frame_post_draw
+		if IsoCameraRig.world_to_cell(view.position) == c + Vector2i(2, 2):
+			mid = get_viewport().get_texture().get_image()
+			print("UNIT walk mid: rotation %.1f°, figures built for bucket %d" % [view.rotation_degrees.y, view._built_face])
+	start.save_png("%s/%s_walk_start.png" % [out, tag])
+	if mid != null:
+		mid.save_png("%s/%s_walk_mid.png" % [out, tag])
+	print("UNIT walk at %s" % c)
+	get_tree().quit()
+
+
 ## Вісім відділень на полі, кожне на своєму з 8 напрямів (стрілецьке й штурмове з двома дронами через одне):
 ## жодні двоє бійців не стоять один за одним уздовж погляду на жодному напрямі. Наближення й віддалення.
 func _facings(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:

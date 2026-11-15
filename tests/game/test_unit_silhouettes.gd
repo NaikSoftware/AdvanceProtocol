@@ -131,17 +131,18 @@ func test_squads_take_seeded_layouts_that_keep_standing_figures_apart_on_screen(
 			assert_lte(Vector2(lay.origin.x, lay.origin.z).length(), 0.2, "у межах сліду відділення")
 			assert_lte(absf(wrapf(lay.basis.get_euler().y, -PI, PI)), 0.3 + 0.35 + 0.0001, "поворот фігури до ±37°")
 			assert_eq(lay, UnitSilhouettes.model_figure_transform(i, k), "стала розкладка")
+	# Місця стоять у світі, тож проміжок поперек погляду — властивість розкладки, а не напряму: кожна з
+	# розкладок, яку може взяти відділення, тримає його для будь-якої кількості стоячих (коли фігура падає,
+	# решта не скаче). Повороти фігур на 8 напрямах перевіряє test_unit_view (екранний проміжок фігур).
+	for k in range(1, UnitSilhouettes.LAYOUT_COUNT):
+		for up in range(2, UnitView.SQUAD_FIGURES + 1):
+			assert_gte(UnitSilhouettes.screen_gap(k, up), UnitSilhouettes.MIN_SCREEN_GAP,
+				"розкладка %d, стоїть %d: двоє не стоять один за одним" % [k, up])
 	var picked: Dictionary = {}
-	for facing in 8:
-		var yaw: float = deg_to_rad(UnitView._degrees_for_facing(facing))
-		for unit_id in 12:
-			# одна розкладка на юніт і напрям — для будь-якої кількості стоячих: коли фігура падає, решта не скаче
-			var k: int = UnitSilhouettes.pick_layout(unit_id, yaw)
-			assert_between(k, 1, UnitSilhouettes.LAYOUT_COUNT - 1)
-			for up in range(2, UnitView.SQUAD_FIGURES + 1):
-				assert_gte(UnitSilhouettes.screen_gap(k, yaw, up), UnitSilhouettes.MIN_SCREEN_GAP,
-					"напрям %d, стоїть %d: двоє не стоять один за одним" % [facing, up])
-			picked[k] = true
+	for unit_id in 12:
+		var k: int = UnitSilhouettes.pick_layout(unit_id)
+		assert_between(k, 1, UnitSilhouettes.LAYOUT_COUNT - 1)
+		picked[k] = true
 	assert_gt(picked.size(), 3, "різні відділення — різні розкладки")
 	UnitSilhouettes.use_models({0: UnitModelFixture.soldier()})
 	assert_ne(UnitSilhouettes.merged_mesh(0, 4, 0, 0, 1), UnitSilhouettes.merged_mesh(0, 4, 0, 0, 2), "сітка на розкладку")

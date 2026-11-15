@@ -704,3 +704,6 @@ func test_figures_fell_pauses_only_after_a_hit_on_that_squad() -> void:
 	player._batch = [Events.DamageDealt.new(9, 50, 50), fell] as Array[Events.BattleEvent]
 	player._batch_index = 1
 	assert_null(player._dispatch(fell), "влучання в інше відділення — не чекає")
+	player._batch = [Events.DamageDealt.new(5, 50, 50), Events.UnitTurned.new(5, 2), fell] as Array[Events.BattleEvent]
+	player._batch_index = 2
+	assert_null(player._dispatch(fell), "влучання не просто перед падінням — не те падіння, не чекає")

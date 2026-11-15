@@ -504,7 +504,8 @@ func test_drone_icon_never_overlaps_a_neighbours_bar_or_label() -> void:
 				var w := Vector3(dx, 0.0, dz)
 				var at := Vector2(w.dot(right), w.dot(up))
 				var bar := Rect2(at + Vector2(-bar_size.x * 0.5, bar_y - bar_size.y * 0.5), bar_size)
-				var figures := Rect2(at + Vector2(-0.2, 0.0), Vector2(0.4, 0.225 * up.y))
+				# бійці з трубою: верх труби — 2,4 м (0,30 тайла), вище за голову (0,225)
+				var figures := Rect2(at + Vector2(-0.2, 0.0), Vector2(0.4, 0.30 * up.y))
 				var icon_n: Rect2 = _icon_rect(at + Vector2(0.0, row_y))
 				var tag: String = "нахил %d°, сусід (%d, %d)" % [pitch_deg, dx, dz]
 				assert_false(own.intersects(bar), tag + ": значок на його смузі")
@@ -583,7 +584,9 @@ func test_set_targeted_toggles_the_crosshair() -> void:
 func test_crosshair_sits_below_hp_bar_and_drone_icon() -> void:
 	view.bind(_unit(5))
 	assert_true(view._crosshair.position.y < view._hp_bar.position.y, "приціл мусить лишатись нижче HP-бару")
-	assert_true(view._crosshair.position.y < view._drone_icon.position.y, "приціл мусить лишатись нижче лічильника дронів")
+	# значок дронів намальований вище свого вузла на зсув `offset`: порівнюємо намальоване
+	var icon_y: float = view._drone_icon.position.y + view._drone_icon.offset.y * view._drone_icon.pixel_size
+	assert_true(view._crosshair.position.y < icon_y, "приціл мусить лишатись нижче лічильника дронів")
 
 
 ## Приціл несе колір влучання: гравець читає його як «сюди прилетить».
@@ -1241,8 +1244,8 @@ func test_unit_on_a_bridge_stands_level_on_the_deck() -> void:
 	assert_almost_eq(view.position.y, t.deck_y(bridge) - UnitView.SQUAD_SINK, 0.0001)
 
 
-## Тіло на мосту лежить уздовж настилу на його висоті й не звисає над річкою: від осі мосту не далі за
-## 0,18 тайла (найвужча проїжджа частина — 0,46).
+## Тіла на мосту — на висоті настилу, між поручнями (найвужча проїжджа частина — 0,46) і в межах свого тайла;
+## не шеренгою: одне-два лежать уздовж настилу, одне головою в інший бік, проміжки між сусідами різні.
 func test_bodies_on_a_bridge_lie_along_the_deck_at_its_height() -> void:
 	var t := _relief()
 	TerrainHeight.active = t
@@ -1255,6 +1258,8 @@ func test_bodies_on_a_bridge_lie_along_the_deck_at_its_height() -> void:
 	var water_x: bool = WreckLayer._is_water(_river_board, bridge + Vector2i(1, 0)) or WreckLayer._is_water(_river_board, bridge + Vector2i(-1, 0))
 	var along := Vector2(0.0, 1.0) if water_x else Vector2(1.0, 0.0)
 	var widest: float = 0.0
+	var flipped: int = 0
+	var base: float = PI * 0.5 if water_x else 0.0
 	for facing in 8:
 		for seq in 3:
 			var b := Casualties.Body.new(7 + facing * 3 + seq, bridge, 0, 0, facing, 0, 4)
@@ -1276,11 +1281,16 @@ func test_bodies_on_a_bridge_lie_along_the_deck_at_its_height() -> void:
 				strips.append([mid, span])
 				assert_lte(absf(mid) + span * 0.5, 0.5, "у межах свого тайла мосту")
 				widest = maxf(widest, acos(minf(off, 1.0)))
+				if absf(wrapf(atan2(xf.basis.z.x, xf.basis.z.z) - base, -PI, PI)) > deg_to_rad(100.0) and off > 0.9:
+					flipped += 1
 			strips.sort_custom(func(p: Array, q: Array) -> bool: return p[0] < q[0])
+			var gaps: Array[float] = []
 			for i in range(1, strips.size()):
-				var gap: float = strips[i][0] - strips[i - 1][0] - (strips[i][1] + strips[i - 1][1]) * 0.5
-				assert_gte(gap, 0.05 - 0.0001, "між тілами на настилі щонайменше 0,4 м")
-	assert_gt(widest, deg_to_rad(15.0), "тіла лежать під різними кутами, не рівною шеренгою")
+				gaps.append(strips[i][0] - strips[i - 1][0] - (strips[i][1] + strips[i - 1][1]) * 0.5)
+			assert_gte(gaps.min(), 0.02 - 0.0001, "тіла на настилі не налягають (проміжок від 0,16 м)")
+			assert_gte(gaps.max() - gaps.min(), 0.03, "проміжки різні, а не рівний крок")
+	assert_gt(widest, deg_to_rad(75.0), "одне-два тіла лежать уздовж настилу")
+	assert_gt(flipped, 0, "одне тіло лежить головою в інший бік")
 
 
 ## Тіло лягає на ґрунт під собою — і на схилі; біля води воно в межах 0,3 тайла від середини клітинки, куди
@@ -1313,6 +1323,43 @@ func test_bodies_sit_on_sloped_ground_and_stay_out_of_the_water() -> void:
 			for end: Vector3 in [xf.origin + half, xf.origin - half]:
 				var r: float = Vector2(end.x - shore.x, end.z - shore.y).length()
 				assert_lte(r, 0.3 + 0.01, "біля води тіло не заходить у воду (кінець за %.3f)" % r)
+
+
+## Тіло не лягає під ноги тим, хто ще стоїть: від прямокутника тіла до середини кожного стоячого бійця (місця
+## 0..first−1, у світі) — щонайменше BODY_SLOT_CLEAR (0,3 м землі й пів ступні), на полі й біля води.
+func test_bodies_lie_clear_of_the_standing_figures() -> void:
+	var shore := Vector2i(-1, -1)
+	var field := Vector2i(-1, -1)
+	for y in range(1, _river_board.height - 1):
+		for x in range(1, _river_board.width - 1):
+			var p := Vector2i(x, y)
+			if _river_board.kind_at(p) != Terrain.Kind.FIELD:
+				continue
+			var wet: bool = false
+			for dy in range(-1, 2):
+				for dx in range(-1, 2):
+					wet = wet or WreckLayer._is_water(_river_board, p + Vector2i(dx, dy))
+			if wet and shore.x < 0:
+				shore = p
+			if not wet and field.x < 0:
+				field = p
+	assert_ne(shore, Vector2i(-1, -1), "передумова: поле над водою")
+	var worst: float = INF
+	for cell: Vector2i in [field, shore]:
+		for unit_id in range(1, 25):
+			for facing in 8:
+				for first in range(1, 4):
+					var b := Casualties.Body.new(unit_id, cell, 0, 0, facing, first, 4 - first)
+					var layout: int = UnitSilhouettes.pick_layout(unit_id)
+					var standing: Array[Vector3] = []
+					for i in first:
+						var v: Vector3 = UnitSilhouettes._slot(layout, i)
+						standing.append(Vector3(cell.x + v.x, 0.0, cell.y + v.y))
+					for slot in range(first, 4):
+						var clear: float = WreckLayer.body_clearance(WreckLayer.body_transform(b, slot, _river_board), standing)
+						worst = minf(worst, clear)
+						assert_gte(clear, WreckLayer.BODY_SLOT_CLEAR - 0.0001, "%s юніт %d напрям %d місце %d: тіло під ногами стоячого" % [cell, unit_id, facing, slot])
+	gut.p("найменший проміжок тіло–стоячий: %.3f" % worst)
 
 
 ## Два записи на тому самому тайлі й місці (влучання, лікування, знову влучання) лягають не одне на одному.
@@ -1438,9 +1485,41 @@ func test_tipping_figure_ends_where_its_body_lies() -> void:
 	assert_eq(tipping.size(), 1, "передумова: перекидається один")
 	var slot: int = view._tipping.keys()[0]
 	var spot := Vector3(view.global_position.x + 0.3, 0.0, view.global_position.z - 0.2)
-	view.aim_tips({slot: Transform3D(Basis(), spot)})
+	var heading: float = 0.7
+	view.aim_tips({slot: Transform3D(Basis(Vector3.UP, heading), spot)})
 	for t: Tween in get_tree().get_processed_tweens():
 		t.custom_step(UnitView.FALL_TIP_SEC * 0.999)
-	var at: Vector3 = (tipping[0] as Node3D).global_position
+	var fig := tipping[0] as Node3D
+	var at: Vector3 = fig.global_position
 	assert_almost_eq(Vector2(at.x, at.z), Vector2(spot.x, spot.z), Vector2(0.01, 0.01), "наприкінці — над місцем тіла")
+	# лежача фігура (її вісь «ноги–голова» майже горизонтальна) — уздовж осі тіла, будь-куди головою
+	var up := Vector2(fig.global_basis.y.x, fig.global_basis.y.z).normalized()
+	assert_gt(absf(up.dot(Vector2(sin(heading), cos(heading)))), 0.97, "фігура лягає вздовж тіла, а не впоперек")
+	UnitSilhouettes.use_models({})
+
+
+## Посеред руху бійці дивляться туди, куди йде відділення, а не тримають старий напрям до кінця шляху:
+## після повороту на південь, поки твін ще йде, сітка фігур уже побудована на південь.
+func test_squad_figures_turn_mid_path_not_at_the_end() -> void:
+	UnitSilhouettes.use_models({0: UnitModelFixture.soldier(), 1: UnitModelFixture.tube_soldier()})
+	view.bind(_unit(0, 0, Vector2i(0, 0), 2))  # на схід
+	var hull := view._silhouette.get_node("Hull") as MeshInstance3D
+	var east_mesh: Mesh = hull.mesh
+	var path: Array[Vector2i] = [Vector2i(1, 0), Vector2i(2, 0), Vector2i(2, 1), Vector2i(2, 2), Vector2i(2, 3)]
+	var tween: Tween = view.move_along(path, 0.1).get_object()
+	var south: int = posmod(roundi(UnitView._degrees_for_facing(4) / 45.0), 8)
+	var checked: int = 0
+	while tween.is_running():
+		tween.custom_step(0.01)
+		view._process(0.0)
+		if IsoCameraRig.world_to_cell(view.position) == Vector2i(2, 2) and tween.is_running():
+			checked += 1
+			assert_eq(view._built_face, south, "на південній ділянці фігури вже дивляться на південь")
+			assert_ne(hull.mesh, east_mesh, "сітку перебудовано посеред руху")
+			# фігура в світі повернута на південь (± поворот місця в розкладці)
+			var fig: Basis = hull.global_transform.basis * UnitSilhouettes.model_figure_transform(0, view._layout, deg_to_rad(UnitView._degrees_for_facing(4))).basis
+			var yaw: float = rad_to_deg(atan2(fig.z.x, fig.z.z))
+			var want: float = rad_to_deg(atan2(view.global_transform.basis.z.x, view.global_transform.basis.z.z))
+			assert_almost_eq(absf(wrapf(yaw - want, -180.0, 180.0)), 0.0, 45.0, "фігура — за напрямом руху")
+	assert_gt(checked, 0, "передумова: кадри на південній ділянці")
 	UnitSilhouettes.use_models({})
