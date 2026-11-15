@@ -230,32 +230,41 @@ func test_figures_have_real_height_in_every_set() -> void:
 			assert_lte(idx.size() / 3, 900, "трикутників: %s, %s" % [slug, where])
 
 
-## Лице вперед (−Z): темні текселі стоячого бійця на висоті тулуба — гвинтівка й рукавички — лежать перед ним, а не за
-## спиною і не збоку. Труба для цього не годиться: вона завжди стоїть ззаду, хоч би куди дивилась модель. Півоберт
-## (±X) ловить друга умова: темне зміщене вздовж −Z не менше, ніж на півзміщення убік (боєць набору 0 тримає гвинтівку
-## впоперек тулуба, тож убік вона зміщена вдвічі більше, ніж уперед).
+## Обличчям вперед (−Z): носки обох ступнів лежать попереду щиколоток. Труба для цього не годиться (вона завжди ззаду, хоч би
+## куди дивилась модель), а темні текселі гвинтівки зміщуються, коли її перенесено впоперек тулуба. Тут не текстура, а
+## геометрія: поворот моделі на чверть оберту (±90°) кладе носки на ±X, і умова «вперед більше, ніж убік» ламається в усіх
+## трьох наборах (боєць набору 0 стоїть півоберта, але носки в нього попереду на 51° від −Z).
 func test_standing_figures_face_forward_in_every_set() -> void:
 	for set_id in UnitSilhouettes.SET_COUNT:
-		var mesh: ArrayMesh = _figure_mesh(set_id, "rifle_soldier")
-		var arrays: Array = mesh.surface_get_arrays(0)
-		var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-		var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
-		var png: String = UnitSilhouettes.model_dir(set_id) + "rifle_soldier_albedo.png"
-		var img: Image = Image.load_from_file(ProjectSettings.globalize_path(png))
-		assert_not_null(img, "атлас " + png)
-		var dark: int = 0
-		var sum := Vector2.ZERO
-		for i in verts.size():
-			if verts[i].y < 0.4 * _MAN or verts[i].y > 0.8 * _MAN:
-				continue
-			var px: Color = img.get_pixel(clampi(int(uvs[i].x * img.get_width()), 0, img.get_width() - 1), clampi(int(uvs[i].y * img.get_height()), 0, img.get_height() - 1))
-			if px.get_luminance() < 0.2:
-				dark += 1
-				sum += Vector2(verts[i].x, verts[i].z)
-		assert_gt(dark, 10, "темні текселі на висоті тулуба, набір %d" % set_id)
-		var mean: Vector2 = sum / maxf(dark, 1.0)
-		assert_lt(mean.y, 0.0, "темне — спереду (−Z), набір %d" % set_id)
-		assert_gt(-mean.y, 0.5 * absf(mean.x), "темне — вздовж −Z, а не вбік (±X), набір %d: %s" % [set_id, mean])
+		var verts: PackedVector3Array = _figure_mesh(set_id, "rifle_soldier").surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+		var lows: Array[float] = []
+		for v in verts:
+			if v.y < 0.3 / 1.8 * _MAN:
+				lows.append(v.x)
+		lows.sort()
+		var mid_x: float = lows[lows.size() / 2]
+		var toe := Vector2.ZERO
+		for side in [-1.0, 1.0]:
+			var foot := Vector3.ZERO
+			var ankle := Vector3.ZERO
+			var nf: int = 0
+			var na: int = 0
+			for v in verts:
+				if signf(v.x - mid_x) != side:
+					continue
+				if v.y < 0.10 / 1.8 * _MAN:
+					foot += v
+					nf += 1
+				elif v.y > 0.15 / 1.8 * _MAN and v.y < 0.30 / 1.8 * _MAN:
+					ankle += v
+					na += 1
+			assert_gt(nf, 3, "ступня, набір %d" % set_id)
+			assert_gt(na, 3, "щиколотка, набір %d" % set_id)
+			var d: Vector3 = foot / float(nf) - ankle / float(na)
+			toe += Vector2(d.x, d.z)
+		toe /= 2.0
+		assert_lt(toe.y, 0.0, "носки вперед (−Z), набір %d: %s" % [set_id, toe])
+		assert_gt(-toe.y, absf(toe.x), "носки вперед, а не вбік (±X), набір %d: %s" % [set_id, toe])
 
 
 ## Тон загиблих набору: набір 0 — як у живого (матеріал бійця без змін), набори 1 і 2 — рівно добуток тону бійця на
