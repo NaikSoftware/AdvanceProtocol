@@ -329,8 +329,9 @@ func arm_engineer(action: int) -> void:
 	if tiles.is_empty():
 		action_refused.emit(status["reason"])
 		return
-	_clear_pending()
+	# Підпис знімається до _clear_pending(): скидання прев'ю перекладає HUD, а підпис уже зайвий.
 	mine_caption.emit(-1, _selected_unit.pos)
+	_clear_pending()
 	_armed_action = action
 	_armed_at_ms = Time.get_ticks_msec()
 	_targets = tiles
@@ -347,8 +348,8 @@ func arm_drone() -> void:
 	if reason != "":
 		action_refused.emit(reason)
 		return
-	_clear_pending()
 	mine_caption.emit(-1, _selected_unit.pos)
+	_clear_pending()
 	disarm()
 	_drone_armed = true
 	drone_armed.emit(_selected_unit.pos, DroneCommand.RANGE, Targeting.drone_marks(state, _selected_unit.id))

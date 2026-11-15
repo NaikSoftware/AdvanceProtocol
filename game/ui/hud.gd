@@ -74,6 +74,10 @@ var _tag: UnitTag = null
 var _mine_tag: UnitTag = null
 var _mine_cell: Vector2i = NO_CELL
 var _mine_box_pos: Vector2 = Vector2.ZERO
+## Зсув підпису від тайла міни, поки місце законне, і чи знайшлося місце взагалі.
+var _mine_offset: Vector2 = Vector2.ZERO
+var _mine_has_offset: bool = false
+var _mine_spot_ok: bool = true
 var _card: HoldCard = null
 var _tag_offset: Vector2 = Vector2.ZERO
 var _tag_has_offset: bool = false
@@ -662,7 +666,10 @@ func _on_mine_caption(owner: int, cell: Vector2i) -> void:
 	if owner < 0:
 		_hide_mine_caption()
 		return
+	if cell != _mine_cell:
+		_mine_has_offset = false
 	_mine_cell = cell
+	_mine_spot_ok = true
 	_mine_tag.show_mine(_state != null and owner == _state.active_player, owner)
 	_mine_tag.size = _mine_tag.get_combined_minimum_size().ceil()
 	_place_mine_tag()
@@ -672,6 +679,7 @@ func _on_mine_caption(owner: int, cell: Vector2i) -> void:
 
 func _hide_mine_caption() -> void:
 	_mine_cell = NO_CELL
+	_mine_has_offset = false
 	_mine_tag.visible = false
 	_mine_tag.clear_leader()
 
@@ -698,11 +706,23 @@ func _place_mine_tag() -> void:
 		"others": others, "chrome": _chrome_rects(), "screen": Rect2(Vector2.ZERO, size),
 	}
 	var placement := TagPlacement.new(scene)
-	var pick: Dictionary = placement.best()
-	if not pick["found"]:
-		_mine_tag.visible = false
-		return
-	var rect: Rect2 = pick["rect"]
+	var rect := Rect2()
+	# Підпис тримає зсув від тайла, поки місце законне: між рівноцінними місцями він не стрибає.
+	if _mine_has_offset:
+		var kept := Rect2(box.position + _mine_offset, _mine_tag.size)
+		if placement.is_legal(kept):
+			rect = kept
+	if rect.size == Vector2.ZERO:
+		var pick: Dictionary = placement.best()
+		if not pick["found"]:
+			_mine_has_offset = false
+			_mine_spot_ok = false
+			_sync_mine_tag_visibility()
+			return
+		rect = pick["rect"]
+	_mine_offset = rect.position - box.position
+	_mine_has_offset = true
+	_mine_spot_ok = true
 	_mine_tag.position = rect.position.round()
 	_mine_tag.size = rect.size
 	_mine_box_pos = box.position
@@ -714,9 +734,10 @@ func _place_mine_tag() -> void:
 	_sync_mine_tag_visibility()
 
 
-## Поки картка утримання на екрані, підпис не показується (як тег юніта).
+## Поки картка утримання на екрані, підпис не показується (як тег юніта); без законного місця
+## він не повертається й після відпускання.
 func _sync_mine_tag_visibility() -> void:
-	_mine_tag.visible = _mine_cell != NO_CELL and not _card.visible
+	_mine_tag.visible = _mine_cell != NO_CELL and _mine_spot_ok and not _card.visible
 
 
 ## Рух камери: підпис лише їде разом з тайлом, а місце перебирається, коли рух стих.

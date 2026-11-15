@@ -384,7 +384,8 @@ func score(r: Rect2) -> float:
 ## важливіший за чисті контури.
 func best(relax: int = 0) -> Dictionary:
 	var pick: Dictionary = {}
-	for level in range(relax, 3):
+	# Без полігонів рівні послаблення нічого не міняють: один прохід замість трьох однакових.
+	for level in range(relax, relax + 1 if _cells_raw.is_empty() else 3):
 		relax_used = level
 		pick = _best(level)
 		if pick["found"]:
