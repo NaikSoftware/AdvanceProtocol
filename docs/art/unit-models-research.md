@@ -223,7 +223,7 @@ both road wheels on the ground. Real names, as in §1, are private reference onl
 | --- | --- | --- | --- | --- |
 | 1 | field gun | 2B16 Nona-K, 120 mm gun-mortar | Hawthorn | road wheels on the ground (the real gun sits on a baseplate) |
 | 1 | howitzer | 2A65 Msta-B, 152 mm | Maple | road wheels on the ground (the real gun sits on a firing jack) |
-| 1 | engineer vehicle | IMR-3M on the T-90 hull | Sycamore | none; the front is a full-width two-piece dozer blade without tines |
+| 1 | engineer vehicle | IMR-3M on the T-90 hull | Sycamore | none; a solid full-width dozer blade without tines, the cab moved off the centreline |
 | 2 | field gun | M119A3, 105 mm | Kame | a split trail of two straight legs in a V instead of the single bow trail; a small flat shield, its size invented |
 | 2 | howitzer | M777A2, 155 mm | Scarp | road wheels on the ground (raised in the real firing position) |
 | 2 | engineer vehicle | M1150 Assault Breacher Vehicle | Coulee | none |
@@ -252,10 +252,17 @@ guns separate by footprint and barrel. What every model must keep:
 - **Hawthorn's shield** is two thin vertical plates beside the cradle, the left one taller, and
   does not read from above. The role rests on its size and short barrel.
 - **The engineer vehicles carry no barrel.**
-  - Sycamore's crane boom lies backwards along the centreline on its support frame. It is about
-    0.5 m thick, so it reads as a beam and not as a gun.
-  - Coulee's plough stands about 0.5 m beyond each track, and its launcher superstructure stays
-    low and flat-topped.
+  - Sycamore is 9.32 m overall: a 6.8 m hull, the blade 0.26 m ahead of the bow, and the boom
+    stowed. The boom is a 0.5 m beam lying along the centreline at deck level, below the cab top,
+    from the turret ring to a flat, open claw that overhangs the rear by about 2 m. It never
+    rises above the deck, so it does not read as a barrel.
+  - Sycamore's cab stands beside the boom, off the centreline: at most 1.2 m wide and 0.6 m above
+    the deck, with a stepped front, a dark window strip and a hatch. It takes the hull's roof
+    tone, so it stays within a few L* of the deck. The blade is one solid plate on solid push
+    beams, with no daylight under it, in the set paint with mud wear.
+  - Coulee's plough stands about 0.5 m beyond each track on push arms at their real reach, and
+    ends in a continuous dark tine bar across its full width. Its launcher superstructure stays
+    low and flat-topped, with no cupola.
 - **Nothing is enlarged**: every part keeps its real size.
 
 ### Infantry figures
