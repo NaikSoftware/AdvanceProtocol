@@ -189,7 +189,10 @@ product against the target's facing. No trigonometry, no division.
 - Recomputed for the active player from scratch at turn start and after every move step.
   **Never carry another player's visibility into the renderer.**
 - **The handover gate is mandatory.** Not skippable, not animated through, and the camera must not
-  leak the previous player's positions — recentre on the incoming player's first unit.
+  leak the previous player's positions — recentre on the incoming player's first unit. The gate
+  shows each team's remaining HP share, read from `core/` and drawn as lines or a bar: a deliberate
+  exception that reveals aggregate losses the incoming player did not witness
+  ([details](docs/ui/hud.md#handover-gate-and-pause)).
 - **After the gate, the incoming player watches a replay of the opponents' turns, filtered to what
   their side would have seen live** and to everything that hit their own units or mines. A squad
   that ends a move hidden in a building shows none of its route. Fogged actions take no time and
