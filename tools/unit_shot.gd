@@ -70,6 +70,9 @@ func _ready() -> void:
 	if a.size() > 5 and a[5] == "fall":
 		await _fall(screen, map, out, tag)
 		return
+	if a.size() > 5 and a[5] == "guns_bridge":
+		await _guns_bridge(screen, map, out, tag)
+		return
 	if a.size() > 5 and a[5] == "squad_bridge":
 		await _squad_bridge(screen, map, out, tag, int(a[6].substr(9)) if a.size() > 6 and a[6].begins_with("standing=") else 0)
 		return
@@ -283,6 +286,38 @@ func _lineup(screen: BattleScreen, map: MapData, out: String, tag: String) -> vo
 
 ## Справжні юніти двох гармат, інженерної машини й танка (смуги HP, крони, ґрунт карти) на найближчому й найдальшому зумі:
 ## остаточна перевірка впізнаваності гармат — разом із розрахунком, не окрема модель.
+## Шостий аргумент guns_bridge: польова гармата й гаубиця на двох клітинках мосту, напрям — SHOT_FACING. Мост
+## несе похідне положення гармат: станини зведені, розрахунок — з боків.
+func _guns_bridge(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
+	var m: MapData = map.duplicate(true)
+	m.take_over_path(map.resource_path)
+	var c := Vector2i(m.width / 2, m.height / 2)
+	var bridge: Array[Vector2i] = []
+	for y in m.height:
+		for x in m.width:
+			if m.tiles[y * m.width + x] == Terrain.Kind.BRIDGE:
+				bridge.append(Vector2i(x, y))
+	bridge.sort_custom(func(p: Vector2i, q: Vector2i) -> bool: return (p - c).length_squared() < (q - c).length_squared())
+	var f0: int = int(OS.get_environment("SHOT_FACING"))
+	m.spawns = [
+		{"type_id": 9, "owner": 0, "pos": bridge[0], "facing": f0},
+		{"type_id": 10, "owner": 1, "pos": bridge[1], "facing": f0},
+	]
+	screen.setup(m, 2, 1)
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	for f in SETTLE_FRAMES:
+		await get_tree().process_frame
+	rig.center_on(bridge[0])
+	for z: float in [IsoCameraRig.MIN_ZOOM, 8.0]:
+		rig.zoom_by(z / rig.zoom_level)
+		for f in SETTLE_FRAMES * 2:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png("%s/%s_z%d.png" % [out, tag, int(z)])
+	print("UNIT guns_bridge at %s %s" % [bridge[0], bridge[1]])
+	get_tree().quit()
+
+
 func _real(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
 	var m: MapData = map.duplicate(true)
 	m.take_over_path(map.resource_path)

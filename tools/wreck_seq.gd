@@ -45,7 +45,7 @@ func _ready() -> void:
 		# розрахунок знищеної гармати лягає біля уламка
 		layer.add_body(Casualties.Body.new(1, cell, 0, wtype, wfacing, 0, Casualties.CREW_FIGURES))
 	if OS.get_environment("WRECK_SQUAD") != "" and OS.get_environment("WRECK_NOBODIES") == "":
-		# для сравнения тону: тіла відділення на сусідньому тайлі, без вогню поруч
+		# для порівняння тону: тіла відділення на сусідньому тайлі, без вогню поруч
 		layer.add_body(Casualties.Body.new(2, cell + Vector2i(2, 0), 0, 0, 0, 1, 3))
 	layer.call("_refresh_effects")
 	# nodepth — стовп диму без перевірки глибини й м'якого краю: чи ховає його щось непрозоре геометрично, а не порядком.

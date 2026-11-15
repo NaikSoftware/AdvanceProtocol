@@ -142,6 +142,8 @@ var destroyed: bool = false
 @onready var _drone_icon: Sprite3D = $DroneIcon
 
 var _hull_material: Material
+## Юніт стоїть на мосту: гармата — у похідному положенні (UnitSilhouettes.travel_mesh).
+var _travel_pose: bool = false
 ## Тіло — модель GLB (а не коробки): лише її шейдер крутить колеса й траки за пройденим шляхом.
 var _has_model: bool = false
 ## Пройдений шлях в одиницях світу: від нього колеса й траки моделі крутяться в такт руху.
@@ -218,6 +220,9 @@ func bind(unit: Unit) -> void:
 	_type_id = unit.type_id
 	_unit_id = unit.id
 	_travel = _travel_by_unit.get(unit.id, 0.0)
+	# Гармата на мосту — у похідному положенні (станини зведені): розведені стирчали б за поручні.
+	var th: TerrainHeight = TerrainHeight.active
+	_travel_pose = th != null and th.is_deck(unit.pos)
 	_build_silhouette(unit.type_id, unit.owner)
 	_tilts = UnitTypes.is_vehicle(UnitTypes.get_type(unit.type_id)["unit_class"])
 	# Свіжий вузол (чи перебудований battle_screen._rebuild_units_for_active_player)
@@ -801,7 +806,7 @@ func _build_silhouette(type_id: int, owner: int) -> void:
 		child.free()
 
 	_owner = owner
-	var built := UnitSilhouettes.build_merged(type_id, -1, UnitSilhouettes.set_of(owner))
+	var built := UnitSilhouettes.build_merged(type_id, -1, UnitSilhouettes.set_of(owner), 0, 0, _travel_pose)
 	for part in built.get_children():
 		built.remove_child(part)
 		_silhouette.add_child(part)
@@ -868,7 +873,7 @@ func contact_slots() -> int:
 
 ## Стопи розрахунку гармати в системі силуету (їх повертає разом із гарматою сам силует); у решти юнітів їх нема.
 func _crew_feet() -> Array[Vector3]:
-	return UnitSilhouettes.crew_feet(_type_id, _set_id())
+	return UnitSilhouettes.crew_feet(_type_id, _set_id(), _travel_pose)
 
 
 ## Сила плями слота `i`: квад під гарматою — як у техніки, під розрахунком — як під бійцем відділення.

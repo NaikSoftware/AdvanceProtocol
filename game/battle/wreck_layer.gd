@@ -543,15 +543,13 @@ func rebuild_fallen(state: BattleState, observer: int) -> void:
 	for b in state.bodies:
 		if b.shown_to(observer):
 			shown.append(b)
+	# Дошка міняється на місці (підірваний міст), тож однакова дошка за посиланням — ще не та сама за вмістом.
+	var sig: int = _board_signature(state.board)
 	# Перебудова дошки йде після кожного пакета: без змін тіла не перекладаються.
-	if shown == _bodies and _board == state.board and _order == state.bodies:
+	if shown == _bodies and _board == state.board and _order == state.bodies and sig == _board_sig:
 		return
 	# Знімок повтору несе власну копію дошки: кеш скидається лише тоді, коли дошка справді інша за вмістом.
-	var sig: int = hash([state.board.width, state.board.height, state.board.tiles])
-	if sig != _board_sig:
-		_board_sig = sig
-		clear_deck_cache()
-		_body_memo.clear()
+	_sync_board_signature(sig)
 	_order = state.bodies.duplicate()
 	_bodies = shown
 	_board = state.board
@@ -560,7 +558,22 @@ func rebuild_fallen(state: BattleState, observer: int) -> void:
 
 ## Щойно впалі (подія `FiguresFell`) — одразу, а не на перебудові після пакета: інакше фігура
 ## зникала б із відділення й лягала б аж по всьому. Чи показане тіло глядачеві, вирішує той, хто кличе.
+## Підпис вмісту дошки: ширина, висота, клітинки.
+static func _board_signature(board: Board) -> int:
+	return hash([board.width, board.height, board.tiles])
+
+
+## Місця тіл залежать від дошки (вода й міст довкола): інша за вмістом дошка скидає їхні кеші.
+func _sync_board_signature(sig: int) -> void:
+	if sig != _board_sig:
+		_board_sig = sig
+		clear_deck_cache()
+		_body_memo.clear()
+
+
 func add_body(body: Casualties.Body) -> void:
+	if _board != null:
+		_sync_board_signature(_board_signature(_board))
 	# Пізнє додавання (після перекидання фігури) може прийти вже після перебудови з тим самим тілом.
 	for b in _bodies:
 		if b.unit_id == body.unit_id and b.seq == body.seq:
@@ -945,14 +958,18 @@ static func _crew_pair(b: Casualties.Body, board: Board, earlier: Array) -> Dict
 		key.append_array([e.unit_id, e.seq])
 	if _crew_cache.has(key):
 		return _crew_cache[key]
+	if deck >= 0 and UnitSilhouettes.travel_mesh(b.type_id, set_id) != null:
+		# Гармата на мосту — у похідному положенні, і настил (0,45 між поручнями) мінус її колія лишає з боку менше
+		# за ширину тіла, а вздовж настил — це весь тайл, зайнятий нею: місця для тіла нема, і не кладемо жодного.
+		_crew_cache[key] = {}
+		return {}
 	var row: Dictionary = UnitSilhouettes.spec(b.type_id, set_id)
 	var spots: Array = row.get("body_spots", [])
 	var legal: Array = row.get("body_legal", [])
+	if spots.is_empty() or legal.is_empty():
+		push_error("рядок гармати типу %d набору %d без body_spots/body_legal: розрахунок лишився б без тіл" % [b.type_id, set_id])
 	var mask: int = int(legal[b.facing]) if b.facing < legal.size() else 0
-	var centre: Vector3 = IsoCameraRig.cell_to_world(b.pos)
-	if deck >= 0 and th != null and th.is_deck(b.pos):
-		centre.y = th.deck_y(b.pos)
-	var taken: Array = []  # [середина, довга вісь, розрахунок?]
+	var taken: Array = []  # [середина, довга вісь]
 	for i in earlier.size():
 		var e: Casualties.Body = earlier[i]
 		for k in range(e.first, e.first + e.count):
@@ -960,7 +977,7 @@ static func _crew_pair(b: Casualties.Body, board: Board, earlier: Array) -> Dict
 			if not body_is_laid(exf):
 				continue
 			var em: Vector3 = body_centre(exf) - IsoCameraRig.cell_to_world(b.pos)
-			taken.append([Vector2(em.x, em.z), Vector2(exf.basis.z.x, exf.basis.z.z).normalized(), false])
+			taken.append([Vector2(em.x, em.z), Vector2(exf.basis.z.x, exf.basis.z.z).normalized()])
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash([b.unit_id, b.pos, b.seq, "crew"])
 	var order: Array[int] = []
@@ -1527,6 +1544,10 @@ static func burnt_material() -> ShaderMaterial:
 ## `Rules.roll()`: косметика не сміє зсувати кидки правил, і хеш дає всім ті самі уламки.
 static func build_wreck(pos: Vector2i, type_id: int, facing: int, set_id: int = 0) -> Node3D:
 	var model: ArrayMesh = UnitSilhouettes.model_mesh(type_id, set_id)
+	var th: TerrainHeight = TerrainHeight.active
+	if th != null and th.is_deck(pos) and UnitSilhouettes.travel_mesh(type_id, set_id) != null:
+		# На мосту гармата — у похідному положенні, і уламок теж: станини зведені, не за поручнями.
+		model = UnitSilhouettes.travel_mesh(type_id, set_id)
 	var root := Node3D.new() if model != null else UnitSilhouettes.build(type_id, set_id)
 	root.name = "Wreck_%d_%d" % [pos.x, pos.y]
 	var merged := MeshInstance3D.new()
@@ -1553,12 +1574,17 @@ static func build_wreck(pos: Vector2i, type_id: int, facing: int, set_id: int = 
 	# Перекіс — довкола осей самого корпусу, після повороту: інакше нахил «їде» з напрямом.
 	root.basis = Basis(Vector3.UP, deg_to_rad(UnitView._degrees_for_facing(facing))) \
 		* Basis.from_euler(Vector3(deg_to_rad(float(h % 5 - 2)), 0.0, deg_to_rad(float((h >> 6) % 5 - 2))))
-	root.position = IsoCameraRig.cell_to_world(pos)
+	root.position = wreck_root(pos)
+	return root
+
+
+## Де стоїть корінь уламка й тінь його стовпа: на землі, а на мосту — на настилі (`cell_to_world` там дає русло під ним).
+static func wreck_root(pos: Vector2i) -> Vector3:
+	var at: Vector3 = IsoCameraRig.cell_to_world(pos)
 	var th: TerrainHeight = TerrainHeight.active
 	if th != null and th.is_deck(pos):
-		# На мосту `cell_to_world` дає русло під настилом: уламок стоїть на настилі, як і сам юніт.
-		root.position.y = th.deck_y(pos)
-	return root
+		at.y = th.deck_y(pos)
+	return at
 
 
 func _add_node(pos: Vector2i, type_id: int, life: float, facing: int, birth: float, set_id: int = 0) -> void:
@@ -1609,7 +1635,7 @@ func _refresh_effects() -> void:
 	mm.visible_instance_count = _column_cells.size() * PUFFS_PER_COLUMN
 	var sm: MultiMesh = _shadows.multimesh
 	for i in _column_cells.size():
-		sm.set_instance_transform(i, Transform3D(Basis(), IsoCameraRig.cell_to_world(_column_cells[i])))
+		sm.set_instance_transform(i, Transform3D(Basis(), wreck_root(_column_cells[i])))
 		sm.set_instance_custom_data(i, Color(absf(column_opacity_for(_entries[_column_cells[i]].life)), 0, 0, _entries[_column_cells[i]].birth))
 	sm.visible_instance_count = _column_cells.size()
 	var fm: MultiMesh = _fires.multimesh

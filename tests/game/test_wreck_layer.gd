@@ -791,9 +791,9 @@ func test_every_legal_crew_spot_is_clear_of_the_wreck_as_built_and_visible() -> 
 	for id: int in [9, 10]:
 		var row: Dictionary = UnitSilhouettes.spec(id)
 		var spots: Array = row.body_spots
-		var legal_total: int = 0
 		var illegal_total: int = 0
 		for facing in 8:
+			var legal_total: int = 0
 			var mask: int = int(row.body_legal[facing])
 			for tile in [Vector2i(1, 1), Vector2i(2, 5), Vector2i(3, 3), Vector2i(6, 2), Vector2i(7, 7)]:
 				var node: Node3D = WreckLayer.build_wreck(tile, id, facing)
@@ -820,7 +820,7 @@ func test_every_legal_crew_spot_is_clear_of_the_wreck_as_built_and_visible() -> 
 					legal_total += 1
 				else:
 					illegal_total += 1
-			assert_gte(legal_total, 3, "дозволені місця є, тип %d" % id)
+			assert_gte(legal_total, 3, "дозволені місця є, тип %d, напрям %d" % [id, facing])
 		assert_gt(illegal_total, 0, "таблиця не суцільна, тип %d" % id)
 
 
@@ -888,7 +888,7 @@ func test_a_crew_body_without_a_legal_spot_is_not_laid_at_all() -> void:
 					var mid: Vector3 = WreckLayer.body_centre(xf) - IsoCameraRig.cell_to_world(b.pos)
 					assert_lte(absf(mid.x), WreckLayer.WATER_REACH, "середина тіла не за воду")
 					assert_lte(absf(mid.z), WreckLayer.WATER_REACH, "середина тіла не за воду")
-	assert_lt(laid, 5 * 8 * 2, "не кожне місце знайшлось: води з усіх боків")
+	assert_eq(laid, 0, "води з усіх боків: жодного дозволеного місця, тіл нема")
 
 
 ## Уламок на мосту стоїть на настилі, а не в руслі під ним: корінь на deck_y, для будь-якого типу. Тіла розрахунку
@@ -914,28 +914,66 @@ func test_a_wreck_on_a_bridge_stands_on_the_deck_and_its_crew_lies_on_the_span()
 		var wreck: Node3D = WreckLayer.build_wreck(cell, id, 0)
 		assert_almost_eq(wreck.position.y, deck, 0.0001, "корінь уламка типу %d на настилі" % id)
 		wreck.free()
-	# вода зі сходу й заходу від мосту: він іде вздовж z, і від осі настилу (x) тіло не далі за ширину проїзду
+	# Гармата на мосту — у похідному положенні: уламок бере модель із зведеними станинами, вона вужча за проїзд між
+	# поручнями, а тіл розрахунку не кладемо зовсім: з боків від неї менше за ширину тіла, вздовж — увесь тайл.
 	for id: int in [9, 10]:
-		for facing: int in [0, 2, 3, 5]:
+		var travel: ArrayMesh = UnitSilhouettes.travel_mesh(id, 0)
+		assert_not_null(travel, "похідна модель типу %d є" % id)
+		var span: float = 2.0 * (WreckLayer.BODY_DECK_HALF_ROAD - WreckLayer.BODY_DECK_RAIL_GAP)
+		assert_lt(travel.get_aabb().size.x, span, "похідна гармата вужча за проїзд, тип %d" % id)
+		assert_gt(UnitSilhouettes.model_mesh(id, 0).get_aabb().size.x, span - 0.01, "розведені станини не вмістились би, тип %d" % id)
+		var free_side: float = (span - travel.get_aabb().size.x) * 0.5
+		assert_lt(free_side, WreckLayer.BODY_WIDTH, "збоку від гармати тілу місця нема, тип %d" % id)
+		for facing: int in 8:
 			var body := Casualties.Body.new(5, cell, 0, id, facing, 0, Casualties.CREW_FIGURES)
-			var plain: Dictionary = CrewLegal.ground_index(CrewLegal.wreck_tris(id, 0, facing, Vector2.ZERO))
-			var centre: Vector3 = IsoCameraRig.cell_to_world(cell)
-			var laid: int = 0
 			for slot in Casualties.CREW_FIGURES:
-				var xf: Transform3D = WreckLayer.body_transform(body, slot, b, [])
-				if not WreckLayer.body_is_laid(xf):
-					continue
-				laid += 1
-				var mid: Vector3 = WreckLayer.body_centre(xf) - centre
-				var long := Vector2(xf.basis.z.x, xf.basis.z.z).normalized()
-				var wide := Vector2(-long.y, long.x)
-				assert_almost_eq(xf.origin.y, deck, 0.0001, "тіло на настилі")
-				var where: String = "тип %d, напрям %d, місце %d" % [id, facing, slot]
-				for sl: float in [-1.0, 1.0]:
-					for sw: float in [-1.0, 1.0]:
-						var corner: Vector2 = Vector2(mid.x, mid.z) + long * (WreckLayer.BODY_LENGTH * 0.5 * sl) + wide * (WreckLayer.BODY_WIDTH * 0.5 * sw)
-						assert_lte(absf(corner.x), WreckLayer.BODY_DECK_HALF_ROAD - WreckLayer.BODY_DECK_RAIL_GAP + 0.0001, "кут між поручнями, " + where)
-						assert_lte(absf(corner.y), 0.5, "кут у тайлі, " + where)
-				assert_false(CrewLegal.rect_hits(Vector2(mid.x, mid.z), long, WreckLayer.BODY_LENGTH * 0.5, WreckLayer.BODY_WIDTH * 0.5, plain), "тіло на мосту не під уламком, " + where)
+				assert_false(WreckLayer.body_is_laid(WreckLayer.body_transform(body, slot, b, [])), "на мосту тіл нема, тип %d, напрям %d" % [id, facing])
+		var wreck: Node3D = WreckLayer.build_wreck(cell, id, 0)
+		var mesh: ArrayMesh = (wreck.get_node("Body") as MeshInstance3D).mesh
+		assert_lt(mesh.get_aabb().size.x, span, "уламок на мосту — похідний: у поручнях, тип %d" % id)
+		wreck.free()
 	TerrainHeight.active = previous
 	WreckLayer.clear_deck_cache()
+
+
+## Рядок гармати має таблицю місць тіл у кожному наборі: без неї розрахунок мовчки лишався б без тіл.
+func test_every_gun_row_carries_its_body_table_in_every_set() -> void:
+	UnitSilhouettes.reset_models()
+	for set_id in 3:
+		for id: int in [9, 10]:
+			var row: Dictionary = UnitSilhouettes.spec(id, set_id)
+			assert_gte((row.get("body_spots", []) as Array).size(), 8, "місця тіл, тип %d, набір %d" % [id, set_id])
+			assert_eq((row.get("body_legal", []) as Array).size(), 8, "маска на кожен напрям, тип %d, набір %d" % [id, set_id])
+			assert_eq((row.get("crew_travel", []) as Array).size(), Casualties.CREW_FIGURES, "розрахунок у похідному положенні, тип %d, набір %d" % [id, set_id])
+
+
+## Міст підірвано на місці, і дошка та сама за посиланням: тіла, покладені до цього, перераховуються. Шар після
+## перебудови й після пізнішого add_body збігається зі свіжим розрахунком.
+func test_bodies_are_recomputed_after_a_bridge_is_demolished_in_place() -> void:
+	for y in 8:
+		state.board.set_kind(Vector2i(4, y), Terrain.Kind.BRIDGE)
+		_seen(0, Vector2i(3, y))
+		var gun: Unit = state.add_unit(10, 0, Vector2i(3, y), y)
+		gun.hp = 0
+		Casualties.record(state, gun, 100)
+	Casualties.reveal(state, 0)
+	layer.rebuild_fallen(state, 0)
+	var before: Array = layer.body_transforms().duplicate()
+	for y in 8:
+		state.board.set_kind(Vector2i(4, y), Terrain.Kind.BRIDGE_DESTROYED)
+	layer.rebuild_fallen(state, 0)
+	var fresh := WreckLayer.new()
+	add_child_autofree(fresh)
+	fresh.rebuild_fallen(state, 0)
+	assert_eq(layer.body_transforms(), fresh.body_transforms(), "після підриву шар збігається зі свіжим розрахунком")
+	assert_ne(before, layer.body_transforms(), "передумова: підрив змінив місця тіл")
+	var late: Unit = state.add_unit(9, 0, Vector2i(1, 1), 2)
+	late.hp = 0
+	_seen(0, Vector2i(1, 1))
+	Casualties.record(state, late, 100)
+	Casualties.reveal(state, 0)
+	layer.add_body(state.bodies.back())
+	var fresh2 := WreckLayer.new()
+	add_child_autofree(fresh2)
+	fresh2.rebuild_fallen(state, 0)
+	assert_eq(layer.body_transforms(), fresh2.body_transforms(), "і після пізнішого add_body")

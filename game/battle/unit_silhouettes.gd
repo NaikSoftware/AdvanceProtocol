@@ -17,6 +17,8 @@ const _STRIPE_COLOR := Color("d9b23a")
 ## потрапила б у порожнечу між циліндром і колесом).
 ## `crew` (лише гармати): де стоять двоє розрахунків у системі юніта — (x, z) і поворот у градусах; ноги на землі,
 ## 1,8 м, без масштабування. Вони не входять до корпусу: уламки, тінь і дуло рахуються без них.
+## `crew_travel` (лише гармати): те саме для похідного положення (станини зведені, на мосту): між зведеними станинами й
+## поручнями — з боків, за колесами.
 ## `body_spots` (лише гармати): місця тіл розрахунку, коли гармату знищено, у системі гармати — (x, z) і курс у градусах;
 ## `body_legal` — для кожного з восьми напрямів гармати маска тих, що дозволені: поза уламком, яким його малюють, у тайлі
 ## й на виду з камери. Маску складає tools/crew_body_table.gd; тест порівнює її з перерахунком.
@@ -30,8 +32,8 @@ const _SPECS: Array[Dictionary] = [
 	{"hull": Vector3(0.4375, 0.1875, 0.9375), "barrel": 0.86, "wheel": 0.045, "extras": [&"turret"]},  # 6 винищувач танків 3,5×2,3×7,5 м
 	{"hull": Vector3(0.3675, 0.1875, 0.70), "barrel": 0.46, "wheel": 0.034, "extras": [&"turret"]},  # 7 легкий танк 2,9×2,3×5,6 м
 	{"hull": Vector3(0.475, 0.25, 0.90), "barrel": 0.75, "wheel": 0.039, "extras": [&"turret"]},  # 8 важкий танк 3,8×2,8×(корпус 7,2) м
-	{"hull": Vector3(0.27, 0.28, 0.34), "barrel": 0.36, "wheel": 0.067, "bore": 0.317, "flame": [Vector3(0.0, 0.27, -0.08), Vector3(0.0, 0.24, 0.02)], "extras": [&"trail"], "crew": [Vector3(0.02, 0.27, 0.0), Vector3(-0.04, 0.43, 0.0)], "body_spots": [Vector3(-0.36, 0.08, 0.0), Vector3(-0.32, -0.08, 135.0), Vector3(-0.2, -0.32, 135.0), Vector3(-0.08, -0.36, 0.0), Vector3(0.2, -0.32, 135.0), Vector3(0.24, -0.28, 45.0), Vector3(0.36, -0.08, 90.0), Vector3(0.36, 0.0, 0.0), Vector3(-0.28, -0.2, 45.0), Vector3(0.36, -0.16, 135.0)], "body_legal": [763, 765, 1023, 895, 1023, 511, 495, 1023]},  # 9 польова гармата: лафет з колесами й щитом; ствол і станини за його межами
-	{"hull": Vector3(0.305, 0.40, 0.52), "barrel": 0.73, "wheel": 0.075, "bore": 0.487, "flame": [Vector3(0.0, 0.37, -0.13), Vector3(0.0, 0.34, 0.02)], "extras": [&"trail"], "crew": [Vector3(-0.09, 0.33, 0.0), Vector3(0.13, 0.40, 0.0)], "body_spots": [Vector3(0.0, -0.36, 90.0), Vector3(0.2, -0.32, 135.0), Vector3(-0.16, -0.32, 135.0), Vector3(0.16, -0.32, 45.0), Vector3(-0.32, -0.2, 45.0), Vector3(0.36, -0.16, 135.0), Vector3(0.36, -0.04, 0.0), Vector3(-0.36, -0.16, 45.0), Vector3(-0.12, -0.36, 0.0), Vector3(0.28, -0.24, 45.0)], "body_legal": [619, 875, 891, 958, 413, 407, 469, 762]},  # 10 гаубиця: лафет з колесами; ствол і станини за його межами
+	{"hull": Vector3(0.27, 0.28, 0.34), "barrel": 0.36, "wheel": 0.067, "bore": 0.317, "flame": [Vector3(0.0, 0.27, -0.08), Vector3(0.0, 0.24, 0.02)], "extras": [&"trail"], "crew": [Vector3(0.02, 0.27, 0.0), Vector3(-0.04, 0.43, 0.0)], "crew_travel": [Vector3(-0.17, 0.28, 0.0), Vector3(0.17, 0.32, 0.0)], "body_spots": [Vector3(-0.36, 0.08, 0.0), Vector3(-0.32, -0.08, 135.0), Vector3(-0.2, -0.32, 135.0), Vector3(-0.08, -0.36, 0.0), Vector3(0.2, -0.32, 135.0), Vector3(0.24, -0.28, 45.0), Vector3(0.36, -0.08, 90.0), Vector3(0.36, 0.0, 0.0), Vector3(-0.28, -0.2, 45.0), Vector3(0.36, -0.16, 135.0)], "body_legal": [763, 765, 1023, 895, 1023, 511, 495, 1023]},  # 9 польова гармата: лафет з колесами й щитом; ствол і станини за його межами
+	{"hull": Vector3(0.305, 0.40, 0.52), "barrel": 0.73, "wheel": 0.075, "bore": 0.487, "flame": [Vector3(0.0, 0.37, -0.13), Vector3(0.0, 0.34, 0.02)], "extras": [&"trail"], "crew": [Vector3(-0.09, 0.33, 0.0), Vector3(0.13, 0.40, 0.0)], "crew_travel": [Vector3(-0.17, 0.33, 0.0), Vector3(0.17, 0.38, 0.0)], "body_spots": [Vector3(0.0, -0.36, 90.0), Vector3(0.2, -0.32, 135.0), Vector3(-0.16, -0.32, 135.0), Vector3(0.16, -0.32, 45.0), Vector3(-0.32, -0.2, 45.0), Vector3(0.36, -0.16, 135.0), Vector3(0.36, -0.04, 0.0), Vector3(-0.36, -0.16, 45.0), Vector3(-0.12, -0.36, 0.0), Vector3(0.28, -0.24, 45.0)], "body_legal": [619, 875, 891, 958, 413, 407, 469, 762]},  # 10 гаубиця: лафет з колесами; ствол і станини за його межами
 	{"hull": Vector3(0.45, 0.22, 0.92), "barrel": 0.0, "wheel": 0.04, "extras": [&"stripe"]},  # 11 інженерна машина: корпус без плуга
 ]
 
@@ -78,6 +80,7 @@ const MODEL_SLUGS: Array[String] = [
 	"tank_destroyer", "light_tank", "heavy_tank", "field_gun", "howitzer", "engineer_vehicle",
 ]
 const _MODEL_SHADER: Shader = preload("res://game/battle/shaders/unit_model.gdshader")
+const _FALLEN_SHADER: Shader = preload("res://game/battle/shaders/unit_fallen.gdshader")
 ## Сітка моделі за (набір, тип) у системі юніта (null — файлу нема); у відділення — одна фігура.
 static var _models: Dictionary = {}
 ## Тести підставляють сітки самі: тоді типи поза словником — без моделі, диск не читається.
@@ -183,17 +186,23 @@ static func build(type_id: int, set_id: int = 0) -> Node3D:
 ## кольорами у вершинах (однаковими для всіх власників):
 ## один виклик малювання й один у тіні замість трьох-п'яти на юніт (§8). `standing` — скільки
 ## фігур стоїть; `drones` — скільки з них несе трубу дрона.
-static func build_merged(type_id: int, standing: int = -1, set_id: int = 0, drones: int = 0, layout: int = 0) -> Node3D:
+static func build_merged(type_id: int, standing: int = -1, set_id: int = 0, drones: int = 0, layout: int = 0, travel: bool = false) -> Node3D:
 	var hull := MeshInstance3D.new()
 	hull.name = "Hull"
-	hull.mesh = merged_mesh(type_id, standing, set_id, drones, layout)
-	if has_model(type_id, set_id):
-		hull.material_override = model_material(type_id, set_id)
+	# `travel`: гармата на мосту — у похідному положенні (станини зведені), якщо модель такого вигляду є
+	travel = travel and travel_mesh(type_id, set_id) != null
+	if travel:
+		hull.mesh = travel_mesh(type_id, set_id)
+		hull.material_override = model_material(type_id, set_id, true)
 	else:
-		hull.material_override = _merged_mat()
+		hull.mesh = merged_mesh(type_id, standing, set_id, drones, layout)
+		if has_model(type_id, set_id):
+			hull.material_override = model_material(type_id, set_id)
+		else:
+			hull.material_override = _merged_mat()
 	var out := Node3D.new()
 	out.add_child(hull)
-	var crew_m: ArrayMesh = crew_mesh(type_id, set_id)
+	var crew_m: ArrayMesh = crew_mesh(type_id, set_id, travel)
 	if crew_m != null:
 		# Розрахунок — окремий вузол зі своїм матеріалом: атлас бійця не дістати з атласу гармати. Це один виклик
 		# малювання зверху на гармату, а не на бійця.
@@ -317,11 +326,11 @@ static func _crew_box() -> BoxMesh:
 ## 1,8 м, без масштабування), поки є його модель, інакше коробка-фігура. Другий боєць — у присіді (як заряджаючий), коли
 ## набір його має: стоячі з гвинтівками разом читались двома стрілками. Меш має атлас бійця, тож малюється його
 ## матеріалом. Кеш — за гарматою й розв'язаним набором бійця: набір без власного бійця бере набір 0.
-static func crew_mesh(type_id: int, set_id: int = 0) -> ArrayMesh:
-	var crew: Array = spec(type_id, set_id).get("crew", [])
+static func crew_mesh(type_id: int, set_id: int = 0, travel: bool = false) -> ArrayMesh:
+	var crew: Array = crew_rows(type_id, set_id, travel)
 	if crew.is_empty():
 		return null
-	var key := "crew:%d:%d:%d:%s" % [_resolved_set(type_id, set_id), type_id, _resolved_set(PLAIN_FIGURE, set_id), has_model(PLAIN_FIGURE, set_id)]
+	var key := "crew:%d:%d:%d:%s:%s" % [_resolved_set(type_id, set_id), type_id, _resolved_set(PLAIN_FIGURE, set_id), has_model(PLAIN_FIGURE, set_id), travel]
 	if _merged_meshes.has(key):
 		return _merged_meshes[key]
 	var soldier: ArrayMesh = model_mesh(PLAIN_FIGURE, set_id)
@@ -352,10 +361,18 @@ static func crew_mesh(type_id: int, set_id: int = 0) -> ArrayMesh:
 	return mesh
 
 
+## Місця розрахунку гармати: у похідному положенні (на мосту) — рядок `crew_travel`, бо між станинами, зведеними докупи, стояти ніде.
+static func crew_rows(type_id: int, set_id: int = 0, travel: bool = false) -> Array:
+	var row: Dictionary = spec(type_id, set_id)
+	if travel and row.has("crew_travel"):
+		return row.crew_travel
+	return row.get("crew", [])
+
+
 ## Де стоїть розрахунок у системі юніта: стопи кожного — для тіні-контакту.
-static func crew_feet(type_id: int, set_id: int = 0) -> Array[Vector3]:
+static func crew_feet(type_id: int, set_id: int = 0, travel: bool = false) -> Array[Vector3]:
 	var out: Array[Vector3] = []
-	for c: Vector3 in spec(type_id, set_id).get("crew", []):
+	for c: Vector3 in crew_rows(type_id, set_id, travel):
 		out.append(Vector3(c.x, 0.0, c.y))
 	return out
 
@@ -557,6 +574,7 @@ static func fallen_material(set_id: int) -> Material:
 	if not _fallen_materials.has(key):
 		if body_mesh(set_id) != null and has_model(PLAIN_FIGURE, set_id):
 			var m := model_material(PLAIN_FIGURE, set_id).duplicate() as ShaderMaterial
+			m.shader = _FALLEN_SHADER
 			m.set_shader_parameter("fallen", true)
 			# Мокра від багна тканина не блищить: з відблиском бійця тіло під сонцем сіріло.
 			m.set_shader_parameter("specular", FALLEN_SPECULAR)
@@ -618,6 +636,22 @@ static func model_mesh(type_id: int, set_id: int = 0) -> ArrayMesh:
 	return _own_model(type_id, _resolved_set(type_id, set_id))
 
 
+## Похідне положення гармати (станини зведені докупи): на мосту, де розведені станини стирчали б за поручні. Є лише в
+## наборів, що мають файл `<slug>_travel.glb` (поки лише набір 0); решта — без нього, і гармата лишається як є.
+const TRAVEL_SLUG_SUFFIX: String = "_travel"
+const TRAVEL_KEY: int = 1000
+static var _travel_models: Dictionary = {}
+
+
+static func travel_mesh(type_id: int, set_id: int = 0) -> ArrayMesh:
+	var resolved: int = _resolved_set(type_id, set_id)
+	var key := Vector2i(resolved, type_id)
+	if not _travel_models.has(key):
+		var path: String = model_dir(resolved) + MODEL_SLUGS[type_id] + TRAVEL_SLUG_SUFFIX + ".glb"
+		_travel_models[key] = _load_model(path) if not _models_pinned and ResourceLoader.exists(path) else null
+	return _travel_models[key]
+
+
 static func _own_model(type_id: int, set_id: int) -> ArrayMesh:
 	var key := Vector2i(set_id, type_id)
 	if not _models.has(key):
@@ -644,6 +678,7 @@ static func use_set_specs(rows: Dictionary) -> void:
 
 
 static func reset_models() -> void:
+	_travel_models.clear()
 	_set_specs = _SET_SPECS.duplicate(true)
 	_models.clear()
 	_models_pinned = false
@@ -743,14 +778,14 @@ const FIGURE_SPECULAR: float = 0.2
 
 
 ## Один матеріал на тип: текстури, шорсткість і specular — з імпортованого матеріалу моделі.
-static func model_material(type_id: int, set_id: int = 0) -> ShaderMaterial:
-	var key := Vector2i(_resolved_set(type_id, set_id), type_id)
+static func model_material(type_id: int, set_id: int = 0, travel: bool = false) -> ShaderMaterial:
+	var key := Vector2i(_resolved_set(type_id, set_id), type_id + (TRAVEL_KEY if travel else 0))
 	if _model_materials.has(key):
 		return _model_materials[key]
 	var m := ShaderMaterial.new()
 	m.shader = _MODEL_SHADER
 	m.set_shader_parameter("wheel_radius", float(spec(type_id, set_id).get("wheel", 0.06)))
-	var src := model_mesh(type_id, set_id).surface_get_material(0) as BaseMaterial3D
+	var src := (travel_mesh(type_id, set_id) if travel else model_mesh(type_id, set_id)).surface_get_material(0) as BaseMaterial3D
 	if src != null:
 		m.set_shader_parameter("albedo_tex", src.albedo_texture)
 		m.set_shader_parameter("albedo_color", src.albedo_color)
