@@ -33,6 +33,9 @@ func _ready() -> void:
 	layer.set("_frame", int(float(a[6]) * WreckLayer.FLIPBOOK_FPS))
 	# Народився давно: стовп уже повний, як у перебудованих зі стану уламків.
 	layer.call("_add_node", cell, int(OS.get_environment("WRECK_TYPE")) if OS.get_environment("WRECK_TYPE") != "" else MEDIUM_TANK, float(a[3]), 0, WreckLayer.LONG_AGO)
+	if Casualties.has_crew(int(OS.get_environment("WRECK_TYPE")) if OS.get_environment("WRECK_TYPE") != "" else MEDIUM_TANK):
+		# розрахунок знищеної гармати лягає біля уламка
+		layer.add_body(Casualties.Body.new(1, cell, 0, int(OS.get_environment("WRECK_TYPE")), 0, 0, Casualties.CREW_FIGURES))
 	layer.call("_refresh_effects")
 	# nodepth — стовп диму без перевірки глибини й м'якого краю: чи ховає його щось непрозоре геометрично, а не порядком.
 	if a.size() > 7 and a[7] == "nodepth":

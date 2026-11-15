@@ -10,6 +10,8 @@ extends RefCounted
 ## фігура лишає тіло, і після лікування теж, тож тіл у відділення може бути й більше за чотири.
 
 const SQUAD_FIGURES: int = 4
+## Розрахунок гармати: двоє. Косметика, як і тіла відділення: без HP, без правил; лягає, коли гармата знищена.
+const CREW_FIGURES: int = 2
 
 class Body extends RefCounted:
 	var unit_id: int
@@ -41,6 +43,11 @@ class Body extends RefCounted:
 		return revealed_to & (1 << player) != 0
 
 
+## Чи має тип розрахунок, що лишає тіла, коли його знищено: польова гармата й гаубиця (артилерія).
+static func has_crew(type_id: int) -> bool:
+	return UnitTypes.get_type(type_id).unit_class == UnitTypes.UnitClass.ARTILLERY
+
+
 ## Скільки фігур стоїть: `ceil(SQUAD_FIGURES · hp / max_hp)` цілими.
 static func figures(hp: int, max_hp: int) -> int:
 	if max_hp <= 0 or hp <= 0:
@@ -51,13 +58,22 @@ static func figures(hp: int, max_hp: int) -> int:
 ## Викликати одразу після того, як HP піхоти зменшилось з `hp_before`; подія тіл іде слідом за
 ## `DamageDealt`. Лягають фігури, що стояли до влучання й уже не стоять.
 static func record(state: BattleState, unit: Unit, hp_before: int) -> Array[Events.BattleEvent]:
-	if unit.unit_class() != UnitTypes.UnitClass.INFANTRY:
+	var first: int = 0
+	var count: int = 0
+	if has_crew(unit.type_id):
+		# Розрахунок не втрачає фігур від влучань: обоє лягають разом із гарматою, що ось-ось лишить уламки.
+		if unit.hp > 0 or hp_before <= 0:
+			return []
+		count = CREW_FIGURES
+	elif unit.unit_class() == UnitTypes.UnitClass.INFANTRY:
+		var before: int = figures(hp_before, unit.max_hp())
+		first = figures(unit.hp, unit.max_hp())
+		if first >= before:
+			return []
+		count = before - first
+	else:
 		return []
-	var before: int = figures(hp_before, unit.max_hp())
-	var now: int = figures(unit.hp, unit.max_hp())
-	if now >= before:
-		return []
-	var body := Body.new(unit.id, unit.pos, unit.owner, unit.type_id, unit.facing, now, before - now)
+	var body := Body.new(unit.id, unit.pos, unit.owner, unit.type_id, unit.facing, first, count)
 	# Найбільший номер + 1, а не кількість записів: підірваний міст забирає записи, і лічба повторила б номер.
 	for b in state.bodies:
 		if b.unit_id == unit.id:

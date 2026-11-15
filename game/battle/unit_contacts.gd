@@ -120,9 +120,10 @@ func sync() -> void:
 	var slot: int = 0
 	for view in _views:
 		var road: float = 1.0 if _on_road(view) else 0.0
-		var k: float = view.contact_strength()
-		for xf: Transform3D in view.contact_transforms():
-			var custom := Color(road, k, 0.0, 0.0)
+		var quads: Array[Transform3D] = view.contact_transforms()
+		for qi in quads.size():
+			var xf: Transform3D = quads[qi]
+			var custom := Color(road, view.contact_strength_at(qi), 0.0, 0.0)
 			if xf != _placed[slot] or custom != _custom[slot]:
 				_placed[slot] = xf
 				_road[slot] = road

@@ -774,6 +774,10 @@ static func body_transform(b: Casualties.Body, slot: int, board: Board = null, e
 		for dy in range(-1, 2):
 			for dx in range(-1, 2):
 				near_water = near_water or _is_water(board, b.pos + Vector2i(dx, dy))
+	if Casualties.has_crew(b.type_id):
+		var crew_xf: Variant = _crew_body(b, slot, centre, near_water, board)
+		if crew_xf != null:
+			return crew_xf as Transform3D
 	var r_ring: float = rng.randf_range(BODY_RING_MIN, BODY_RING_MAX)
 	var r_ang: float = rng.randf_range(-BODY_ANGLE, BODY_ANGLE)
 	var jitter: float = BODY_JITTER * (0.5 if near_water else 1.0)
@@ -833,6 +837,110 @@ static func body_transform(b: Casualties.Body, slot: int, board: Board = null, e
 		return hidden
 	# біля води жодне місце не тримало кути на суші — найсухіше (на практиці перше кільце завжди вміщається)
 	return best if best_clear > -INF else driest
+
+
+## Трикутники моделі гармати нижче 1,8 м (проєкція на XZ, по три точки) — те, на що розрахунок не лягає: уламок
+## і є ця модель. Кеш за набором і типом.
+static var _gun_tris: Dictionary = {}
+
+
+static func gun_footprint(type_id: int, set_id: int) -> PackedVector2Array:
+	var key := Vector2i(set_id, type_id)
+	if _gun_tris.has(key):
+		return _gun_tris[key]
+	var out := PackedVector2Array()
+	var mesh: ArrayMesh = UnitSilhouettes.model_mesh(type_id, set_id)
+	if mesh != null:
+		var a: Array = mesh.surface_get_arrays(0)
+		var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+		var idx: PackedInt32Array = a[Mesh.ARRAY_INDEX]
+		for t in range(0, idx.size(), 3):
+			var p: Array[Vector3] = [v[idx[t]], v[idx[t + 1]], v[idx[t + 2]]]
+			if minf(p[0].y, minf(p[1].y, p[2].y)) < UnitSilhouettes.FIGURE_SIZE.y:
+				for q: Vector3 in p:
+					out.append(Vector2(q.x, q.z))
+	_gun_tris[key] = out
+	return out
+
+
+## Чи перетинає прямокутник (середина, довга вісь, пів-довжина, пів-ширини) якийсь трикутник `tris`: розділова вісь
+## серед нормалей сторін трикутника й двох осей прямокутника.
+static func rect_hits_tris(mid: Vector2, long: Vector2, half_l: float, half_w: float, tris: PackedVector2Array) -> bool:
+	var wide := Vector2(-long.y, long.x)
+	for t in range(0, tris.size(), 3):
+		var tri: Array[Vector2] = [tris[t], tris[t + 1], tris[t + 2]]
+		var axes: Array[Vector2] = [long, wide]
+		for i in 3:
+			var e: Vector2 = tri[(i + 1) % 3] - tri[i]
+			axes.append(Vector2(-e.y, e.x))
+		var apart: bool = false
+		for ax in axes:
+			if ax.length_squared() < 1e-12:
+				continue
+			var tmin: float = INF
+			var tmax: float = -INF
+			for p in tri:
+				tmin = minf(tmin, ax.dot(p))
+				tmax = maxf(tmax, ax.dot(p))
+			var c: float = ax.dot(mid)
+			var r: float = absf(ax.dot(long)) * half_l + absf(ax.dot(wide)) * half_w
+			if tmax < c - r or c + r < tmin:
+				apart = true
+				break
+		if not apart:
+			return true
+	return false
+
+
+## Тіло розрахунку гармати лягає біля місця, де боєць стояв (рядок `crew`), але на вільну землю: не під уламок
+## (модель гармати), у межах тайла й, біля води, не далі WATER_REACH. Шукає від стійки назовні, сідово;
+## `null`, коли місця нема, — тоді діє звичайний розклад.
+static func _crew_body(b: Casualties.Body, slot: int, centre: Vector3, near_water: bool, board: Board) -> Variant:
+	var set_id: int = UnitSilhouettes.set_of(b.owner)
+	var rows: Array = UnitSilhouettes.spec(b.type_id, set_id).get("crew", [])
+	if rows.is_empty():
+		return null
+	var c: Vector3 = rows[mini(slot, rows.size() - 1)]
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([b.unit_id, b.pos, b.seq, slot, "crew"])
+	var turn_y: float = deg_to_rad(UnitView._degrees_for_facing(b.facing))
+	var turn := Basis(Vector3.UP, turn_y)
+	var tris: PackedVector2Array = gun_footprint(b.type_id, set_id)
+	var cam: float = deg_to_rad(IsoCameraRig.YAW_DEGREES)
+	var start_ang: float = rng.randf() * TAU
+	var jit: float = rng.randf_range(-0.5, 0.5)
+	for step in 14:
+		var radius: float = 0.03 * float(step)
+		for k in (1 if step == 0 else 12):
+			var ang: float = start_ang + TAU * float(k) / 12.0
+			var local := Vector3(c.x, 0.0, c.y) + Vector3(cos(ang), 0.0, sin(ang)) * radius
+			for dh: float in [jit, 0.0, 0.6, -0.6, 1.2, -1.2, PI * 0.5]:
+				# сідовий напрям відносно стійки; камерне обмеження — як у польового тіла (_field_body)
+				var heading: float = turn_y + deg_to_rad(c.z) + dh
+				var off: float = wrapf(heading - cam, -PI * 0.5, PI * 0.5)
+				if absf(off) < BODY_VIEW_MIN:
+					heading = cam + (BODY_VIEW_MIN if off >= 0.0 else -BODY_VIEW_MIN)
+				var xf := Transform3D(Basis(Vector3.UP, heading), centre + turn * local)
+				var mid: Vector3 = body_centre(xf) - centre
+				var long := Vector2(xf.basis.z.x, xf.basis.z.z).normalized()
+				var wide := Vector2(-long.y, long.x)
+				var inside: bool = true
+				for sl: float in [-1.0, 1.0]:
+					for sw: float in [-1.0, 1.0]:
+						var corner: Vector2 = Vector2(mid.x, mid.z) + long * (BODY_LENGTH * 0.5 * sl) + wide * (BODY_WIDTH * 0.5 * sw)
+						inside = inside and absf(corner.x) <= 0.5 and absf(corner.y) <= 0.5
+				if not inside:
+					continue
+				if near_water and corner_reach(xf, centre) > WATER_REACH:
+					continue
+				# прямокутник тіла — в системі юніта (проти повороту), де лежать трикутники моделі
+				var mid_l: Vector3 = turn.inverse() * mid
+				var long_l: Vector3 = turn.inverse() * Vector3(long.x, 0.0, long.y)
+				if rect_hits_tris(Vector2(mid_l.x, mid_l.z), Vector2(long_l.x, long_l.z).normalized(), BODY_LENGTH * 0.5, BODY_WIDTH * 0.5, tris):
+					continue
+				xf.origin.y = _body_ground(b.pos, xf.origin)
+				return xf
+	return null
 
 
 ## Видима середина тіла: сітка лежить не на півоті, а зсунута в бік гвинтівки (+x тіла) на BODY_VISIBLE_SHIFT —

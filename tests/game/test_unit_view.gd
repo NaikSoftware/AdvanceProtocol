@@ -117,6 +117,29 @@ func test_squad_contact_is_a_small_weak_shadow_under_each_standing_figure() -> v
 	assert_almost_eq(contacts.transform_of(0).basis.x.length(), UnitSilhouettes.spec(5).hull.x * UnitView.CONTACT_SPREAD, 0.0001)
 
 
+## Гармата: квад під корпусом, як у техніки, і по малій слабкій тіні під ногами кожного з двох розрахунку; вони
+## повертаються разом із гарматою.
+func test_gun_crew_has_a_small_contact_shadow_each() -> void:
+	WeatherRig.unit_contact = 0.6
+	WeatherRig.sun_ground = Vector2.ZERO
+	var contacts := _with_contacts()
+	for type_id: int in [9, 10]:
+		view.bind(_unit(type_id))
+		var feet_rows: Array[Vector3] = UnitSilhouettes.crew_feet(type_id)
+		assert_eq(view.contact_slots(), 1 + feet_rows.size(), "квад гармати й по тіні на бійця")
+		assert_eq(contacts.custom_of(0).g, 1.0, "під гарматою — повна сила карти")
+		assert_almost_eq(view.contact_strength_at(1) * WeatherRig.unit_contact, UnitView.FIGURE_CONTACT_ALPHA, 0.0001, "під бійцем — як у відділення")
+		for turn: float in [0.0, PI * 0.5, PI * 0.75]:
+			view.rotation.y = turn
+			contacts.sync()
+			for i in feet_rows.size():
+				var xf: Transform3D = contacts.transform_of(1 + i)
+				assert_almost_eq(xf.basis.x.length(), UnitView.FIGURE_CONTACT_SIZE, 0.0001, "~0,9 м квад під бійцем")
+				var feet: Vector3 = view.global_transform * feet_rows[i]
+				assert_almost_eq(Vector2(xf.origin.x, xf.origin.z), Vector2(feet.x, feet.z), Vector2.ONE * 0.0001, "під ногами бійця %d, поворот %.2f" % [i, turn])
+	view.rotation.y = 0.0
+
+
 func test_contact_shadow_shifts_along_the_sun_ground_direction() -> void:
 	WeatherRig.unit_contact = 0.6
 	WeatherRig.sun_ground = Vector2(1.0, 0.0)

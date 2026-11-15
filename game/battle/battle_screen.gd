@@ -1347,7 +1347,8 @@ func _on_wreck_left(pos: Vector2i, type_id: int, facing: int, owner: int) -> voi
 func _on_figures_fell(body: Casualties.Body) -> void:
 	# Фігури, що перекидаються, сповзають туди, де ляже тіло.
 	var view: UnitView = _unit_views.get(body.unit_id)
-	if view != null and is_instance_valid(view):
+	# Розрахунок гармати не перекидається: його ніхто не малює стоячим на гарматі, він просто лягає біля уламка.
+	if view != null and is_instance_valid(view) and not Casualties.has_crew(body.type_id):
 		var targets: Dictionary = {}
 		for slot in range(body.first, body.first + body.count):
 			targets[slot] = WreckLayer.body_transform(body, slot, _state().board, WreckLayer.earlier_on_tile(_state().bodies, body))
@@ -1355,7 +1356,7 @@ func _on_figures_fell(body: Casualties.Body) -> void:
 	# Тіло лягає, коли фігура вже перекинулась (UnitView._tip_over).
 	get_tree().create_timer(UnitView.FALL_TIP_SEC).timeout.connect(_land_body.bind(body.unit_id, body.seq, _fall_run))
 	# Ніхто не лишився стояти — відділення знищене: стримана пляма (на нерозвіданому її ховає маска).
-	if body.first == 0 and _scars != null and not _no_scorch(body.pos):
+	if body.first == 0 and not Casualties.has_crew(body.type_id) and _scars != null and not _no_scorch(body.pos):
 		_scars.stamp_squad_scorch(body.pos)
 
 

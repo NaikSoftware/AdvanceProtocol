@@ -729,3 +729,34 @@ func test_flame_roots_of_guns_and_engineer_sit_on_model_metal() -> void:
 					hit_y = maxf(hit_y, (q as Vector3).y)
 			assert_gt(hit_y, -INF, "під коренем полум'я типу %d є модель" % id)
 			assert_lte(absf(local.y - hit_y), 0.019, "корінь полум'я типу %d лежить на металі (0,15 м)" % id)
+
+
+## Розрахунок знищеної гармати лягає біля уламка, а не під ним, у межах свого тайла (`body_transform`, поле й біля води).
+func test_crew_bodies_lie_clear_of_the_wreck_inside_the_tile() -> void:
+	UnitSilhouettes.reset_models()
+	var land: Board = Board.create(8, 8, Terrain.GroundState.DRY)
+	var shore: Board = Board.create(8, 8, Terrain.GroundState.DRY)
+	shore.set_kind(Vector2i(4, 3), Terrain.Kind.WATER)
+	for id: int in [9, 10]:
+		var tris: PackedVector2Array = WreckLayer.gun_footprint(id, 0)
+		assert_gt(tris.size(), 0, "модель гармати типу %d" % id)
+		for facing: int in [0, 3, 6]:
+			for board: Board in [land, shore]:
+				var b := Casualties.Body.new(7, Vector2i(3, 3), 0, id, facing, 0, Casualties.CREW_FIGURES)
+				var centre: Vector3 = IsoCameraRig.cell_to_world(b.pos)
+				var turn := Basis(Vector3.UP, deg_to_rad(UnitView._degrees_for_facing(facing)))
+				for slot in Casualties.CREW_FIGURES:
+					var xf: Transform3D = WreckLayer.body_transform(b, slot, board, [])
+					var mid: Vector3 = WreckLayer.body_centre(xf) - centre
+					var long := Vector2(xf.basis.z.x, xf.basis.z.z).normalized()
+					var where: String = "тип %d, напрям %d, місце %d, %s" % [id, facing, slot, "берег" if board == shore else "поле"]
+					assert_lte(WreckLayer.corner_reach(xf, centre), 0.5 * sqrt(2.0), "тіло в тайлі, " + where)
+					if board == land:
+						assert_lte(absf(mid.x) + 0.5 * (absf(long.x) * WreckLayer.BODY_LENGTH + absf(long.y) * WreckLayer.BODY_WIDTH), 0.5, "тіло в межах тайла по x, " + where)
+						assert_lte(absf(mid.z) + 0.5 * (absf(long.y) * WreckLayer.BODY_LENGTH + absf(long.x) * WreckLayer.BODY_WIDTH), 0.5, "тіло в межах тайла по z, " + where)
+						var mid_l: Vector3 = turn.inverse() * mid
+						var long_l: Vector3 = turn.inverse() * Vector3(long.x, 0.0, long.y)
+						assert_false(WreckLayer.rect_hits_tris(Vector2(mid_l.x, mid_l.z), Vector2(long_l.x, long_l.z).normalized(),
+								WreckLayer.BODY_LENGTH * 0.5, WreckLayer.BODY_WIDTH * 0.5, tris), "тіло не під уламком, " + where)
+					else:
+						assert_lte(WreckLayer.corner_reach(xf, centre), WreckLayer.WATER_REACH, "біля води тіло не сягає води, " + where)

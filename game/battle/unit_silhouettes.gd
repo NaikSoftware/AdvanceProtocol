@@ -27,7 +27,7 @@ const _SPECS: Array[Dictionary] = [
 	{"hull": Vector3(0.4375, 0.1875, 0.9375), "barrel": 0.86, "wheel": 0.045, "extras": [&"turret"]},  # 6 винищувач танків 3,5×2,3×7,5 м
 	{"hull": Vector3(0.3675, 0.1875, 0.70), "barrel": 0.46, "wheel": 0.034, "extras": [&"turret"]},  # 7 легкий танк 2,9×2,3×5,6 м
 	{"hull": Vector3(0.475, 0.25, 0.90), "barrel": 0.75, "wheel": 0.039, "extras": [&"turret"]},  # 8 важкий танк 3,8×2,8×(корпус 7,2) м
-	{"hull": Vector3(0.27, 0.28, 0.34), "barrel": 0.36, "wheel": 0.067, "bore": 0.317, "flame": [Vector3(0.0, 0.27, -0.08), Vector3(0.0, 0.24, 0.02)], "extras": [&"trail"], "crew": [Vector3(-0.02, 0.30, 0.0), Vector3(-0.235, 0.25, -90.0)]},  # 9 польова гармата: лафет з колесами й щитом; ствол і станини за його межами
+	{"hull": Vector3(0.27, 0.28, 0.34), "barrel": 0.36, "wheel": 0.067, "bore": 0.317, "flame": [Vector3(0.0, 0.27, -0.08), Vector3(0.0, 0.24, 0.02)], "extras": [&"trail"], "crew": [Vector3(-0.02, 0.30, 0.0), Vector3(0.05, 0.37, 30.0)]},  # 9 польова гармата: лафет з колесами й щитом; ствол і станини за його межами
 	{"hull": Vector3(0.305, 0.40, 0.52), "barrel": 0.73, "wheel": 0.075, "bore": 0.487, "flame": [Vector3(0.0, 0.37, -0.13), Vector3(0.0, 0.34, 0.02)], "extras": [&"trail"], "crew": [Vector3(-0.09, 0.33, -45.0), Vector3(0.13, 0.40, 45.0)]},  # 10 гаубиця: лафет з колесами; ствол і станини за його межами
 	{"hull": Vector3(0.45, 0.22, 0.92), "barrel": 0.0, "wheel": 0.04, "extras": [&"stripe"]},  # 11 інженерна машина: корпус без плуга
 ]
@@ -91,8 +91,6 @@ static var _figure_material: StandardMaterial3D
 ## Фігура відділення: 1,8 × 0,5 м (1 тайл = 8 м). Колір дає екземпляр MultiMesh — живі в
 ## кольорі власника, загиблі темні (L* 20–28), тож уся четвірка — один виклик малювання.
 const FIGURE_SIZE: Vector3 = Vector3(0.0625, 0.225, 0.05)
-## Рівна оливкова ділянка атласу моделі (правий стовпець під клітинками коліс): сюди дивляться бійці розрахунку.
-const _FLAT_TEXEL: Vector2 = Vector2(0.94, 0.7)
 const FALLEN_COLOR: Color = Color("3a342c")
 ## Квадрат зі стороною 0,2 (1,6 м), повернутий на 22,5°: кожна пара бійців лежить під 22,5° до будь-якого з
 ## восьми напрямів погляду камери на відділення, тож поперек погляду їх розділяє щонайменше 0,38 сторони.
@@ -192,6 +190,15 @@ static func build_merged(type_id: int, standing: int = -1, set_id: int = 0, dron
 		hull.material_override = _merged_mat()
 	var out := Node3D.new()
 	out.add_child(hull)
+	var crew_m: ArrayMesh = crew_mesh(type_id, set_id)
+	if crew_m != null:
+		# Розрахунок — окремий вузол зі своїм матеріалом: атлас бійця не дістати з атласу гармати. Це один виклик
+		# малювання зверху на гармату, а не на бійця.
+		var crew := MeshInstance3D.new()
+		crew.name = "Crew"
+		crew.mesh = crew_m
+		crew.material_override = model_material(PLAIN_FIGURE, set_id) if has_model(PLAIN_FIGURE, set_id) else _merged_mat()
+		out.add_child(crew)
 	return out
 
 
@@ -229,18 +236,14 @@ static func merged_cached(type_id: int, standing: int, set_id: int, drones: int,
 ## неї вписаний поворот самих фігур.
 static func merged_mesh(type_id: int, standing: int = -1, set_id: int = 0, drones: int = 0, layout: int = 0, face: int = 0) -> ArrayMesh:
 	var has_figures: bool = (spec(type_id, set_id).extras as Array).has(&"figures")
-	var crew: Array = spec(type_id, set_id).get("crew", [])
 	var up: int = _FIGURE_SLOTS.size() if standing < 0 else clampi(standing, 0, _FIGURE_SLOTS.size())
 	var model: ArrayMesh = model_mesh(type_id, set_id)
-	if model != null and not has_figures and crew.is_empty():
+	if model != null and not has_figures:
 		return model
 	var plain: ArrayMesh = model_mesh(PLAIN_FIGURE, set_id) if model != null else null
 	var tubes: int = clampi(drones, 0, up) if plain != null and plain != model else 0
 	var key: String = _merged_key(type_id, standing, set_id, drones, layout, face)
 	if _merged_meshes.has(key):
-		return _merged_meshes[key]
-	if model != null and not has_figures:
-		_merged_meshes[key] = _with_crew(model, crew, set_id)
 		return _merged_meshes[key]
 	if model != null:
 		var bare_mesh: ArrayMesh = plain if plain != null else model
@@ -269,8 +272,6 @@ static func merged_mesh(type_id: int, standing: int = -1, set_id: int = 0, drone
 			for i in up:
 				pieces.append([_figure_mesh.surface_get_arrays(0), figure_transform(i, true, layout), BODY_COLOR])
 	root.free()
-	for cm: Vector3 in crew:
-		pieces.append([_crew_box().surface_get_arrays(0), _crew_transform(cm, FIGURE_SIZE.y * 0.5), BODY_COLOR])
 	var v := PackedVector3Array()
 	var n := PackedVector3Array()
 	var c := PackedColorArray()
@@ -310,53 +311,42 @@ static func _crew_box() -> BoxMesh:
 	return b
 
 
-## Сітка гармати плюс двоє розрахунків у ту саму поверхню (один виклик малювання): справжній боєць набору, поки є
-## його модель, інакше коробка-фігура. Текстурні координати бійців — на рівний оливковий клаптик атласу гармати,
-## бо власний атлас бійця в цьому матеріалі недоступний.
-## shortcut: боєць одного кольору без своєї текстури; повноцінний — коли атласи гармати й бійця зведуть в один.
-static func _with_crew(gun: ArrayMesh, crew: Array, set_id: int) -> ArrayMesh:
-	var soldier: ArrayMesh = model_mesh(0, set_id)
-	var src: Mesh = soldier if soldier != null else _crew_box()
+## Двоє розрахунків гармати однією сіткою (рядок `crew`): справжній боєць набору (`PLAIN_FIGURE`, ступні на землі, 1,8 м,
+## без масштабування), поки є його модель, інакше коробка-фігура. Сітка має атлас бійця, тож малюється його матеріалом.
+## Кеш — за гарматою й розв'язаним набором бійця: набір без власного бійця бере набір 0.
+static func crew_mesh(type_id: int, set_id: int = 0) -> ArrayMesh:
+	var crew: Array = spec(type_id, set_id).get("crew", [])
+	if crew.is_empty():
+		return null
+	var key := "crew:%d:%d:%d:%s" % [_resolved_set(type_id, set_id), type_id, _resolved_set(PLAIN_FIGURE, set_id), has_model(PLAIN_FIGURE, set_id)]
+	if _merged_meshes.has(key):
+		return _merged_meshes[key]
+	var soldier: ArrayMesh = model_mesh(PLAIN_FIGURE, set_id)
 	var xfs: Array[Transform3D] = []
 	for c: Vector3 in crew:
 		xfs.append(_crew_transform(c, 0.0 if soldier != null else FIGURE_SIZE.y * 0.5))
-	var fig: Array = _merge_model(src, xfs).surface_get_arrays(0)
-	var g: Array = gun.surface_get_arrays(0)
-	var gv: PackedVector3Array = g[Mesh.ARRAY_VERTEX]
-	var fv: PackedVector3Array = fig[Mesh.ARRAY_VERTEX]
-	var n: int = fv.size()
-	var out: Array = []
-	out.resize(Mesh.ARRAY_MAX)
-	out[Mesh.ARRAY_VERTEX] = gv + fv
-	out[Mesh.ARRAY_NORMAL] = (g[Mesh.ARRAY_NORMAL] as PackedVector3Array) + (fig[Mesh.ARRAY_NORMAL] as PackedVector3Array)
-	var gt: PackedFloat32Array = g[Mesh.ARRAY_TANGENT] if g[Mesh.ARRAY_TANGENT] != null else PackedFloat32Array()
-	if gt.size() == gv.size() * 4:
-		# дотичні бійців — ті, що дав _merge_model (повернуті разом із фігурою); константа лише коли джерело їх не мало
-		var ft: PackedFloat32Array = fig[Mesh.ARRAY_TANGENT] if fig[Mesh.ARRAY_TANGENT] != null else PackedFloat32Array()
-		if ft.size() != n * 4:
-			ft.clear()
-			for i in n:
-				ft.append_array([1.0, 0.0, 0.0, 1.0])
-		out[Mesh.ARRAY_TANGENT] = gt + ft
-	var black := PackedColorArray()
-	var flat := PackedVector2Array()
+	var a: Array = _merge_model(soldier if soldier != null else _crew_box(), xfs).surface_get_arrays(0)
+	# Маски колеса й гусениці та вісь UV2 — для техніки: боєць їх не має й крутитись не мусить.
+	var n: int = (a[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+	var colours := PackedColorArray()
+	colours.resize(n)
+	colours.fill(Color.BLACK if soldier != null else BODY_COLOR)
+	a[Mesh.ARRAY_COLOR] = colours
 	var zero := PackedVector2Array()
-	black.resize(n)
-	black.fill(Color.BLACK)
-	flat.resize(n)
-	flat.fill(_FLAT_TEXEL)
 	zero.resize(n)
-	out[Mesh.ARRAY_COLOR] = (g[Mesh.ARRAY_COLOR] as PackedColorArray) + black
-	out[Mesh.ARRAY_TEX_UV] = (g[Mesh.ARRAY_TEX_UV] as PackedVector2Array) + flat
-	out[Mesh.ARRAY_TEX_UV2] = (g[Mesh.ARRAY_TEX_UV2] as PackedVector2Array) + zero
-	var idx := PackedInt32Array(g[Mesh.ARRAY_INDEX])
-	for i: int in fig[Mesh.ARRAY_INDEX]:
-		idx.append(gv.size() + i)
-	out[Mesh.ARRAY_INDEX] = idx
+	a[Mesh.ARRAY_TEX_UV2] = zero
 	var mesh := ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, out)
-	mesh.surface_set_material(0, gun.surface_get_material(0))
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a)
+	_merged_meshes[key] = mesh
 	return mesh
+
+
+## Де стоїть розрахунок у системі юніта: стопи кожного — для тіні-контакту.
+static func crew_feet(type_id: int, set_id: int = 0) -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	for c: Vector3 in spec(type_id, set_id).get("crew", []):
+		out.append(Vector3(c.x, 0.0, c.y))
+	return out
 
 
 ## Четвірка фігур одним MultiMesh: стоять перші `standing`, решта лежить на тих самих місцях.

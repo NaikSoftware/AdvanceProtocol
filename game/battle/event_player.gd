@@ -213,7 +213,8 @@ func _dispatch(event: Events.BattleEvent) -> Variant:
 		figures_fell.emit((event as Events.FiguresFell).body)
 		# Пакет чекає, доки боєць перекинеться (якщо падіння хтось малює): перебудова юнітів
 		# після пакета інакше обриває його на першому кадрі.
-		return _pause(UnitView.FALL_TIP_SEC) if _tips((event as Events.FiguresFell).body.unit_id) else null
+		var fell: Casualties.Body = (event as Events.FiguresFell).body
+		return _pause(UnitView.FALL_TIP_SEC) if not Casualties.has_crew(fell.type_id) and _tips(fell.unit_id) else null
 	elif event is Events.UnitDestroyed:
 		return _handle_unit_destroyed(event)
 	elif event is Events.WreckLeft:

@@ -72,7 +72,7 @@ func test_every_lost_figure_leaves_a_body_also_after_repair() -> void:
 
 
 func test_vehicles_and_engineers_leave_no_bodies() -> void:
-	for type_id: int in [5, 2, 9, 11]:
+	for type_id: int in [5, 2, 11]:
 		var u: Unit = state.add_unit(type_id, 0, Vector2i(type_id, 8), 0)
 		assert_true(_hit(u, 0).is_empty(), "тип %d" % type_id)
 	assert_true(state.bodies.is_empty())
@@ -229,3 +229,46 @@ func test_a_bad_body_is_rejected() -> void:
 		many["bodies"].append(good["bodies"][0].duplicate())
 	assert_not_null(BattleSerializer.from_dict(many), "8 тіл одного юніта")
 	assert_not_null(BattleSerializer.from_dict(good), "передумова: справжнє збереження відкривається")
+
+
+## Розрахунок гармати: знищена гармата (польова, гаубиця) лишає двох бійців; поранена — нікого. Косметика, без HP.
+func test_a_destroyed_gun_leaves_its_two_crew() -> void:
+	for type_id: int in [9, 10]:
+		var gun: Unit = state.add_unit(type_id, 0, Vector2i(type_id, 3), 3)
+		assert_true(_hit(gun, gun.max_hp() / 2).is_empty(), "поранена гармата розрахунку не кладе")
+		var ev: Array[Events.BattleEvent] = _hit(gun, 0)
+		assert_eq(ev.size(), 1, "тип %d" % type_id)
+		var body: Casualties.Body = (ev[0] as Events.FiguresFell).body
+		assert_eq([body.unit_id, body.pos, body.type_id, body.facing, body.first, body.count],
+				[gun.id, Vector2i(type_id, 3), type_id, 3, 0, Casualties.CREW_FIGURES])
+		assert_eq(_lying(gun.id), 2)
+		assert_true(_hit(gun, 0).is_empty(), "мертву гармату вдруге не кладемо")
+
+
+## Постріл, що знищує гармату: тіла розрахунку — між шкодою й загибеллю, до уламків.
+func test_a_shot_that_kills_a_gun_lays_the_crew_before_the_wreck() -> void:
+	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)
+	var gun: Unit = state.add_unit(10, 1, Vector2i(5, 4), 6)
+	gun.hp = 10
+	state.begin_turn()
+	var events: Array = FireCommand.create(a.id, gun.id).apply(state)
+	var i_dmg: int = events.find_custom(func(e: Events.BattleEvent) -> bool: return e is Events.DamageDealt)
+	assert_true(events[i_dmg + 1] is Events.FiguresFell, "розрахунок — одразу після шкоди")
+	assert_true(events[i_dmg + 2] is Events.UnitDestroyed)
+	assert_eq(_lying(gun.id), 2)
+
+
+## Показ тіл розрахунку — за тими самими правилами: лише розвіданий тайл.
+func test_crew_bodies_follow_the_reveal_rules_and_a_save() -> void:
+	var gun: Unit = state.add_unit(9, 1, Vector2i(10, 10), 2)
+	var body: Casualties.Body = (_hit(gun, 0)[0] as Events.FiguresFell).body
+	assert_false(body.shown_to(0), "нерозвіданий тайл — тіл не видно")
+	state.add_unit(5, 0, Vector2i(9, 10), 0)
+	state.refresh_vision(0)
+	assert_true(body.shown_to(0), "тайл розвідано — тіла видно")
+	var b: BattleState = BattleSerializer.from_dict(_saved())
+	assert_not_null(b)
+	if b != null:
+		assert_eq(b.bodies.size(), 1)
+		assert_eq([b.bodies[0].type_id, b.bodies[0].first, b.bodies[0].count, b.bodies[0].revealed_to],
+				[9, 0, 2, body.revealed_to])

@@ -863,7 +863,22 @@ const FIGURE_CONTACT_SUNNY: float = 0.65
 
 
 func contact_slots() -> int:
-	return SQUAD_FIGURES if _has_figures() else 1
+	return SQUAD_FIGURES if _has_figures() else 1 + _crew_feet().size()
+
+
+## Стопи розрахунку гармати в системі силуету (їх повертає разом із гарматою сам силует); у решти юнітів їх нема.
+func _crew_feet() -> Array[Vector3]:
+	return UnitSilhouettes.crew_feet(_type_id, _set_id())
+
+
+## Сила плями слота `i`: квад під гарматою — як у техніки, під розрахунком — як під бійцем відділення.
+func contact_strength_at(i: int) -> float:
+	if _has_figures() or i == 0:
+		return contact_strength()
+	if WeatherRig.unit_contact <= 0.0:
+		return 0.0
+	var alpha: float = FIGURE_CONTACT_ALPHA * (FIGURE_CONTACT_SUNNY if WeatherRig.sun_ground != Vector2.ZERO else 1.0)
+	return clampf(alpha / WeatherRig.unit_contact, 0.0, 1.0)
 
 
 ## Сила плями відносно тіні техніки (множник у шейдері через дані екземпляра).
@@ -878,7 +893,17 @@ func contact_strength() -> float:
 
 func contact_transforms() -> Array[Transform3D]:
 	if not _has_figures():
-		return [contact_transform()]
+		var out_gun: Array[Transform3D] = [contact_transform()]
+		var crew_shown: bool = _contact_on and is_visible_in_tree() and _silhouette.visible
+		var crew_shift: Vector2 = WeatherRig.sun_ground * CONTACT_SUN_SHIFT * FIGURE_CONTACT_SIZE
+		for feet: Vector3 in _crew_feet():
+			if not crew_shown:
+				out_gun.append(UnitContacts.HIDDEN)
+				continue
+			var cxf: Transform3D = _silhouette.global_transform * Transform3D(Basis.from_scale(Vector3(FIGURE_CONTACT_SIZE, 1.0, FIGURE_CONTACT_SIZE)), Vector3(feet.x, 0.06, feet.z))
+			cxf.origin += Vector3(crew_shift.x, 0.0, crew_shift.y)
+			out_gun.append(cxf)
+		return out_gun
 	var out: Array[Transform3D] = []
 	var shown: bool = _contact_on and is_visible_in_tree() and _silhouette.visible
 	var shift: Vector2 = WeatherRig.sun_ground * CONTACT_SUN_SHIFT * FIGURE_CONTACT_SIZE

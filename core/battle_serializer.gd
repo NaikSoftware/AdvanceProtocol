@@ -252,7 +252,7 @@ static func _is_valid(data: Dictionary) -> bool:
 		if int((board["tiles"] as Array)[pos.y * w + pos.x]) == Terrain.Kind.BRIDGE_DESTROYED:
 			return false
 		wreck_at[pos] = true
-	# Тіла — лише піхоти, свого юніта (той самий власник і тип), на дошці й не у воді (з підірваним
+	# Тіла — піхоти чи розрахунку гармати, свого юніта (той самий власник і тип), на дошці й не у воді (з підірваним
 	# мостом вони йдуть у річку), і місця в межах четвірки відділення. Тіл у юніта буває й понад
 	# чотири: лікування фігуру ставить, а тіла лишає.
 	if data.has("bodies"):
@@ -267,7 +267,7 @@ static func _is_valid(data: Dictionary) -> bool:
 					and _in(b, "facing", 0, 7) and _in(b, "first", 0, Casualties.SQUAD_FIGURES - 1)
 					and _in(b, "count", 1, Casualties.SQUAD_FIGURES - int(b["first"]))):
 				return false
-			if _is_vehicle_type(int(b["type_id"])):
+			if _is_vehicle_type(int(b["type_id"])) and not Casualties.has_crew(int(b["type_id"])):
 				return false
 			if unit_of.get(int(b["unit_id"]), Vector2i(-1, -1)) != Vector2i(int(b["owner"]), int(b["type_id"])):
 				return false
