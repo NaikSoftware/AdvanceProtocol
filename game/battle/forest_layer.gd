@@ -141,6 +141,8 @@ var board_plan: Array[Dictionary] = []
 var _contour_edges: Texture2D
 var contour_rings := PackedVector4Array()
 var contour_ring_colors := PackedColorArray()
+## Чи несе кільце хвилю імпульсу (1) чи лише межу (0) — BoardView.draw_circles.
+var contour_ring_bands := PackedFloat32Array()
 ## Рамка всіх ліній на землі (xy — мінімум, zw — максимум): крона, чий промінь до землі її не
 ## перетинає, землі під собою не шукає. Порожня — (1, 1, 0, 0).
 var line_rect := Vector4(1.0, 1.0, 0.0, 0.0)
@@ -218,9 +220,10 @@ func set_contour_edges(tex: Texture2D) -> void:
 
 ## Кільця дальності (BoardView.draw_circles): шейдер крони бере до чотирьох. Під час імпульсу
 ## кільця приходять щокадру, тож тоді оновлюються лише вони.
-func set_contour_rings(rings: PackedVector4Array, colors: PackedColorArray) -> void:
+func set_contour_rings(rings: PackedVector4Array, colors: PackedColorArray, bands := PackedFloat32Array()) -> void:
 	contour_rings = rings
 	contour_ring_colors = colors
+	contour_ring_bands = bands
 	for mat: ShaderMaterial in _wired():
 		_wire_rings(mat)
 
@@ -271,6 +274,7 @@ func _wire_rings(mat: ShaderMaterial) -> void:
 	mat.set_shader_parameter("ring_count", mini(contour_rings.size(), 4))
 	mat.set_shader_parameter("rings", contour_rings)
 	mat.set_shader_parameter("ring_colors", contour_ring_colors)
+	mat.set_shader_parameter("ring_bands", contour_ring_bands)
 
 
 ## Клітинки показаних глядачеві юнітів: крони між ними й камерою стають напівпрозорими.

@@ -132,6 +132,8 @@ var _circles: Dictionary = {}
 var _circle_nodes: Dictionary = {}
 ## шар -> Array[float] поступу імпульсу кожного кола (0..1): його бачить і крона лісу.
 var _circle_pulse: Dictionary = {}
+## шар -> Array[float]: 1 — коло несе хвилю імпульсу, 0 — лише межу.
+var _circle_band: Dictionary = {}
 ## Усі шари контурів, зведені в картку ребер для крон лісу (ForestLayer.set_contour_edges): крона
 ## закрила б стрічку на землі, тож лінію під собою малює сама. Одна текстура на розмір дошки.
 var _edge_image: Image
@@ -177,6 +179,7 @@ func build(board: Board) -> void:
 	_circles.clear()
 	_circle_nodes.clear()
 	_circle_pulse.clear()
+	_circle_band.clear()
 
 	for y in board.height:
 		for x in board.width:
@@ -437,6 +440,13 @@ func draw_circles(circles: Array[Dictionary], layer: int, animate: bool = true) 
 	_circles[layer] = circles
 	var nodes: Array[Node] = []
 	var progress: Array[float] = []
+	var bands: Array[float] = []
+	# Фронти всіх кіл біжать разом, тож хвилю несе лише найбільше коло: дві хвилі одна на одній
+	# світили б удвічі, а імпульс — лише підказка. Межі менших кіл з'являються, коли фронт їх досягає.
+	var outer: int = -1
+	for i in circles.size():
+		if outer < 0 or float(circles[i]["radius"]) > float(circles[outer]["radius"]):
+			outer = i
 	for c in circles:
 		var r: float = float(c["radius"])
 		var centre: Vector3 = IsoCameraRig.cell_to_world(c["center"])
@@ -446,6 +456,8 @@ func draw_circles(circles: Array[Dictionary], layer: int, animate: bool = true) 
 		sm.set_shader_parameter(&"ring_color", c["color"])
 		sm.set_shader_parameter(&"radius", r)
 		sm.set_shader_parameter(&"pulse", 0.0 if animate else 1.0)
+		bands.append(1.0 if nodes.size() == outer else 0.0)
+		sm.set_shader_parameter(&"band", bands[-1])
 		var mi := MeshInstance3D.new()
 		mi.name = "Circle%d_%d" % [layer, nodes.size()]
 		# Поки біжить імпульс, сітка — увесь круг; далі лише смуга межі (_set_pulse).
@@ -468,6 +480,7 @@ func draw_circles(circles: Array[Dictionary], layer: int, animate: bool = true) 
 		progress.append(0.0 if animate else 1.0)
 	_circle_nodes[layer] = nodes
 	_circle_pulse[layer] = progress
+	_circle_band[layer] = bands
 	_publish_circles()
 
 
@@ -688,6 +701,7 @@ func _publish_circles() -> void:
 		return
 	var rings := PackedVector4Array()
 	var colors := PackedColorArray()
+	var bands := PackedFloat32Array()
 	var layers: Array = _circles.keys()
 	layers.sort()
 	for layer: int in layers:
@@ -697,7 +711,9 @@ func _publish_circles() -> void:
 			var centre: Vector3 = IsoCameraRig.cell_to_world(c["center"])
 			rings.append(Vector4(centre.x, centre.z, float(c["radius"]), progress[i] if i < progress.size() else 1.0))
 			colors.append(c["color"])
-	_forest.set_contour_rings(rings, colors)
+			var band: Array = _circle_band.get(layer, [])
+			bands.append(band[i] if i < band.size() else 1.0)
+	_forest.set_contour_rings(rings, colors, bands)
 	_publish_line_rect()
 
 

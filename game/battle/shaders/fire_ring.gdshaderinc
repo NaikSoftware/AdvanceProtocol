@@ -5,6 +5,8 @@
 // p      — точка ґрунту відносно центру тайла юніта, у тайлах (1 тайл = 1.0 світу);
 // radius — радіус правила в тайлах, рівно той, що дав core/;
 // pulse  — поступ одноразового імпульсу 0..1 (веде твін BoardView), 1 — кільце стоїть;
+// band   — 1, коли кільце несе хвилю імпульсу; 0 — лише межа (менше коло того самого огляду: фронти
+//          спільні, і дві хвилі одна на одній світили б удвічі);
 // px     — розмір пікселя на ґрунті в тайлах (рахує викликач: похідні беруться з його точки ґрунту).
 // Повертає непрозорість; колір дає викликач.
 
@@ -26,7 +28,7 @@ float fr_cov(float inside, float px) {
 	return clamp(inside / px + 0.5, 0.0, 1.0);
 }
 
-float fire_ring(vec2 p, float radius, float pulse, float px) {
+float fire_ring(vec2 p, float radius, float pulse, float band, float px) {
 	float d = length(p);
 	// Межа — суцільна непрозора лінія рівно на радіусі: за нею гравець і вирішує. Не тонша за
 	// півтора пікселя: на найдальшому зумі лінія інакше розсипається.
@@ -38,5 +40,5 @@ float fire_ring(vec2 p, float radius, float pulse, float px) {
 	float s = (f - d) / FR_PULSE_W;
 	float wave = s >= 0.0 && s <= 1.0 ? (1.0 - s) * (1.0 - s) * fr_cov(f - d, px) : 0.0;
 	float shown = clamp((f - radius) / 0.25 + 0.5, 0.0, 1.0);
-	return max(line * shown, wave * FR_PULSE_A * fr_cov(radius - d, px));
+	return max(line * shown, band * wave * FR_PULSE_A * fr_cov(radius - d, px));
 }

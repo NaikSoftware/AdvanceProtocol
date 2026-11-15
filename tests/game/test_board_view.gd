@@ -463,6 +463,22 @@ func test_gun_and_drone_fronts_move_together() -> void:
 		assert_almost_eq(front, 0.3 * BoardView.PULSE_SPEED, 1e-5, "%s: фронт" % ring.name)
 
 
+## Фронти гармати й дрона біжать разом, тож дві хвилі лягли б одна на одну й удвічі яскравіше. Хвилю
+## несе лише найбільше коло огляду; менше — без хвилі (band = 0), його межа просто з'являється, коли
+## спільний фронт її досягає. Крона отримує ту саму ознаку.
+func test_only_the_outermost_ring_of_a_hold_draws_the_band() -> void:
+	view.build(Board.create(12, 12, Terrain.GroundState.DRY))
+	view.draw_circles([{"center": Vector2i(6, 6), "radius": 3, "color": Color.WHITE},
+		{"center": Vector2i(6, 6), "radius": 5, "color": Color.PURPLE}] as Array[Dictionary], BoardView.LAYER_INSPECT)
+	var bands: Array = []
+	for ring: MeshInstance3D in _circle_nodes():
+		bands.append((ring.material_override as ShaderMaterial).get_shader_parameter("band"))
+	assert_eq(bands, [0.0, 1.0], "гармата без хвилі, дрон — з хвилею")
+	assert_eq(view.forest().contour_ring_bands, PackedFloat32Array([0.0, 1.0]))
+	view.draw_circles([{"center": Vector2i(6, 6), "radius": 3, "color": Color.WHITE}] as Array[Dictionary], BoardView.LAYER_INSPECT)
+	assert_eq((_circle_nodes()[0].material_override as ShaderMaterial).get_shader_parameter("band"), 1.0, "одне коло — з хвилею")
+
+
 ## Кільце на землі завжди під контурами зон, хоч куди зсунута камера: порядок прозорих задає зсув
 ## сортування, а не відстань до камери.
 func test_ring_draws_under_the_contours() -> void:

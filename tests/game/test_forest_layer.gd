@@ -268,7 +268,7 @@ func test_contour_edges_reach_every_crown_but_not_the_fade() -> void:
 	var tex := ImageTexture.create_from_image(Image.create(2, 2, false, Image.FORMAT_RGBA8))
 	f.set_contour_edges(tex)
 	var rings := PackedVector4Array([Vector4(5.0, 3.0, 3.0, 0.0)])
-	f.set_contour_rings(rings, PackedColorArray([Color(0.25, 0.5, 0.75, 0.5)]))
+	f.set_contour_rings(rings, PackedColorArray([Color(0.25, 0.5, 0.75, 0.5)]), PackedFloat32Array([0.0]))
 	f.set_line_rect(Vector4(1.0, 2.0, 8.0, 9.0))
 	f.set_broken({Vector2i(7, 6): true})
 	f.set_reveal_cells([Vector2i(5, 3)] as Array[Vector2i])
@@ -281,6 +281,7 @@ func test_contour_edges_reach_every_crown_but_not_the_fade() -> void:
 		assert_eq(mat.get_shader_parameter("ring_count"), 1, "%s: одне кільце" % n.name)
 		assert_eq(mat.get_shader_parameter("overlay_layers"), 1 << (BoardView.OVERLAY_LAYER - 1), "%s: лише камера накладок, не зонд" % n.name)
 		assert_eq(mat.get_shader_parameter("rings"), rings, "%s: центр і радіус кільця" % n.name)
+		assert_eq(mat.get_shader_parameter("ring_bands"), PackedFloat32Array([0.0]), "%s: хвиля лише в найбільшого кола" % n.name)
 		assert_eq(mat.get_shader_parameter("line_rect"), Vector4(1.0, 2.0, 8.0, 9.0), "%s: рамка ліній і після перебудови пролому" % n.name)
 		# Лінію за юнітом юніт ховає: крона, чий промінь до землі йде крізь його клітинку, її не малює.
 		assert_eq(mat.get_shader_parameter("units_on"), true, "%s: юніти під кронами" % n.name)

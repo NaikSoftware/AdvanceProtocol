@@ -9,6 +9,7 @@ render_mode unshaded, cull_disabled, blend_mix, depth_draw_never;
 uniform vec4 ring_color : source_color = vec4(1.0);
 uniform float radius = 1.0;
 uniform float pulse = 1.0;
+uniform float band = 1.0;
 
 // Вершини сітки — відносно центру тайла юніта (вузол стоїть у ньому), тож це вже точка ґрунту.
 varying vec2 ground;
@@ -21,5 +22,5 @@ void fragment() {
 	// Слід пікселя на ґрунті однаковий в усіх напрямках — так само рахує й крона.
 	float px = max(0.7071 * length(vec2(length(dFdx(ground)), length(dFdy(ground)))), 1e-4);
 	ALBEDO = ring_color.rgb;
-	ALPHA = ring_color.a * fire_ring(ground, radius, pulse, px);
+	ALPHA = ring_color.a * fire_ring(ground, radius, pulse, band, px);
 }
