@@ -567,7 +567,7 @@ static var _fallen_materials: Dictionary = {}
 const FALLEN_SPECULAR: float = 0.1
 
 
-## Матеріал загиблих набору: матеріал простого бійця з `fallen` (шейдер темнить), один на набір, тож
+## Матеріал загиблих набору: матеріал простого бійця з шейдером `unit_fallen` (темнить), один на набір, тож
 ## увесь шар тіл набору — один виклик малювання. Без моделі — темний колір коробок.
 static func fallen_material(set_id: int) -> Material:
 	var key: int = _resolved_set(PLAIN_FIGURE, set_id)
@@ -575,7 +575,6 @@ static func fallen_material(set_id: int) -> Material:
 		if body_mesh(set_id) != null and has_model(PLAIN_FIGURE, set_id):
 			var m := model_material(PLAIN_FIGURE, set_id).duplicate() as ShaderMaterial
 			m.shader = _FALLEN_SHADER
-			m.set_shader_parameter("fallen", true)
 			# Мокра від багна тканина не блищить: з відблиском бійця тіло під сонцем сіріло.
 			m.set_shader_parameter("specular", FALLEN_SPECULAR)
 			m.set_shader_parameter("roughness", 1.0)

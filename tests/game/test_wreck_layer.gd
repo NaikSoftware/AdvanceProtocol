@@ -291,10 +291,10 @@ func test_model_bodies_use_the_body_mesh_and_one_fallen_material_per_set() -> vo
 	var mi: MultiMeshInstance3D = layer.fallen_meshes()[0]
 	assert_same(mi.multimesh.mesh, body, "загиблий — своя сітка, не стоячий боєць плазом")
 	assert_same(mi.material_override, UnitSilhouettes.fallen_material(1))
-	assert_true((mi.material_override as ShaderMaterial).get_shader_parameter("fallen"), "шейдер темнить загиблих")
+	assert_same((mi.material_override as ShaderMaterial).shader, UnitSilhouettes._FALLEN_SHADER, "шейдер темнить загиблих")
 	assert_lte((mi.material_override as ShaderMaterial).get_shader_parameter("specular"), 0.1, "тіло без відблиску")
 	assert_eq((mi.material_override as ShaderMaterial).get_shader_parameter("roughness"), 1.0)
-	assert_ne(UnitSilhouettes.model_material(0).get_shader_parameter("fallen"), true, "живі — ні")
+	assert_ne(UnitSilhouettes.model_material(0).shader, UnitSilhouettes._FALLEN_SHADER, "живі — ні")
 	assert_same((mi.material_override as ShaderMaterial).get_shader_parameter("albedo_tex"),
 		UnitSilhouettes.model_material(0).get_shader_parameter("albedo_tex"), "атлас простого бійця")
 	layer.add_body((ev[0] as Events.FiguresFell).body)

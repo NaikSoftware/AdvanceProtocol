@@ -18,7 +18,13 @@ func _init() -> void:
 		for id: int in [9, 10]:
 			var masks: PackedInt32Array = Legal.legal_masks(id, 0)
 			print("TABLE type %d body_legal: %s" % [id, Array(masks)])
-			source = _with_masks(source, id, masks)
+			var rewritten: String = _with_masks(source, id, masks)
+			if rewritten.is_empty():
+				# Рядок не знайдено: файл не чіпаємо, і команда падає, а не тихо лишає стару таблицю.
+				push_error("crew_body_table: у _SPECS нема рядка типу %d з body_legal" % id)
+				quit(1)
+				return
+			source = rewritten
 			var spots: Array = UnitSilhouettes.spec(id).get("body_spots", [])
 			for facing in 8:
 				var legal: Array[int] = []
@@ -32,14 +38,18 @@ func _init() -> void:
 	quit()
 
 
-## Рядок `_SPECS` типу `id` (закінчується коментарем `# <id> `) з новим масивом `body_legal`.
+## Рядок `_SPECS` типу `id` (закінчується коментарем `# <id> `) з новим масивом `body_legal`; порожній рядок — рядка нема.
 static func _with_masks(source: String, id: int, masks: PackedInt32Array) -> String:
 	var lines: PackedStringArray = source.split("\n")
+	var matched: bool = false
 	for i in lines.size():
 		if lines[i].contains("\"body_legal\": [") and lines[i].contains("},  # %d " % id):
 			var from: int = lines[i].find("\"body_legal\": [")
 			var to: int = lines[i].find("]", from)
 			lines[i] = lines[i].substr(0, from) + "\"body_legal\": " + str(Array(masks)) + lines[i].substr(to + 1)
+			matched = true
+	if not matched:
+		return ""
 	return "\n".join(lines)
 
 

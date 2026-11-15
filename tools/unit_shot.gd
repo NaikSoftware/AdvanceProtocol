@@ -306,7 +306,7 @@ func _guns_bridge(screen: BattleScreen, map: MapData, out: String, tag: String) 
 	for f in SETTLE_FRAMES:
 		await get_tree().process_frame
 	rig.center_on(bridge[0])
-	for z: float in [IsoCameraRig.MIN_ZOOM, 8.0]:
+	for z: float in [IsoCameraRig.MIN_ZOOM, IsoCameraRig.MAX_ZOOM]:
 		rig.zoom_by(z / rig.zoom_level)
 		for f in SETTLE_FRAMES * 2:
 			await get_tree().process_frame

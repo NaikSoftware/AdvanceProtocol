@@ -214,7 +214,7 @@ func test_fallen_use_the_body_mesh_and_a_fallen_copy_of_the_plain_material() -> 
 	assert_same(UnitSilhouettes.body_or_box(0), body)
 	assert_eq(UnitSilhouettes.body_pose(0), Transform3D(), "модель лежить як є")
 	var m := UnitSilhouettes.fallen_material(0) as ShaderMaterial
-	assert_true(m.get_shader_parameter("fallen"))
+	assert_same(m.shader, UnitSilhouettes._FALLEN_SHADER)
 	assert_ne(m, UnitSilhouettes.model_material(0))
 	assert_same(m, UnitSilhouettes.fallen_material(0), "один на набір")
 	UnitSilhouettes.use_models({})
