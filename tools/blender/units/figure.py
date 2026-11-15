@@ -6,25 +6,37 @@ A squad is four figures on fixed slots: the plain figure (<unit>, the rifle squa
 same figure with a drone launch tube on its back (each `variants` entry, e.g. assault_soldier). Both files come out of
 one run with one atlas layout, so the game draws a squad mixing them under one material. Config is the units.json
 entry's `figure` block:
-  out_dir, prefix  national set: the files go to assets/units/<out_dir>/ and `prefix` is cut off the unit keys
+  out_dir, prefix  national set: the files go to assets/units/<out_dir>/ and `prefix` is cut off the
+    unit keys
   yaw       degrees about Blender Z that turn the source's chest onto +Y (glTF/Godot -Z, the front)
-  crown_rim_m, crown_rim_scale  metres above which the head is drawn in towards its axis (the helmet's rim flare)
-  crown_cap_m, crown_squash  metres of the 1.8 m figure above which the helmet is pressed down to `crown_squash` of its
-            height before the fit (a night-vision mount would otherwise be the crown and set the height)
+  crown_rim_m, crown_rim_scale  metres above which the head is drawn in towards its axis (the
+    helmet's rim flare)
+  crown_cap_m, crown_squash  metres of the 1.8 m figure above which the helmet is pressed down to
+    `crown_squash` of its
+            height before the fit (a night-vision mount would otherwise be the crown and set the
+              height)
   tris      triangle budget of one figure (four per squad, up to ~10 squads on screen)
   tex       atlas size, px; the right 1/16 is kept for flat kit colours (the tube)
   paint     flat tones (sRGB 0..255): uniform, helmet, kit (plate carrier, pouches, pack), gun, boots, skin;
-            `kit_hue`, `kit_sat` pick the carrier out of the source colour; `gun_v` is the value below which low-saturation
-            texels are the rifle; `rifle_capsule_m` picks a cloth-coloured rifle by position; `head_h`, `boots_h` are heights as
+            `kit_hue`, `kit_sat` pick the carrier out of the source colour; `gun_v` is the value
+              below which low-saturation
+            texels are the rifle; `rifle_capsule_m` picks a cloth-coloured rifle by position;
+              `head_h`, `boots_h` are heights as
             fractions of the figure; `top_lift` multiplies (linear) the cloth tones of up-facing texels,
             `top_fade` (0..1) turns them towards grey
-  variants  {<unit>: {tube: {length_m, diameter_m, bottom_m, colour, cap, shades, light}}}: a cylinder strapped upright on the back,
+  variants  {<unit>: {tube: {length_m, diameter_m, bottom_m, colour, cap, shades, light}}}: a
+    cylinder strapped upright on the back,
             real size, its side `colour`, its end caps `cap`; {<unit>: {body: {...}}}: the fallen soldier lying on his
-            side; {<unit>: {crouch: {hip_m, knee_m, thigh_deg, shin_deg}}}: the second pose, crouched;
-            {<unit>: {kneel: {hip_m, knee_m, front_sign, split_x_m, front, rear}}}: the same slot, kneeling on one knee
-`shades` multiplies the tube colour from lit to shaded and `light` (a vector in the figure's frame) says where the lit side is.
-`rifle_pose` {r_m, axis, at_m}: carry the rifle across the chest (a split-off, turned copy of its faces); `camo` {cell_px, threshold,
-depth, seed}: dark patches on the cloth; `crown_ring` [scale, rise_m]: an inset ring raised on the head plate; `ao_gain`: strength of the baked occlusion.
+            side; {<unit>: {crouch: {hip_m, knee_m, thigh_deg, shin_deg}}}: the second pose,
+              crouched;
+            {<unit>: {kneel: {hip_m, knee_m, front_sign, split_x_m, front, rear}}}: the same slot,
+              kneeling on one knee
+`shades` multiplies the tube colour from lit to shaded and `light` (a vector in the figure's frame)
+says where the lit side is.
+`rifle_pose` {r_m, axis, at_m}: carry the rifle across the chest (a split-off, turned copy of its
+faces); `camo` {cell_px, threshold,
+depth, seed}: dark patches on the cloth; `crown_ring` [scale, rise_m]: an inset ring raised on the
+head plate; `ao_gain`: strength of the baked occlusion.
 `--crude` skips the bake and paints the whole figure the uniform tone: the farthest-zoom shape test.
 
 Steps: import, yaw, scale to 1.8 m = 0.225 units with the body (not the rifle) centred on the origin and the soles on
@@ -51,7 +63,8 @@ work = os.path.join(os.environ.get("AP_UNIT_SCRATCH") or os.path.expanduser("~/.
 os.makedirs(work, exist_ok=True)
 N = fig.get("tex", 512)
 p = fig.get("paint", {})
-# A national set's figures live in assets/units/<out_dir>/ under the set 0 slugs: `prefix` is cut off every unit key
+# A national set's figures live in assets/units/<out_dir>/ under the set 0 slugs: `prefix` is cut
+# off every unit key
 # (set1_rifle_soldier -> set1/rifle_soldier.glb), so a set's atlas names match set 0's.
 PREFIX = fig.get("prefix", "")
 OUT = os.path.join(REPO, "assets", "units", fig.get("out_dir", ""))
@@ -90,14 +103,17 @@ z0, z1 = co[:, 2].min(), co[:, 2].max()
 if "crown_rim_m" in fig and "crown_cap_m" not in fig:
     print("FIG WARNING crown_rim_m is ignored without crown_cap_m")
 if "crown_cap_m" in fig:
-    # A mount or a spike on the helmet would set the 1.8 m and leave the man shorter under it: everything above
+    # A mount or a spike on the helmet would set the 1.8 m and leave the man shorter under it:
+    # everything above
     # `crown_cap_m` is pressed down to `crown_squash` of its height before the fit.
     cap = z0 + fig["crown_cap_m"] / 1.8 * (z1 - z0)
     top = co[:, 2] > cap
     co[top, 2] = cap + (co[top, 2] - cap) * fig.get("crown_squash", 0.15)
     if "crown_rim_m" in fig:
-        # The flare of a high-cut helmet (rails, ear flaps) is as wide as the torso seen from above and reads as a hat brim:
-        # above `crown_rim_m` the head is drawn in towards its own axis, fully by 0.1 m higher, to `crown_rim_scale`.
+        # The flare of a high-cut helmet (rails, ear flaps) is as wide as the torso seen from above
+        # and reads as a hat brim:
+        # above `crown_rim_m` the head is drawn in towards its own axis, fully by 0.1 m higher, to
+        # `crown_rim_scale`.
         zn = (co[:, 2] - z0) / (z1 - z0) * 1.8
         head = (zn > fig["crown_rim_m"]) & (zn < fig["crown_rim_m"] + 0.15)
         ax, ay = np.median(co[head, 0]), np.median(co[head, 1])
@@ -155,7 +171,8 @@ bmesh.ops.delete(bm, geom=small, context='FACES')
 bm.to_mesh(lo.data); bm.free()
 print("FIG tris", tris0, "->", len(lo.data.polygons), "islands", len(islands), "dropped faces", len(small))
 if "crown_ring" in fig:
-    # The decimated crown is one flat plate: an inset ring `crown_ring[0]` of its size, raised `crown_ring[1]` m, makes it a shell.
+    # The decimated crown is one flat plate: an inset ring `crown_ring[0]` of its size, raised
+    # `crown_ring[1]` m, makes it a shell.
     scale, rise = fig["crown_ring"]
     bmc = bmesh.new(); bmc.from_mesh(lo.data); bmc.faces.ensure_lookup_table()
     zmax = max(v.co.z for v in bmc.verts)
@@ -270,9 +287,12 @@ else:
         votes.append(s[7:, 7:] - s[:-7, 7:] - s[7:, :-7] + s[:-7, :-7])
     cls[cloth] = np.argmax(np.stack(votes, -1), -1)[cloth]
     cls[skin] = 5                                             # 5 face
-    # A rifle the same colour as the cloth has no colour to find it by (see `rifle_capsule_m` below).
-    # A rifle the colour of the cloth is found by where it lies: `rifle_capsule_m` = [from, to, radius, y_min], metres in
-    # the figure's frame (front = +y), a capsule around the rifle's axis, cut off behind `y_min` so the chest stays cloth.
+    # A rifle the same colour as the cloth has no colour to find it by (see `rifle_capsule_m`
+    # below).
+    # A rifle the colour of the cloth is found by where it lies: `rifle_capsule_m` = [from, to,
+    # radius, y_min], metres in
+    # the figure's frame (front = +y), a capsule around the rifle's axis, cut off behind `y_min` so
+    # the chest stays cloth.
     if "rifle_capsule_m" in p:
         ca, cb, cr, cy0 = p["rifle_capsule_m"]
         P = np.stack([x, y, pos[..., 2]], -1) / M
@@ -292,7 +312,8 @@ else:
     top = up * (cls <= 2)
     flat = flat * (1.0 + (p.get("top_lift", 1.0) - 1.0) * top)[..., None]
     if "camo" in p:
-        # dark patches on the cloth to break the flat tone (the texels are uv islands, so a patch follows a sleeve or a leg):
+        # dark patches on the cloth to break the flat tone (the texels are uv islands, so a patch
+        # follows a sleeve or a leg):
         # smooth value noise `cell_px` wide, thresholded, `depth` (0..1) dark in linear
         cm = p["camo"]
         rg = np.random.default_rng(cm.get("seed", 1))
@@ -433,35 +454,9 @@ def smoothstep(e0, e1, x):
 def make_body(b, base, unit):
     """A fallen soldier, not the standing one rotated flat: knees bent, face down and rolled onto one side so an
     arm lies under the torso, the rifle cut away and lying flat beside him. Same vertices' UVs, so the same atlas."""
-    # the rifle: dark (gun-class) faces well off the body axis at hand height; gloves on the chest stay with the man
-    bm = bmesh.new(); bm.from_mesh(base.data)
-    uvl = bm.loops.layers.uv.active
-    rifle = set()
-    for f in bm.faces:
-        u = sum(l[uvl].uv.x for l in f.loops) / len(f.loops)
-        v = sum(l[uvl].uv.y for l in f.loops) / len(f.loops)
-        c = f.calc_center_median()
-        dark = cls_map is not None and cls_map[min(N - 1, int((1.0 - v) * N)), min(N - 1, int(u * N))] == 3
-        if dark and math.hypot(c.x, c.y) > b.get("rifle_r_m", 0.3) * M and 0.3 * HEIGHT < c.z < 0.85 * HEIGHT:
-            rifle.add(f.index)
-    # only the largest connected piece is the rifle: dark knee pads and gloves would come away as floating shards
-    bm.faces.ensure_lookup_table()
-    best, seen_f = set(), set()
-    for i in rifle:
-        if i in seen_f:
-            continue
-        piece, stack = set(), [i]
-        seen_f.add(i)
-        while stack:
-            j = stack.pop(); piece.add(j)
-            for e in bm.faces[j].edges:
-                for g in e.link_faces:
-                    if g.index in rifle and g.index not in seen_f:
-                        seen_f.add(g.index); stack.append(g.index)
-        if len(piece) > len(best):
-            best = piece
-    rifle = best
-    bm.free()
+    # the rifle: dark (gun-class) faces well off the body axis at hand height, the largest connected
+    # piece (see find_rifle)
+    rifle = find_rifle(base, b.get("rifle_r_m", 0.3))
 
     def part(keep_rifle):
         bm = bmesh.new(); bm.from_mesh(base.data); bm.faces.ensure_lookup_table()

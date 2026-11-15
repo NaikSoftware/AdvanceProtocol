@@ -47,8 +47,10 @@ LUMA = np.array([0.2126, 0.7152, 0.0722])
 GATE = 14.5          # the top median; 14.5 passes (section 5)
 WARN_BODY = 15.0
 MIN_BODY_PX = 30
-# A squad of slim figures (types 0 and 1) is 31-44 px at the farthest scale, so a place that lands on 27-29 px by sub-pixel
-# position is still a measurement: the median of the brighter half of 20 pixels. The vehicle floor stays 30.
+# A squad of slim figures (types 0 and 1) is 31-44 px at the farthest scale, so a place that lands
+# on 27-29 px by sub-pixel
+# position is still a measurement: the median of the brighter half of 20 pixels. The vehicle floor
+# stays 30.
 MIN_SQUAD_PX = 20
 SQUAD_TYPES = (0, 1)
 floor_px = MIN_BODY_PX
@@ -138,7 +140,10 @@ def shoot(set_id, type_id, maps, out, zoom=None):
             fails.append("%s: Godot run timed out after %d s" % (mp, GODOT_TIMEOUT))
             continue
         announced = list(dict.fromkeys(re.findall(r"UNIT gate (\S+) cell", r.stdout)))
-        # A place the squad was hidden at (under 30 mask px: a pole, a crown) is shot again on the next cell of its kind: say so.
+        for line in re.findall(r"UNIT gate WARNING .*", r.stdout):
+            print("%s: %s" % (mp, line))  # a place dropped for lack of a free cell
+        # A place the squad was hidden at (under 30 mask px: a pole, a crown) is shot again on the
+        # next cell of its kind: say so.
         for name, cell, px in re.findall(r"UNIT gate (\S+) cell (\(.*?\)) hidden \((\d+) px\)", r.stdout):
             final = [c for n, c in re.findall(r"UNIT gate (\S+) cell (\([^)]*\))\s*$", r.stdout, re.M) if n == name]
             print("%s: place %s: cell %s hidden (%s px) -> cell %s" % (mp, name, cell, px, final[-1] if final else "?"))

@@ -514,7 +514,8 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 						far = false
 				if far and chosen.size() < 3:
 					chosen.append(cand)
-		# Резерв: місце, де відділення сховане за опорою ЛЕП чи крислатою кроною, знімається ще раз на наступній клітинці
+		# Резерв: місце, де відділення сховане за опорою ЛЕП чи крислатою кроною, знімається ще раз
+		# на наступній клітинці
 		# того самого роду, не ближче 5 клітинок до вже взятих.
 		var spare: Array[Vector2i] = []
 		for cand: Vector2i in list + (relaxed.get(sv, []) as Array):
@@ -524,11 +525,13 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 					apart = false
 			if apart and spare.size() < 4:
 				spare.append(cand)
-		# Один резерв на всі місця поверхні: перше сховане бере його першу клітинку, наступне — вже наступну.
+		# Один резерв на всі місця поверхні: перше сховане бере його першу клітинку, наступне — вже
+		# наступну.
 		for i in chosen.size():
 			cells.append(["field%d%s" % [sv, "abcd"[i]], chosen[i], spare])
 	var names: Dictionary = {Vector2i(1, 0): "forestE", Vector2i(-1, 0): "forestW", Vector2i(0, 1): "forestS", Vector2i(0, -1): "forestN"}
-	# Клітинка одна на місце: поля вже зайняли свої (і запасні), а місця біля лісу не ділять між собою ні основну, ні запасні.
+	# Клітинка одна на місце: поля вже зайняли свої (і запасні), а місця біля лісу не ділять між
+	# собою ні основну, ні запасні.
 	var taken: Dictionary = {}
 	for fc: Array in cells:
 		taken[fc[1]] = true
@@ -537,6 +540,8 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 	for key: Vector3i in side_cands:
 		var near: Array = (side_cands[key] as Array).filter(func(q: Vector2i) -> bool: return not taken.has(q))
 		if near.is_empty():
+			push_warning("unit_shot: місце біля лісу %s%d відкинуто: усі його клітинки вже зайняті" % [names[Vector2i(key.x, key.y)], key.z])
+			print("UNIT gate WARNING forest place %s%d dropped: every candidate cell is taken" % [names[Vector2i(key.x, key.y)], key.z])
 			continue
 		near.sort_custom(by_dist)
 		taken[near[0]] = true
@@ -598,7 +603,8 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 		var mask: Image = get_viewport().get_texture().get_image()
 		for nd: Node in soft:
 			(nd as Node3D).visible = true
-		# Опора ЛЕП, крона чи шматок будівлі між відділенням і камерою лишають під межею гейту: місце міняється на наступну
+		# Опора ЛЕП, крона чи шматок будівлі між відділенням і камерою лишають під межею гейту:
+		# місце міняється на наступну
 		# клітинку того самого роду, а не лишається «моделі нема».
 		if _mask_px(mask) < GATE_MIN_PX and not (cl[2] as Array).is_empty():
 			print("UNIT gate %s cell %s hidden (%d px), next place" % [cl[0], cell, _mask_px(mask)])
@@ -628,8 +634,10 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 
 
 
-## Пікселі пурпурової маски відділення у вікні виміру гейту: те саме вікно, що в tools/unit_contrast_gate.py. Поріг —
-## 30, як у техніки там; відділення (типи 0 і 1) гейт міряє від 20, тож місце тут міняється, лише коли воно нижче за 30.
+## Пікселі пурпурової маски відділення у вікні виміру гейту: те саме вікно, що в
+## tools/unit_contrast_gate.py. Поріг —
+## 30, як у техніки там; відділення (типи 0 і 1) гейт міряє від 20, тож місце тут міняється, лише
+## коли воно нижче за 30.
 const GATE_MIN_PX: int = 30
 
 

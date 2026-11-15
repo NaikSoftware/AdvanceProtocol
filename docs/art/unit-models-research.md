@@ -271,7 +271,7 @@ carries plain tones and no pattern. There are no patches, flags, insignia, name 
 | --- | --- | --- | --- | --- | --- | --- |
 | 0 | ROK infantry, digital uniform | rounded mid-cut, fabric cover | front magazine pouches, small pack; darker than the uniform | rifle with a compact optic | 110, 109, 70 | 88, 88, 58 |
 | 1 | Russian infantry, digital uniform | rounded, fabric cover, goggles on the front | bulky, with a collar, dark olive | assault rifle with a curved magazine and a suppressor | 129, 142, 91 | 82, 94, 55 |
-| 2 | US infantry, OCP uniform | high-cut, fabric cover, night-vision mount at the front, pouch at the back | coyote, close to the uniform | carbine with an optic and a suppressor | 170, 143, 96 | 70, 56, 40 |
+| 2 | US infantry, OCP uniform | high-cut, fabric cover, night-vision mount at the front, pouch at the back | coyote, close to the uniform | carbine with an optic and a suppressor | 170, 143, 96, helmet 153, 129, 86 | 70, 56, 40 |
 
 Real uniforms are camouflage. Their mean tones sit close to the maps' meadow and ploughed ground
 (about L* 38 on Crossroads), so the figures do not take them. Each nation takes its vehicle set's

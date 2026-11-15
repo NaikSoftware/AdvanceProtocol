@@ -219,7 +219,8 @@ func _figure_mesh(set_id: int, slug: String) -> ArrayMesh:
 	return UnitSilhouettes._load_model(path)
 
 
-## Кожен набір має всі шість файлів фігур і рядки відділень: без рядка модель набору не діє, і набір тихо
+## Кожен набір має всі шість файлів фігур і рядки відділень: без рядка модель набору не діє, і набір
+## тихо
 ## стояв би в одязі набору 0.
 func test_every_set_has_every_figure_file_and_spec_row() -> void:
 	for set_id in UnitSilhouettes.SET_COUNT:
@@ -231,7 +232,8 @@ func test_every_set_has_every_figure_file_and_spec_row() -> void:
 				assert_true((UnitSilhouettes._SET_SPECS.get(set_id, {}) as Dictionary).has(id), "набір %d тип %d: нема рядка відділення" % [set_id, id])
 
 
-## Відділення набору N справді бере фігури набору N, а не набору 0: власна модель, три пози тіл і поза навпочіпки.
+## Відділення набору N справді бере фігури набору N, а не набору 0: власна модель, три пози тіл і
+## поза навпочіпки.
 func test_squad_figures_come_from_the_players_set() -> void:
 	UnitSilhouettes.reset_models()
 	for set_id in range(1, UnitSilhouettes.SET_COUNT):
@@ -243,7 +245,8 @@ func test_squad_figures_come_from_the_players_set() -> void:
 		assert_ne(UnitSilhouettes.body_mesh(set_id), UnitSilhouettes.body_mesh(0))
 
 
-## Справжній зріст: боєць 1,8 м (0,225 тайла) на кожному наборі, підошви на нулі, труба — як у набору 0, загиблий
+## Справжній зріст: боєць 1,8 м (0,225 тайла) на кожному наборі, підошви на нулі, труба — як у
+## набору 0, загиблий
 ## лежить нижче метра, кожна фігура вкладається в бюджет трикутників набору 0.
 func test_figures_have_real_height_in_every_set() -> void:
 	for set_id in UnitSilhouettes.SET_COUNT:
@@ -267,44 +270,74 @@ func test_figures_have_real_height_in_every_set() -> void:
 			assert_lte(idx.size() / 3, 900, "трикутників: %s, %s" % [slug, where])
 
 
-## Обличчям вперед (−Z): носки обох ступнів лежать попереду щиколоток. Труба для цього не годиться (вона завжди ззаду, хоч би
-## куди дивилась модель), а темні текселі гвинтівки зміщуються, коли її перенесено впоперек тулуба. Тут не текстура, а
-## геометрія: поворот моделі на чверть оберту (±90°) кладе носки на ±X, і умова «вперед більше, ніж убік» ламається в усіх
-## трьох наборах (боєць набору 0 стоїть півоберта, але носки в нього попереду на 51° від −Z).
+## Вектор носків: куди дивляться ступні відносно щиколоток (x, z). Ступні ділить уздовж осі
+## найбільшого розкиду підошов, а не
+## за знаком x: після повороту на чверть оберту поділ за x зникає, а вісь розкиду переходить на z.
+func _toe_vector(verts: PackedVector3Array) -> Vector2:
+	var sole: float = 0.10 / 1.8 * _MAN
+	var lo := Vector3(INF, INF, INF)
+	var hi := Vector3(-INF, -INF, -INF)
+	for v in verts:
+		if v.y < sole:
+			lo = lo.min(v)
+			hi = hi.max(v)
+	var on_x: bool = hi.x - lo.x >= hi.z - lo.z
+	var mid: float = (lo.x + hi.x) * 0.5 if on_x else (lo.z + hi.z) * 0.5
+	var sum := Vector2.ZERO
+	var feet: int = 0
+	for side in [-1.0, 1.0]:
+		var foot := Vector3.ZERO
+		var ankle := Vector3.ZERO
+		var nf: int = 0
+		var na: int = 0
+		for v in verts:
+			if signf((v.x if on_x else v.z) - mid) != side:
+				continue
+			if v.y < sole:
+				foot += v
+				nf += 1
+			elif v.y > 0.15 / 1.8 * _MAN and v.y < 0.30 / 1.8 * _MAN:
+				ankle += v
+				na += 1
+		if nf > 3 and na > 3:
+			var d: Vector3 = foot / float(nf) - ankle / float(na)
+			sum += Vector2(d.x, d.z)
+			feet += 1
+	assert_eq(feet, 2, "обидві ступні знайдено")
+	return sum / maxf(feet, 1.0)
+
+
+func _turned(verts: PackedVector3Array, degrees: float) -> PackedVector3Array:
+	var basis := Basis(Vector3.UP, deg_to_rad(degrees))
+	var out := PackedVector3Array()
+	for v in verts:
+		out.append(basis * v)
+	return out
+
+
+func _faces_forward(toe: Vector2) -> bool:
+	return toe.y < 0.0 and -toe.y > absf(toe.x)
+
+
+## Обличчям вперед (−Z): носки обох ступнів лежать попереду щиколоток і більше вперед, ніж убік.
+## Труба для цього не
+## годиться (вона завжди ззаду, хоч би куди дивилась модель), а темні текселі гвинтівки зміщуються,
+## коли її перенесено
+## впоперек тулуба. Тут геометрія: модель, повернута на чверть оберту (±90°) чи на пів оберту,
+## носками вперед не дивиться
+## в жодному з трьох наборів (тест повертає вершини сам).
 func test_standing_figures_face_forward_in_every_set() -> void:
 	for set_id in UnitSilhouettes.SET_COUNT:
 		var verts: PackedVector3Array = _figure_mesh(set_id, "rifle_soldier").surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
-		var lows: Array[float] = []
-		for v in verts:
-			if v.y < 0.3 / 1.8 * _MAN:
-				lows.append(v.x)
-		lows.sort()
-		var mid_x: float = lows[lows.size() / 2]
-		var toe := Vector2.ZERO
-		for side in [-1.0, 1.0]:
-			var foot := Vector3.ZERO
-			var ankle := Vector3.ZERO
-			var nf: int = 0
-			var na: int = 0
-			for v in verts:
-				if signf(v.x - mid_x) != side:
-					continue
-				if v.y < 0.10 / 1.8 * _MAN:
-					foot += v
-					nf += 1
-				elif v.y > 0.15 / 1.8 * _MAN and v.y < 0.30 / 1.8 * _MAN:
-					ankle += v
-					na += 1
-			assert_gt(nf, 3, "ступня, набір %d" % set_id)
-			assert_gt(na, 3, "щиколотка, набір %d" % set_id)
-			var d: Vector3 = foot / float(nf) - ankle / float(na)
-			toe += Vector2(d.x, d.z)
-		toe /= 2.0
-		assert_lt(toe.y, 0.0, "носки вперед (−Z), набір %d: %s" % [set_id, toe])
-		assert_gt(-toe.y, absf(toe.x), "носки вперед, а не вбік (±X), набір %d: %s" % [set_id, toe])
+		var toe: Vector2 = _toe_vector(verts)
+		assert_true(_faces_forward(toe), "носки вперед (−Z), набір %d: %s" % [set_id, toe])
+		for turn in [90.0, -90.0, 180.0]:
+			var turned: Vector2 = _toe_vector(_turned(verts, turn))
+			assert_false(_faces_forward(turned), "повернута на %d° модель не має дивитись вперед, набір %d: %s" % [int(turn), set_id, turned])
 
 
-## Тон загиблих набору: набір 0 — як у живого (матеріал бійця без змін), набори 1 і 2 — рівно добуток тону бійця на
+## Тон загиблих набору: набір 0 — як у живого (матеріал бійця без змін), набори 1 і 2 — рівно
+## добуток тону бійця на
 ## `FALLEN_TINT`.
 func test_fallen_material_carries_the_sets_tint() -> void:
 	UnitSilhouettes.reset_models()

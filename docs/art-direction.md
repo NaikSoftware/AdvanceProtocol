@@ -188,34 +188,46 @@ falls back to the box placeholder, so a model may land one type at a time.
   ΔE ≥ 14.5); the closest zoom (`--zoom 6`) is advisory. A set's soldiers drop in through the same path
   (`set<N>/rifle_soldier.glb`, `set<N>/rifle_soldier_crouch.glb`, `set<N>/assault_soldier.glb` and
   `set<N>/rifle_soldier_body.glb` with its `_prone` and `_back` poses, with their `_SET_SPECS` rows).
-  Sets 1 and 2 aim at the same targets against their own tanks, in their own paint family and with
+  Sets 1 and 2 follow the same targets against their own tanks, in their own paint family and with
   their own figure (units.json `set1_rifle_soldier`, `set2_rifle_soldier`; the build writes to
-  `assets/units/set<N>/`). Set 1: cloth and helmet (129, 142, 91), carrier (82, 94, 55), tube
-  (138, 152, 90), up-facing cloth at 0.7, no baked occlusion darkening (`ao_gain` 0) and dark camouflage
-  patches on the cloth (`camo`) to break the flat tone; the rifle is found by value (`gun_v` 0.09), as it
-  is darker than any cloth. It renders as a sage field green, hue 111–129 against its tank's 102–139,
-  chroma 19–28 against the tank's 8–16. Set 2: cloth (170, 143, 96), helmet (153, 129, 86, a tenth darker than the cloth so it reads as a
-  separate shell), carrier (70, 56, 40), tube (168, 144, 100), up-facing cloth at 0.9; its rifle is the colour of its cloth, so it
-  is found by position (`rifle_capsule_m`) and carried across the chest at low ready (`rifle_pose`) so
-  that it is never edge-on behind the torso at the start facing; its helmet crown is pressed flat, its
-  rim drawn in and an inset ring raised on the head plate (`crown_cap_m`, `crown_rim_m`, `crown_ring`)
-  so the night-vision mount does not make a point and the plate reads as a shell, its second pose is a
-  kneel (one knee down, 1.44 m) where set 0's is a crouch. The fallen of both sets carry a tint in
-  `UnitSilhouettes.FALLEN_TINT`: set 2's are lifted by 1.08, which keeps them at the ground's value minus
-  1.4 L* on Crossroads and minus 2.2 L* on River (a higher lift pushes sunny bodies past the ground
-  + 2 L*), set 1's are tinted a little cooler because the warm tint of mud turns a green cloth's hue
-  off the living. The tubes of sets 1 and 2 are shaded across their side in four steps; set 0's is one
-  flat tone. The figures differ from set 0's at the closest zoom by helmet (set 1 low and rounded with
-  goggles, set 2 high-cut with a darker shell), carrier and tone; at the farthest zoom the HP bar
-  carries the side.
+  `assets/units/set<N>/`), except for the departures named below. Set 1: cloth and helmet (129,
+  142, 91), carrier (82, 94, 55), tube (138, 152, 90), up-facing cloth at 0.7, no baked occlusion
+  darkening (`ao_gain` 0) and dark camouflage patches on the cloth (`camo`) to break the flat
+  tone; the rifle is found by value (`gun_v` 0.09), as it is darker than any cloth. It renders as
+  a sage field green, hue 111–129 against its tank's 102–139, chroma 19–28 against the tank's
+  8–16. Set 2: cloth (170, 143, 96), helmet (153, 129, 86, a tenth darker than the cloth so it
+  reads as a separate shell), carrier (70, 56, 40), tube (168, 144, 100), up-facing cloth at 0.9.
+  Its rifle is the colour of its cloth, so it is found by position (`rifle_capsule_m`) and carried
+  across the chest at low ready (`rifle_pose`), so that it is never edge-on behind the torso at
+  the start facing. Its helmet crown is pressed flat, its rim drawn in and an inset ring raised on
+  the head plate (`crown_cap_m`, `crown_rim_m`, `crown_ring`), so the night-vision mount does not
+  make a point and the plate reads as a shell. Its second pose is a kneel (one knee down, 1.44 m)
+  where set 0's is a crouch. The fallen of both sets carry a tint in
+  `UnitSilhouettes.FALLEN_TINT`. Set 2's are lifted by 1.08, which keeps their median at the
+  ground's value minus 1.4 L* on Crossroads and minus 2.4 L* on River (a higher lift pushes sunny
+  bodies past the ground + 2 L*). Set 1's are tinted a little cooler, because the warm tint of mud
+  turns a green cloth's hue off the living. The tubes of sets 1 and 2 are shaded across their side
+  in four steps; set 0's is one flat tone. The figures differ from set 0's at the closest zoom by
+  helmet (set 1 low and rounded with goggles, set 2 high-cut with a darker shell), carrier and
+  tone; at the farthest zoom the HP bar carries the side.
 
-  **Exception to the farthest-zoom gate: set 1 on Ridge.** Set 1 on Ridge at the farthest zoom measures
-  ΔE 10.1 at its tightest place for the rifle squad and 12.3 for the assault squad (the rule is ≥ 14.5), because Ridge's meadow is yellow (hue
-  about 95) and set 1's sage green is the paint that keeps the squad reading as the same army as its tanks;
-  a greener or lighter cloth passes the number and reads as plastic or pale (measured: a cloth of
-  (122, 144, 75) passes at 15.7 and renders at chroma 30–36 against the tank's 8–16). On this one map
-  the squad is judged on the real frame with its HP bar, which locates it. Every other set and every
-  other map passes the rule.
+  **Departures from the soldier targets above, named and accepted.**
+  1. Set 1 on Ridge, farthest-zoom gate (the rule is ΔE ≥ 14.5). The squad's tightest place must
+  not fall below 10.1 for the rifle squad and 12.3 for the assault squad. Ridge's meadow is yellow
+  (hue about 95) and set 1's sage green is the paint that keeps the squad reading as the same army
+  as its tanks; a greener or lighter cloth passes the number and reads as plastic or pale
+  (measured: a cloth of (122, 144, 75) passes at 15.7 and renders at chroma 30–36 against the
+  tank's 8–16). On this one map the squad is judged on the real frame with its HP bar, which
+  locates it. Every other set and every other map passes the rule.
+  2. Set 1 on Ridge, brightest tenth of the cloth (the target is L* 64). The figure-masked p90 at
+  the closest zoom is 64.5 for the rifle squad and 65.3 for the assault squad: 0.5 and 1.3 over.
+  Accepted because the sage cloth reads as field green on the frames, and lowering it fails the
+  gate floor above.
+  3. Set 2 on Crossroads and Ridge, brightest tenth of the cloth. The figure-masked p90 at the
+  closest zoom is 67.9 and 68.0 on Crossroads and 69.0 and 70.3 on Ridge (rifle and assault
+  squads), 4 to 6 over. Accepted because the sand cloth reads as warm sand, not white, and a
+  darker cloth fails the Ridge gate (the set passes it at 15.1 and 15.9). River is inside the
+  target.
 - **One mesh, one primitive, one material**, node transforms applied (a leftover transform is
   baked in on load, but a rotation off the X axis would misplace the wheel axles). Base colour
   texture, optional normal and glTF metallicRoughness (roughness in G, metallic in B), ≤ 1024 px.
