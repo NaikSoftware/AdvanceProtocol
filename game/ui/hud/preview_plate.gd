@@ -1,8 +1,8 @@
 class_name PreviewPlate
 extends HudBake
-## Плита прев'ю над рядом дій (spec §2): ряд цілі + один із вмістів — постріл, дрон, ремонт
-## чи назва верби. Лише показує готові значення, які дає HUD із core/-прев'ю; сама нічого не
-## рахує й не знає про правила.
+## Плита прев'ю над рядом дій (docs/ui/hud.md#action-previews): ряд цілі + один із вмістів —
+## постріл, дрон, ремонт чи назва верби. Лише показує готові значення, які дає HUD із
+## core/-прев'ю; сама нічого не рахує й не знає про правила.
 ##
 ## Вузли дітей отримують унікальні імена в сцені власника (HUD): тести й сцена бою читають
 ## %PreviewDamageValue тощо так само, як і раніше.
@@ -13,7 +13,8 @@ const BONE: Color = Color("e3dfd3")
 const DIM: Color = Color("8f918a")
 const HAIR: Color = Color("3a4043")
 const _SIL_INFANTRY: Texture2D = preload("res://assets/ui/icons/sil_infantry.svg")
-const _ICON_DRONE: Texture2D = preload("res://assets/ui/icons/drone.svg")
+## Той самий малюнок дрона, що й на кнопках «Удар» і «Дрон»: на одному кластері — один дрон.
+const _ICON_DRONE: Texture2D = preload("res://assets/ui/icons/btn_drone.svg")
 const _ICON_REPAIR: Texture2D = preload("res://assets/ui/icons/repair_unit.svg")
 ## Поля вмісту (ліво, верх, право, низ) і проміжок між колонками — однакові в пострілі, дроні й ремонті.
 const _BOX_MARGINS: Vector4 = Vector4(12, 6, 12, 7)

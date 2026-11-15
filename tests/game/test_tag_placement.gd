@@ -1,6 +1,6 @@
 extends GutTest
-## TagPlacement (spec §2): чиста геометрія, без вузлів. Точні значення, а не нерівності, там, де
-## їх дає формула.
+## TagPlacement (docs/ui/hud.md#unit-tag-placement): чиста геометрія, без вузлів. Точні
+## значення, а не нерівності, там, де їх дає формула.
 
 const SCREEN := Rect2(0, 0, 985, 442)
 const TAG := Vector2(209.0, 30.0)

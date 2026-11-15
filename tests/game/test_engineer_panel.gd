@@ -66,6 +66,26 @@ func test_five_buttons_without_ap_cost_in_one_plate() -> void:
 		assert_eq(p.button_for(a).size, Vector2(133, 48), "клітинка 133 × 48: %s" % EN_LABELS[a])
 
 
+## Заливка сітки щільніша за тихі кнопки (0,88 проти 0,65), щоб лінії дошки не перетинали клітинки,
+## а порожня шоста клітинка не має ні заливки, ні роздільників: інакше вона читається мертвою кнопкою.
+func test_grid_fill_is_dense_and_skips_the_empty_cell() -> void:
+	var e: Unit = _engineer()
+	var p: EngineerPanel = _panel()
+	p.show_for(_service.state, e)
+	await get_tree().process_frame
+	assert_eq(EngineerPanel.GRID_FILL_ALPHA, 0.88)
+	var empty := Rect2(135, 99, 133, 48)
+	assert_eq(p.face_rects(), [Rect2(0, 0, 269, 99), Rect2(0, 99, 135, 49)] as Array[Rect2],
+		"два прямокутники без накладання: верхні два ряди й ліва клітинка третього")
+	for r: Rect2 in p.face_rects() + p.hair_rects():
+		assert_false(r.intersects(empty), "порожня клітинка без заливки й роздільників: %s" % r)
+	assert_eq(p.hair_rects(), [Rect2(134, 1, 1, 97), Rect2(1, 49, 267, 1), Rect2(1, 98, 133, 1)] as Array[Rect2],
+		"роздільники лише між заповненими клітинками")
+	assert_eq(p.active_size(), Vector2(269, 148), "розмір плити для стикування не змінюється")
+	# Смужка озброєння лишається тихою, як кнопки ряду.
+	assert_almost_eq((p.strip().get_theme_stylebox(&"panel") as StyleBoxFlat).bg_color.a, 0.65, 0.001)
+
+
 ## Кожна верба в клітинці: значок, проміжок 6 і назва без обрізання, ≥ 7 dp повітря від краю клітинки
 ## з обох боків — обома мовами, приглушені теж (вони такі самі за шириною, але іншим шрифтом).
 func test_every_verb_fits_its_cell_with_air_on_both_sides() -> void:

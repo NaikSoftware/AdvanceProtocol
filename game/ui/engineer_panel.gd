@@ -38,6 +38,8 @@ const ICONS: Dictionary = {
 	EngineerCommand.Action.REPAIR_UNIT: preload("res://assets/ui/icons/btn_repair_unit.svg"),
 }
 const _HAIR: Color = Color("3a4043")
+## Щільніша за тихі кнопки (0,65): крізь 0,65 червона лінія краю карти й контури зон перетинали назви верб.
+const GRID_FILL_ALPHA: float = 0.88
 
 var _unit: Unit = null
 ## action -> {tiles, reason} з action_status().
@@ -53,16 +55,20 @@ func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_plate = PanelContainer.new()
 	_plate.name = "Plate"
-	# Плита верб — не число правил, тож тиха, як кнопки, а не суцільна, як плита прев'ю.
-	_plate.theme_type_variation = &"HudPlateQuiet"
+	# Плита верб — не число правил, тож не суцільна, як плита прев'ю. Заливку у формі «Г» малює
+	# _draw_plate: одна прямокутна плита залила б і порожню шосту клітинку, і та читалась би мертвою кнопкою.
+	# Поля 1 dp — місце краю, як у тихої плити: розмір для стикування той самий.
+	var bare := StyleBoxEmpty.new()
+	bare.set_content_margin_all(1.0)
+	_plate.add_theme_stylebox_override(&"panel", bare)
+	_plate.draw.connect(_draw_plate)
 	add_child(_plate)
 	var box := GridContainer.new()
 	box.name = "Box"
 	box.columns = COLUMNS
-	# Проміжок 1 dp між клітинками — місце для роздільників, які малює _draw_hairs.
+	# Проміжок 1 dp між клітинками — місце для роздільників, які малює _draw_plate.
 	box.add_theme_constant_override("h_separation", 1)
 	box.add_theme_constant_override("v_separation", 1)
-	box.draw.connect(_draw_hairs.bind(box))
 	_plate.add_child(box)
 	for action: int in LABEL_KEYS:
 		var b := Button.new()
@@ -77,7 +83,7 @@ func _init() -> void:
 		b.pressed.connect(_on_pressed.bind(action))
 		box.add_child(b)
 		_buttons[action] = b
-	# Шоста клітинка порожня: сітка лишається прямокутною, і роздільники не обриваються.
+	# Шоста клітинка порожня й без заливки: кнопок п'ять, а сітка 2 × 3 тримає їх на 48 dp.
 	var empty := Control.new()
 	empty.custom_minimum_size = Vector2(CELL_WIDTH, ROW_HEIGHT)
 	empty.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -145,15 +151,45 @@ func _relabel() -> void:
 		_strip.configure(null, "", tr("eng_hint_tap_tile"))
 
 
-## Роздільники 1 dp у проміжках сітки: GridContainer сам ліній не малює.
-func _draw_hairs(grid: GridContainer) -> void:
-	var rows: int = ceili(float(grid.get_child_count()) / COLUMNS)
-	for c in range(1, COLUMNS):
-		var x: float = c * (CELL_WIDTH + 1.0) - 1.0
-		grid.draw_rect(Rect2(x, 0.0, 1.0, grid.size.y), _HAIR)
-	for r in range(1, rows):
-		var y: float = r * (ROW_HEIGHT + 1.0) - 1.0
-		grid.draw_rect(Rect2(0.0, y, grid.size.x, 1.0), _HAIR)
+## Заливки плити в її координатах, без накладання (подвійна напівпрозорість дала б смугу на стику):
+## верхні два ряди на всю ширину й ліва клітинка третього ряду, кожна з краєм 1 dp.
+func face_rects() -> Array[Rect2]:
+	var top_h: float = 1.0 + 2.0 * (ROW_HEIGHT + 1.0)
+	return [Rect2(0.0, 0.0, _plate.size.x, top_h), Rect2(0.0, top_h, CELL_WIDTH + 2.0, _plate.size.y - top_h)]
+
+
+## Роздільники 1 dp лише між заповненими клітинками: порожня клітинка не має ні заливки, ні ліній.
+func hair_rects() -> Array[Rect2]:
+	var col_x: float = 1.0 + CELL_WIDTH
+	var row_y: float = 1.0 + ROW_HEIGHT
+	return [
+		Rect2(col_x, 1.0, 1.0, 2.0 * ROW_HEIGHT + 1.0),
+		Rect2(1.0, row_y, _plate.size.x - 2.0, 1.0),
+		Rect2(1.0, row_y + ROW_HEIGHT + 1.0, CELL_WIDTH, 1.0),
+	]
+
+
+func _draw_plate() -> void:
+	var rects: Array[Rect2] = face_rects()
+	# Стиль береться під час малювання: у _init тема ще не діє.
+	_plate.draw_style_box(_face(false), rects[0])
+	_plate.draw_style_box(_face(true), rects[1])
+	for r: Rect2 in hair_rects():
+		_plate.draw_rect(r, _HAIR)
+
+
+## Колір і край — з тихої плити теми, щільність — GRID_FILL_ALPHA. bottom — ліва клітинка третього ряду:
+## без верхнього краю (його дає нижній край верхньої частини) і з квадратними верхніми кутами.
+func _face(bottom: bool) -> StyleBoxFlat:
+	var f := (get_theme_stylebox(&"panel", &"HudPlateQuiet") as StyleBoxFlat).duplicate() as StyleBoxFlat
+	f.bg_color.a = GRID_FILL_ALPHA
+	if bottom:
+		f.border_width_top = 0
+		f.corner_radius_top_left = 0
+		f.corner_radius_top_right = 0
+	else:
+		f.corner_radius_bottom_left = 0
+	return f
 
 
 func _on_pressed(action: int) -> void:

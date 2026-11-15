@@ -413,11 +413,23 @@ func test_pause_button_has_no_background_in_any_state() -> void:
 		assert_true(b.get_theme_stylebox(st) is StyleBoxEmpty, "пауза без плити: %s" % st)
 	assert_eq(b.size, Vector2(48, 48), "тап-ціль 48 × 48")
 	var mark := b.get_meta(&"group_mark") as TextureRect
-	assert_eq(mark.texture.resource_path, "res://assets/ui/icons/btn_pause.svg", "значок із запеченою тінню")
+	assert_eq(mark.texture.resource_path, "res://assets/ui/icons/btn_pause.svg", "запечена тінь")
+	# Самі смужки малює код по цілих пікселях: кісткова смужка в текстурі розмилася б фільтром поверх них.
+	assert_false(FileAccess.get_file_as_string("res://assets/ui/icons/btn_pause.svg").contains("#fff"), "у текстурі лише тінь")
+	assert_eq(mark.draw.get_connections().size(), 1, "смужки малює draw значка")
 	await get_tree().process_frame
 	var visual := Rect2(Vector2(0, 8), Vector2(40, 40))
 	assert_eq(mark.get_rect().get_center() + (mark.get_parent() as Control).position + ((mark.get_parent() as Control).get_parent() as Control).position, visual.get_center(),
 		"значок по центру малюнка 40 × 40, зсунутого від кута екрана на 8 dp")
+
+
+## Смужки паузи — 2–2,5 dp × ~16 dp і лягають на цілі пікселі за обох масштабів: 2 px/dp і 1,51875
+## (1496 × 672 при 243 dpi), де текстура, розтягнута фільтром, давала смужкам різну яскравість.
+func test_pause_bars_snap_to_whole_device_pixels_at_both_scales() -> void:
+	assert_eq(Hud.pause_bars(Vector2(1000.3, 100.7), 2.0),
+		[Rect2(991, 85, 5, 32), Rect2(1005, 85, 5, 32)] as Array[Rect2], "2 px/dp: 2,5 × 16 dp")
+	assert_eq(Hud.pause_bars(Vector2(700.2, 40.6), 1.51875),
+		[Rect2(693, 29, 3, 24), Rect2(704, 29, 3, 24)] as Array[Rect2], "1,51875 px/dp: 3 px ≈ 2 dp, 24 px ≈ 16 dp")
 
 
 ## «Дрон» / "Drone": значок 16, проміжок 6 і слово лишають ≥ 7 dp до роздільника перед ромбиками, обома мовами.
@@ -764,6 +776,34 @@ func test_verb_plate_goes_bottom_left_of_end_turn_when_bottom_right_is_busy() ->
 	var rects: Array[Rect2] = pick["rects"]
 	assert_eq(pick["name"], "bl")
 	assert_eq(rects[0].position.x, 24.0 + 136.0 + 16.0, "праворуч від «Завершити хід» з проміжком 16")
+
+
+## «Закласти міну» не має кроку підтвердження. Коли плита верб не може стати осторонь
+## інженера й сусідніх клітинок, вона лежить над дошкою, і другий тап подвійного торкання
+## влучив би в клітинку — тоді контролер мусить ковтати тапи по дошці одразу після озброєння.
+func test_verb_plate_over_the_engineer_arms_the_tap_guard_and_a_clear_plate_drops_it() -> void:
+	var state: BattleState = _state()
+	state.active_player = 0
+	var eng: Unit = state.add_unit(11, 0, Vector2i(4, 8), 0)
+	var controller: InputController = _ctl(state)
+	var rig: IsoCameraRig = _rig_for(Vector2i(6, 6))
+	hud.attach_camera(rig)
+	hud.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	hud.size = Vector2(1280, 720)
+	controller.select_unit(eng)
+	var plate: Vector2 = (hud.get_node("%EngineerPanel") as EngineerPanel).active_size()
+	var cell: Rect2 = UnitScreenBox.cell_rect(eng.pos, rig)
+	assert_eq(controller.tap_guard_ms, 0, "плита праворуч унизу вільна — запобіжник не потрібен")
+
+	# Ширина, за якої обидва місця плити (праворуч унизу й ліворуч від «Завершити хід»)
+	# збігаються, а висота ставить їх просто на клітинку інженера.
+	var left_x: float = HudDocking.SAFE_X + HudDocking.END_TURN_W + 16.0
+	hud.size = Vector2(left_x + plate.x + HudDocking.SAFE_X, cell.get_center().y + HudDocking.SAFE_BOTTOM + plate.y * 0.5)
+	assert_true(cell.position.x < left_x + plate.x and cell.end.x > left_x, "передумова: інженер під плитою")
+	assert_eq(controller.tap_guard_ms, Hud.ENGINEER_TAP_GUARD_MS, "плита над інженером — тапи по дошці під запобіжником")
+
+	hud.size = Vector2(1280, 720)
+	assert_eq(controller.tap_guard_ms, 0, "плита знову вільна — запобіжник знято")
 
 
 func test_strip_docks_bottom_right_then_top_right_then_top_left() -> void:

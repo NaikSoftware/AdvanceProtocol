@@ -127,9 +127,13 @@ preview fields; the glyph's geometry never decides a sector.
   the engineer verbs with their own name and icon (clear mine, repair bridge, demolish bridge).
   **One icon family for every button:** every `btn_*.svg` (Confirm, Cancel, End turn, pause, Дрон,
   the verb grid, the armed strip) is cropped so its ink is ~15.5 dp on its longest side inside one
-  16-dp box (`HudKit.ICON_PX`) at a stroke of box ÷ 12 (≈ 1.33 dp). The pause texture is 20 dp because
-  its shadow takes 2 dp a side; its ink is the same 16. The plain `drone.svg` and `repair_unit.svg` stay for the
-  preview plate and the hold card. **One gap:** 6 dp from icon box to word (`HudKit.ICON_GAP`) for every
+  16-dp box (`HudKit.ICON_PX`) at a stroke of box ÷ 12 (≈ 1.33 dp). Pause is the exception: its
+  two bars, 2.25 × 16 dp at a 7-dp pitch, are drawn in code and rounded to whole device pixels
+  (`Hud.pause_bars()`: 5 × 32 px at 2 px/dp, 3 × 24 px at 1.519), because a texture resampled to
+  30.4 px lit the two bars unevenly. `btn_pause.svg` carries only the shadow, ~3 dp around the bars at
+  ~50 % next to them, in a 22-dp box. The damage plate draws the drone with the buttons' `btn_drone.svg`,
+  so the cluster has one drone; the plain `drone.svg` stays for the hold card and `repair_unit.svg` for
+  the repair plate. **One gap:** 6 dp from icon box to word (`HudKit.ICON_GAP`) for every
   action, no exceptions. The label is a localisation key in an auto-translating Label. The 136-dp
   width holds the longest label (en «Demolish bridge») untruncated with ≥ 7 dp from the inner border on
   both sides at all four probe sizes in both locales (`tests/game/test_hud_action_labels.gd`).
@@ -144,7 +148,8 @@ preview fields; the glyph's geometry never decides a sector.
   title and hint fits in the armed cell in both locales, so the strip never widens. **Cancel sits
   on the row's Cancel slot** with the same rect (104 × 48, no plate margin on its side, the divider
   drawn outside it) and the same centred icon-and-word group, so × and the word land on the same
-  pixels between arming and the pending row,
+  pixels between arming and the pending row. The two text lines sit 2 dp tighter than the font's line
+  height, with an 11-dp hint, so the title caps and the hint descenders keep ≥ 6 dp to the plate edge,
   and the inert armed cell sits where Confirm appears one tap later. With Cancel on the right, a
   player backing out with a second tap would fire a drone or demolish a bridge. The armed cell stops
   the tap and does nothing; it does not fall through to the board.
@@ -152,7 +157,10 @@ preview fields; the glyph's geometry never decides a sector.
   116 × 48 hit area.
 - **The engineer verb plate** is a 2 × 3 grid of 133 × 48 cells, 269 × 148 with 1-dp dividers: lay and
   clear mine, repair and demolish bridge, repair unit, and one empty cell. Each cell is icon (16) + 6 +
-  verb name (14), left-aligned, ≥ 7 dp from both cell edges in both locales. Five stacked 48-dp rows
+  verb name (14), left-aligned, ≥ 7 dp from both cell edges in both locales. The fill is denser than a
+  quiet button (`EngineerPanel.GRID_FILL_ALPHA`, 88 %), so map-edge lines and zone contours do not cross
+  the verb names, and it covers the five verbs only: the empty cell has no fill, edge or dividers, so it
+  does not read as a dead button. Five stacked 48-dp rows
   took two thirds of a 360-dp screen, and a shorter row would break the 48-dp hit area. An unavailable
   verb stays dimmed (`HudCellButtonMuted`) and tappable, so the tap can show the reason.
 - **The toast** (an `ERR_*` refusal) sits right-aligned 8 dp above whatever occupies the
@@ -234,7 +242,7 @@ Colour tokens (Godot `Color` hex):
 | token | value | use |
 | --- | --- | --- |
 | `plate` | `121516e6` (90 %) | the player chip |
-| `button_fill` | `121516a6` (65 %) | End turn, Cancel, Дрон, the verb grid, the armed strip (`q_btn`, `q_panel`) |
+| `button_fill` | `121516a6` (65 %) | End turn, Cancel, Дрон, the armed strip (`q_btn`, `q_panel`); the verb grid takes the same colour at 88 % |
 | `primary_fill` | `121516b8` (72 %) | Confirm (`q_prim`) |
 | `button_edge` | `575e61` at 55 %, 1 dp, radius 3 | the soft edge of every quiet button |
 | `plate_solid` | `121516` | every plate that carries rule numbers: preview plate, unit tag, hold card, toast |
@@ -243,6 +251,7 @@ Colour tokens (Godot `Color` hex):
 | `press` | `1e2325` | pressed fill |
 | `text` (bone) | `e3dfd3` | labels, numbers, lit armour wedge, primary frame (1 dp at 85 %), pause icon |
 | `dim` | `8f918a` | captions, `/48`, muted verbs, silhouettes |
+| `hint` | `a4a69e` | the armed strip's hint (`ArmedStrip.HINT`): `dim` gives only ~4.1:1 on the 65 % fill over a field |
 | `p1` / `p2` / `p3` | `3a6ea5` / `a54a3a` / `5a8a4a` | `UnitView.PLAYER_COLORS`: chip bar, target and card tabs, gate rules |
 | gate scrim | `0d1013` | under the gate plate |
 
@@ -252,8 +261,9 @@ brightest board pixel behind each button (`hud=off` frames), bone on the 65 % fi
 worst case is the cluster docked top-left over the village's pale house walls; at the bottom docks it
 is ≥ 8.3:1. Dim text and icons (hint, muted verbs, the Cancel ×) fall to about 2.1:1 over those
 walls. Raise the fill alpha if a map puts a brighter surface under a button and bone falls below
-4.5:1. The pause bars keep ≥ 5.8:1 against their own shadow on every captured frame. Plates that carry rule numbers stay solid. **Pause has no background in any state**,
-focus included: only its bone icon with a soft dark shadow baked into `btn_pause.svg`, dimmed to 70 %
+4.5:1. Small text keeps ≥ 4.5:1 on its own fill over ordinary ground, which is why the strip hint is
+`hint`, not `dim`. The pause bars keep ≥ 7.2:1 against the shadow pixels next to them on every captured frame. Plates that carry rule numbers stay solid. **Pause has no background in any state**,
+focus included: only its bone bars over a soft dark shadow baked into `btn_pause.svg`, dimmed to 70 %
 while pressed (`HudIconButton`). No blur shader and no `BackBufferCopy`: both cost draw calls the
 budget does not have.
 
@@ -275,7 +285,7 @@ separate.
 
 | type | dp | variations |
 | --- | --- | --- |
-| captions | 11 | `HudCaption`, `HudCaptionStats`, `HudFloorCaption` |
+| captions | 11 | `HudCaption`, `HudCaptionStats`, `HudFloorCaption`, the armed strip's hint |
 | small, dim | 12 | `HudHint`, `HudDim`, `HudNumberTag`, `HudNumberDim13` |
 | names | 13 | `HudName`, `HudToast` |
 | buttons, labels | 14 | `HudLabel`, `HudPlateButton(Muted)`, `HudCellButton(Muted)`, `HudPrimaryButton`, `HudNumber`, `HudNumberDim15` |

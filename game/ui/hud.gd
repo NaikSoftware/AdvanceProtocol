@@ -46,8 +46,8 @@ const _VERB_ICONS: Dictionary = {
 const _BTN_DRONE: Texture2D = preload("res://assets/ui/icons/btn_drone.svg")
 const _ICON_FIRE: Texture2D = preload("res://assets/ui/icons/btn_fire.svg")
 const _ICON_MOVE: Texture2D = preload("res://assets/ui/icons/btn_move.svg")
-## Значок паузи несе запечену тінь по 2 dp з кожного боку: бокс текстури 20 dp, чорнило — ті самі 16.
-const _PAUSE_ICON_PX: float = 20.0
+## Текстура паузи — лише запечена тінь, ~3 dp довкола смужок 16 dp заввишки: бокс 22 dp.
+const _PAUSE_ICON_PX: float = 22.0
 const _ICON_CONFIRM: Texture2D = preload("res://assets/ui/icons/confirm.svg")
 
 var _state: BattleState = null
@@ -107,6 +107,28 @@ var _cluster_name: String = ""
 @onready var _toast_label: Label = %ToastLabel
 
 
+## Дві смужки паузи в пікселях екрана довкола центру center: 2,25 × 16 dp із кроком 7 dp, кожен розмір
+## округлений до цілого пікселя. Текстура, розтягнута фільтром до 30,4 px (1,51875 px/dp), давала двом
+## смужкам різну яскравість, тож смужки малює код, а текстура несе лише м'яку тінь.
+static func pause_bars(center: Vector2, px_per_dp: float) -> Array[Rect2]:
+	var w: int = roundi(2.25 * px_per_dp)
+	var h: int = roundi(16.0 * px_per_dp)
+	var pitch: int = roundi(7.0 * px_per_dp)
+	var left: int = roundi(center.x - (pitch + w) * 0.5)
+	var top: int = roundi(center.y - h * 0.5)
+	return [Rect2(left, top, w, h), Rect2(left + pitch, top, w, h)]
+
+
+## Смужки паузи поверх тіні в просторі пікселів екрана. Білі: колір і стан (натиснута — 70 %) дає
+## модуляція значка, як і тіні.
+func _draw_pause_bars(mark: TextureRect) -> void:
+	var to_screen: Transform2D = get_viewport().get_final_transform() * mark.get_global_transform_with_canvas()
+	mark.draw_set_transform_matrix(to_screen.affine_inverse())
+	for r: Rect2 in pause_bars(to_screen * (mark.size * 0.5), to_screen.get_scale().x):
+		mark.draw_rect(r, Color.WHITE)
+	mark.draw_set_transform_matrix(Transform2D.IDENTITY)
+
+
 func _ready() -> void:
 	HudKit.group_content(_confirm_button, HudKit.ICON_PX)
 	_confirm_button.pressed.connect(_on_confirm_pressed)
@@ -123,6 +145,10 @@ func _ready() -> void:
 	# у LINEAR-дітях групи, інакше стрілка значка сходинкується.
 	HudKit.group_content(_end_turn_button, HudKit.ICON_PX)
 	HudKit.group_content(_pause_button, _PAUSE_ICON_PX)
+	var pause_mark := _pause_button.get_meta(&"group_mark") as TextureRect
+	pause_mark.draw.connect(_draw_pause_bars.bind(pause_mark))
+	# Масштаб екрана змінюється разом із вікном, а позиція значка в dp — ні: перерахувати пікселі.
+	get_viewport().size_changed.connect(pause_mark.queue_redraw)
 	HudKit.group_content(_cancel_button, HudKit.ICON_PX)
 	for b: Button in [_end_turn_button, _pause_button, _cancel_button]:
 		b.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -840,7 +866,7 @@ func _ring(center: Vector2i, radius: int) -> PackedVector2Array:
 
 # --- Картка утримання ----------------------------------------------------------------
 
-## Точка натиску на екрані: картка обходить палець (spec §2).
+## Точка натиску на екрані: картка обходить палець (docs/ui/hud.md#tap-and-press-and-hold).
 func note_press(point: Vector2) -> void:
 	_press_point = point
 

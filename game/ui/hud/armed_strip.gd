@@ -1,6 +1,7 @@
 class_name ArmedStrip
 extends PanelContainer
-## Смужка озброєння (дрон або верба інженера): [Скасувати | клітинка «озброєно»], spec §2.
+## Смужка озброєння (дрон або верба інженера): [Скасувати | клітинка «озброєно»]
+## (docs/ui/hud.md#cancel-confirm-and-end-turn).
 ## «Скасувати» стоїть ЛІВОРУЧ, на місці «Скасувати» ряду дій: один тап по цілі замінює
 ## смужку рядом, і «Підтвердити» з'являється на правому кінці. Було б «Скасувати» праворуч —
 ## другий тап «передумав» влучав би в «Підтвердити» й запускав дрон чи підривав міст.
@@ -17,6 +18,16 @@ const CANCEL_WIDTH: float = 104.0
 ## Тап-ціль ряду дій: смужка підміняє ряд, тож «Скасувати» не стрибає між озброєнням і очікуванням.
 ## Плита малюється на HudDocking.VISUAL_H, нижні 8 dp — лише тап-ціль.
 const HEIGHT: float = HudDocking.ROW_H
+## Підказка світліша за загальний HudKit.DIM: на тихій заливці 65 % над полем DIM дає ~4,1 : 1, а дрібному
+## тексту треба ≥ 4,5 : 1. DIM лишається для приглушених верб і підписів на щільніших плитах.
+const HINT: Color = Color("a4a69e")
+## Два рядки щільніше за висоту шрифту на 2 dp: інакше під виносними підказки лишалось ~3 dp, а не 6.
+## Щільніше не можна — нижні виносні назви («Підірвати», "Repair") лягли б на літери підказки.
+const _LINE_TUCK: int = -2
+## Над великими літерами назви шрифт тримає запас під надрядкові знаки (Й, Ї), тож чорнило двох рядків
+## сидить нижче центру; порожній рядок під підказкою піднімає блок на 1 dp, і крапка над «і» теж
+## лишається нижче краю плити.
+const _LIFT: float = 4.0
 const _ICON_CANCEL: Texture2D = preload("res://assets/ui/icons/btn_cancel.svg")
 
 var cancel_button: Button
@@ -71,7 +82,7 @@ func _init() -> void:
 	_icon.modulate = HudKit.BONE
 	armed_cell.add_child(_icon)
 	var text := VBoxContainer.new()
-	text.add_theme_constant_override("separation", 0)
+	text.add_theme_constant_override("separation", _LINE_TUCK)
 	text.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	text.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -90,9 +101,11 @@ func _init() -> void:
 	title_row.add_child(_pips)
 	hint_label = Label.new()
 	hint_label.theme_type_variation = &"HudHint"
-	hint_label.add_theme_color_override("font_color", Color("8f918a"))
+	hint_label.add_theme_color_override("font_color", HINT)
+	hint_label.add_theme_font_size_override("font_size", 11)
 	hint_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	text.add_child(hint_label)
+	text.add_child(_spacer(0.0, _LIFT))
 	# Порожня комірка в кінці: проміжок 6 перед нею + край плити 1 = 7 dp повітря після підпису.
 	armed_cell.add_child(_spacer(0.0))
 
@@ -122,8 +135,8 @@ func configure(icon: Texture2D, title: String, hint: String, pips: Vector2i = Ve
 		_pips.set_counts(pips.x, pips.y)
 
 
-func _spacer(width: float) -> Control:
+func _spacer(width: float, height: float = 0.0) -> Control:
 	var c := Control.new()
-	c.custom_minimum_size = Vector2(width, 0.0)
+	c.custom_minimum_size = Vector2(width, height)
 	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return c
