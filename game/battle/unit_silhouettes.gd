@@ -195,8 +195,8 @@ static func _merged_mat() -> StandardMaterial3D:
 	return _merged_material
 
 
-## Сітка тіла на тип і кількість стоячих фігур; спільна для всіх юнітів того
-## самого вигляду, тож падіння фігури — підміна сітки, а не нова. Відділення несе лише
+## Меш тіла на тип і кількість стоячих фігур; спільний для всіх юнітів того
+## самого вигляду, тож падіння фігури — підміна меша, а не новий. Відділення несе лише
 ## стоячих: загиблі лежать там, де впали (шар тіл WreckLayer), а не йдуть із ним.
 ## Труб дрона на відділенні стільки, скільки дронів лишилось (§3.9, число публічне), і несуть їх
 ## перші стоячі місця — вони падають останніми; решта — простий боєць (`PLAIN_FIGURE`). Модель із
@@ -211,12 +211,12 @@ static func _merged_key(type_id: int, standing: int, set_id: int, drones: int, l
 	return "%d:%d:%s:%d:%d:%d:%d" % [_resolved_set(type_id, set_id), type_id, "model" if model != null else "box", up if has_figures else 0, tubes, layout, face if has_figures else 0]
 
 
-## Чи сітка вже злита (кеш merged_mesh): тоді виклик нічого не будує.
+## Чи меш уже злитий (кеш merged_mesh): тоді виклик нічого не будує.
 static func merged_cached(type_id: int, standing: int, set_id: int, drones: int, layout: int, face: int) -> bool:
 	return _merged_meshes.has(_merged_key(type_id, standing, set_id, drones, layout, face))
 
 
-## `face` — напрям відділення (0–7): сітка будується у світових осях (вузол відділення повертають назад), і в
+## `face` — напрям відділення (0–7): меш будується у світових осях (вузол відділення повертають назад), і в
 ## неї вписаний поворот самих фігур.
 static func merged_mesh(type_id: int, standing: int = -1, set_id: int = 0, drones: int = 0, layout: int = 0, face: int = 0) -> ArrayMesh:
 	var has_figures: bool = (spec(type_id, set_id).extras as Array).has(&"figures")
@@ -243,11 +243,11 @@ static func merged_mesh(type_id: int, standing: int = -1, set_id: int = 0, drone
 				crouched.append(xf)
 			else:
 				bare.append(xf)
-		# Без жодного стоячого — порожня сітка: вузол знищеного відділення нічого не малює.
+		# Без жодного стоячого — порожній меш: вузол знищеного відділення нічого не малює.
 		_merged_meshes[key] = _merge_parts([[model, with_tube], [bare_mesh, bare], [crouch, crouched]]) if up > 0 else ArrayMesh.new()
 		return _merged_meshes[key]
 	var root := build(type_id, set_id)
-	var pieces: Array[Array] = []  ## [масиви сітки, перетворення, колір]
+	var pieces: Array[Array] = []  ## [масиви меша, перетворення, колір]
 	for part: Node in root.get_children():
 		if part is MeshInstance3D:
 			var mi := part as MeshInstance3D
