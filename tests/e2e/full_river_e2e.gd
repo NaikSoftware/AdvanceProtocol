@@ -129,7 +129,16 @@ func _focus_camera(cell: Vector2i) -> void:
 
 
 func _confirm_action() -> void:
-	await _e2e.confirm()
+	if _is_headless():
+		await _e2e.confirm()
+		return
+	# Не через _e2e.confirm(): його settle() докручує твіни, і хід, постріл та вибух
+	# стрибали б одразу в кінець. У вікні чекаємо запікання плити в реальному часі.
+	var button: Button = _e2e.hud().get_node("%ConfirmButton")
+	var deadline: int = Time.get_ticks_msec() + 5000
+	while button.disabled and Time.get_ticks_msec() < deadline:
+		await get_tree().process_frame
+	_e2e.press(button)
 	await _wait_idle()
 	await _pause(0.25, 0.05)
 
