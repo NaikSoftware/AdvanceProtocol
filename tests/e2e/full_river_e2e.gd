@@ -98,7 +98,9 @@ func _wait_idle(max_seconds: float = 15.0) -> void:
 		return
 	var deadline: int = Time.get_ticks_msec() + int(max_seconds * 1000.0)
 	await get_tree().process_frame
-	while _e2e.screen._event_player.is_playing():
+	# Повтор ходів противника після гейта грає між тактами програвача: поки він
+	# триває, дошка чужа й тап по юніту ігнорується, тож чекаємо і його.
+	while _e2e.screen._event_player.is_playing() or _e2e.screen._replay_state != null:
 		if Time.get_ticks_msec() > deadline:
 			fail_test("не дочекались завершення анімації подій")
 			return
@@ -129,7 +131,16 @@ func _focus_camera(cell: Vector2i) -> void:
 
 
 func _confirm_action() -> void:
-	await _e2e.confirm()
+	if _is_headless():
+		await _e2e.confirm()
+		return
+	# Не через _e2e.confirm(): його settle() докручує твіни, і хід, постріл та вибух
+	# стрибали б одразу в кінець. У вікні чекаємо запікання плити в реальному часі.
+	var button: Button = _e2e.hud().get_node("%ConfirmButton")
+	var deadline: int = Time.get_ticks_msec() + 5000
+	while button.disabled and Time.get_ticks_msec() < deadline:
+		await get_tree().process_frame
+	_e2e.press(button)
 	await _wait_idle()
 	await _pause(0.25, 0.05)
 

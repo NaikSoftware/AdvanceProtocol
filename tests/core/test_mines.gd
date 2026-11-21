@@ -125,12 +125,64 @@ func test_driving_onto_an_unknown_mine_detonates_it() -> void:
 			triggered = true
 	assert_true(triggered)
 
-func test_own_mines_do_not_detonate_under_the_owner() -> void:
+## §3.11: міна рве того, хто на неї в'їхав, хоч би чия вона була. Стояти на міні не
+## може ніхто, і власник теж.
+func test_an_own_mine_detonates_under_its_owner() -> void:
 	Mines.place(state, Vector2i(5, 5), 0)
 	var u: Unit = state.add_unit(5, 0, Vector2i(5, 5), 0)
 	var before: int = u.hp
+	var events: Array = Mines.step_on(state, u)
+	assert_true(u.hp < before, "своя міна рве й свого")
+	assert_null(Mines.mine_at(state, Vector2i(5, 5)), "міна одноразова")
+	assert_true(events.size() > 0 and events[0] is Events.MineTriggered)
+
+func test_in_three_players_a_mine_detonates_under_its_owners_unit() -> void:
+	state = BattleState.create(Board.create(10, 10, Terrain.GroundState.DRY), 3, 5)
+	Mines.place(state, Vector2i(5, 5), 2)
+	Mines.place(state, Vector2i(7, 7), 2)
+	var u: Unit = state.add_unit(5, 2, Vector2i(5, 5), 0)
+	var before: int = u.hp
 	Mines.step_on(state, u)
-	assert_eq(u.hp, before, "своя міна свого не рве")
+	assert_true(u.hp < before)
+	assert_null(Mines.mine_at(state, Vector2i(5, 5)))
+	var other: Mines.Mine = Mines.mine_at(state, Vector2i(7, 7))
+	assert_eq(other.known_to, [false, false, true] as Array[bool], "інші міни своїх знань не міняють")
+
+func _bridge_with_mine(pos: Vector2i, owner: int) -> void:
+	state.board.set_kind(pos, Terrain.Kind.BRIDGE)
+	Mines.place(state, pos, owner)
+
+func _has(events: Array, cls: Variant) -> bool:
+	for e in events:
+		if is_instance_of(e, cls):
+			return true
+	return false
+
+## Міна на мосту підриває міст разом із тим, хто на нього в'їхав: тайл стає
+## BRIDGE_DESTROYED тим самим шляхом, що й від підриву інженером, і юніт іде в річку
+## без уламків.
+func test_a_mine_on_a_bridge_destroys_the_bridge_and_the_unit() -> void:
+	_bridge_with_mine(Vector2i(5, 5), 0)
+	state.add_unit(0, 1, Vector2i(9, 9), 0)
+	var u: Unit = state.add_unit(5, 1, Vector2i(5, 5), 0)
+	var events: Array = Mines.step_on(state, u)
+	assert_eq(state.board.kind_at(Vector2i(5, 5)), Terrain.Kind.BRIDGE_DESTROYED)
+	assert_false(u.is_alive(), "юніт іде в річку разом із мостом")
+	assert_null(Mines.mine_at(state, Vector2i(5, 5)))
+	assert_true(events[0] is Events.MineTriggered, "спершу вибух, потім міст")
+	assert_true(_has(events, Events.BridgeChanged))
+	assert_true(_has(events, Events.UnitDestroyed))
+	assert_false(_has(events, Events.WreckLeft), "техніка в річці уламків не лишає")
+	assert_eq(state.wrecks.size(), 0)
+
+func test_a_mined_bridge_takes_a_wreck_on_it_along() -> void:
+	_bridge_with_mine(Vector2i(5, 5), 0)
+	state.wrecks.append(Wrecks.Wreck.new(Vector2i(5, 5), 5, 0, 99, 1))
+	state.add_unit(0, 1, Vector2i(9, 9), 0)
+	var u: Unit = state.add_unit(0, 1, Vector2i(5, 5), 0)   # піхота стоїть і на уламках
+	var events: Array = Mines.step_on(state, u)
+	assert_null(Wrecks.wreck_at(state, Vector2i(5, 5)), "уламки падають у річку з мостом")
+	assert_true(_has(events, Events.WreckRemoved))
 
 func test_clearing_removes_the_mine() -> void:
 	Mines.place(state, Vector2i(5, 5), 0)
@@ -149,12 +201,3 @@ func test_mine_can_kill_and_end_the_match() -> void:
 		if e is Events.MatchEnded:
 			ended = true
 	assert_true(ended)
-
-func test_mine_damage_is_credited_to_the_mine_owner() -> void:
-	# Шкода міни йде в damage_dealt власника міни.
-	Mines.place(state, Vector2i(5, 5), 0)
-	var u: Unit = state.add_unit(5, 1, Vector2i(5, 5), 0)
-	var before: int = u.hp
-	Mines.step_on(state, u)
-	assert_eq(state.damage_dealt[0], before - u.hp)
-	assert_eq(state.damage_dealt[1], 0)

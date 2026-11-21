@@ -23,6 +23,9 @@ signal playback_finished
 ## малювати, вигляд бере з BattleState.known_broken_map(глядача), а не з події.
 signal forest_changed
 
+## Бійці впали й лягли на тайлі (Casualties.Body). Чи бачить їх той, хто перед екраном, вирішує екран.
+signal figures_fell(body: Casualties.Body)
+
 ## Крок руху юніта тайл за тайлом (§1.4 — атмосфера читається, не
 ## пролітає повз). Той самий порядок величини, що й FACE_TURN_DURATION у
 ## UnitView.
@@ -122,6 +125,16 @@ func play(events: Array[Events.BattleEvent]) -> void:
 	playback_finished.emit()
 
 
+## Чи перекидається зараз боєць цього відділення: падіння малює хтось, і подія просто перед ним — влучання в
+## це відділення (core/ подає FiguresFell одразу за DamageDealt). Здача теж кладе тіла, але без влучання —
+## там ніхто не перекидається, і чекати нічого.
+func _tips(unit_id: int) -> bool:
+	if figures_fell.get_connections().is_empty() or _batch_index < 1:
+		return false
+	var e: Events.BattleEvent = _batch[_batch_index - 1]
+	return e is Events.DamageDealt and (e as Events.DamageDealt).unit_id == unit_id
+
+
 ## Пропуск повтору: поточний play() кінчається одразу, без playback_finished, і програвач придатний
 ## для наступного. Чекати кінця анімації не можна: екран звільняє вузол, чий твін вона чекає, а
 ## вбитий твін finished не подає.
@@ -196,6 +209,12 @@ func _dispatch(event: Events.BattleEvent) -> Variant:
 		return _handle_drone_launched(event)
 	elif event is Events.DamageDealt:
 		return _handle_damage_dealt(event)
+	elif event is Events.FiguresFell:
+		figures_fell.emit((event as Events.FiguresFell).body)
+		# Пакет чекає, доки боєць перекинеться (якщо падіння хтось малює): перебудова юнітів
+		# після пакета інакше обриває його на першому кадрі.
+		var fell: Casualties.Body = (event as Events.FiguresFell).body
+		return _pause(UnitView.FALL_TIP_SEC) if not Casualties.has_crew(fell.type_id) and _tips(fell.unit_id) else null
 	elif event is Events.UnitDestroyed:
 		return _handle_unit_destroyed(event)
 	elif event is Events.WreckLeft:
@@ -358,8 +377,24 @@ func _handle_drone_launched(event: Events.DroneLaunched) -> Variant:
 	var view: UnitView = _resolve_unit_view(event.attacker_id)
 	if view != null:
 		view.set_drones(event.drones_left)
-	# Влучання — і від загону, якого глядач не бачить, як і від гармати невидимого стрільця.
-	return _play_shot(event.attacker_id, event.target_id, BattleFx.Weapon.DRONE)
+	var target_view: UnitView = _resolve_unit_view(event.target_id)
+	# Влучання — і від загону, якого глядач не бачить, як і від гармати невидимого стрільця:
+	# політ з тайла, що не розвіданий, показав би, звідки вдарили (§3.3.1). Без цілі польоту
+	# теж нема куди летіти.
+	if view == null or target_view == null:
+		return _play_shot(event.attacker_id, event.target_id, BattleFx.Weapon.DRONE)
+	view.play_shot()
+	BattleFx.spawn_drone(view.get_parent(), view.position, target_view.position)
+	var target: Unit = _resolve_unit(event.target_id)
+	var armoured: bool = target != null and UnitTypes.is_vehicle(target.unit_class())
+	# Влучання — мить прильоту; решту (шкоду, поворот цілі) програвач чекає вже після нього.
+	var t: Tween = Engine.get_main_loop().create_tween()
+	t.tween_interval(BattleFx.DRONE_FLIGHT_SEC)
+	t.tween_callback(func() -> void:
+		if is_instance_valid(target_view):
+			BattleFx.spawn_hit(target_view.get_parent(), target_view.position, BattleFx.Weapon.DRONE, armoured))
+	t.tween_interval(BattleFx.HIT_HOLD_SEC)
+	return t.finished
 
 
 func _handle_damage_dealt(event: Events.DamageDealt) -> Variant:

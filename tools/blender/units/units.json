@@ -1,5 +1,35 @@
 {
-  "_doc": "Per-unit build config, read by tools/blender/units/*.py. Every length is in SOURCE units (the generated GLB as imported), long axis on `fwd`, `h` = height above the source's lowest vertex; measure with measure_source.py. `ends_bottom_h` [rear, front] is the bottom edge of the rear plate and the bow (0 = no bow beyond the track), which verify_glb.py keeps every body vertex above. `type_id` picks the hull box from game/battle/unit_silhouettes.gd _SPECS, which fixes the uniform scale and the muzzle. `fwd` \"-y\" is a source whose nose points to -Y (prep.py turns it half a turn about Z). `gear.kind` \"wheels\" replaces the track loop with tyres: `road` {r, h, long[]} is the axle discs in SOURCE units, `cut_lat`/`cut_r` what prep removes around them, `wheel_lat` the procedural tyre's lateral span, `hub` and `bevel` its shape; no `cut`, `track_*`, `sprocket`, `idler` or `ends_bottom_h`.",
+  "_doc": "Per-unit build config, read by tools/blender/units/*.py. Every length is in SOURCE units (the generated GLB as imported), long axis on `fwd`, `h` = height above the source's lowest vertex; measure with measure_source.py. `ends_bottom_h` [rear, front] is the bottom edge of the rear plate and the bow (0 = no bow beyond the track), which verify_glb.py keeps every body vertex above. `type_id` picks the hull box from game/battle/unit_silhouettes.gd _SPECS, which fixes the uniform scale and the muzzle. `fwd` \"-y\" is a source whose nose points to -Y (prep.py turns it half a turn about Z). `gear.kind` \"wheels\" replaces the track loop with tyres: `road` {r, h, long[]} is the axle discs in SOURCE units, `cut_lat`/`cut_r` what prep removes around them, `wheel_lat` the procedural tyre's lateral span, `hub` and `bevel` its shape; no `cut`, `track_*`, `sprocket`, `idler` or `ends_bottom_h`. `towed` marks a gun on one axle (wheels, no hull roof gun): verify_glb.py then reads the muzzle as the front-most vertex. `gun.pitch` (degrees) tilts the barrel line about its breech point (`start_long`, `axis_h`); a unit with no `gun` (engineer vehicle) gets no barrel. `yaw` [degrees, pivot x, pivot y] turns a skewed source in its own frame (the pivot lands on the centreline: y = 0, or x = 0 for `fwd` \"y\"); `fwd` \"-x\" is a source whose nose points to -X. `cut.keep_ahead` keeps a plough ahead of the idler out of the running-gear cut, and `end_floor_rear_only` holds only the tail plate up so the plough may reach the ground. `k` fixes the uniform scale outright (a towed gun or a plough vehicle is fitted by its real size, while its _SPECS row describes only the solid carriage or hull); `hull_long` then only picks the origin, the centre of that carriage or hull. `whole_model` makes verify_glb.py skip the hull-box checks (the row is smaller than the model). `grid_half` is the half-width of the heightfield grid in model units, for a model wider than its row. `plough` [from_long, lateral factor] stretches what stands ahead of `from_long` across the hull so a plough overhangs the tracks. `lower` [[long0, long1, lat0, lat1, h_ref, factor]] presses what stands above h_ref inside the box towards it (a folded arm laid lower). `add_boxes` also builds ground kit (a firing platform, ammunition crates, plough tines). `paint.blade` {y_min (metres from the model centre), colour} paints everything ahead of y_min worn steel. `gear.road.src_r` / `src_h` are the source tyre that prep cuts away when the procedural wheel (`r`, `h`) is drawn smaller than it. A towed gun's `_SET_SPECS` `barrel` is the natural reach of the source barrel (prep.py logs `source tip`, the stretch stays ~1) and the profile's last ring stops short of that tip by the ring radius x sin(pitch), so the front-most vertex (the lower point of the tilted muzzle ring) lands on the row's `barrel`; `bore` is that vertex's height. `add_discs` [[long, lat, h0, h1, r]] builds a round platform standing on the ground (a firing base). `reach` [from_long, to_long, shift] pulls the stretch of the source between the two long coordinates out by `shift` and moves everything ahead of it rigidly (push arms at their real length). `mirror` {box [long0, long1, lat0, lat1, h0, h1], keep +-1} copies the faces in the box on the `keep` side of the centreline to the other side and drops the faces already there (one good stabiliser leg mirrored).",
+  "rifle_soldier": {
+    "source": "~/.local/share/advance-protocol/unit-sources/rifle_soldier.glb",
+    "figure": {"yaw": 90, "tris": 800, "tex": 512,
+               "paint": {"uniform": [153, 147, 93], "helmet": [153, 147, 93], "kit": [118, 113, 61], "gun": [30, 31, 31], "boots": [48, 46, 40], "skin": [146, 110, 88], "top_lift": 0.7, "top_fade": 0.0, "rough": 0.95},
+               "variants": {"assault_soldier": {"tube": {"length_m": 1.52, "diameter_m": 0.19, "bottom_m": 0.88, "side_m": 0.1, "tilt_deg": 12, "colour": [150, 142, 100], "cap": [60, 60, 50]}},
+                            "rifle_soldier_crouch": {"crouch": {"hip_m": 0.95, "knee_m": 0.5, "thigh_deg": 72, "shin_deg": 125}},
+                            "rifle_soldier_body": {"body": {"knee_m": 0.5, "knee_deg": 50, "roll_deg": 75, "rifle_r_m": 0.2, "rifle_at_m": [0.45, 0.2], "rifle_yaw_deg": 10}},
+                            "rifle_soldier_body_prone": {"body": {"knee_m": 0.5, "knee_deg": 15, "roll_deg": 8, "rifle_r_m": 0.2, "rifle_at_m": [0.35, -0.3], "rifle_yaw_deg": -25}},
+                            "rifle_soldier_body_back": {"body": {"knee_m": 0.5, "knee_deg": 40, "roll_deg": 175, "rifle_r_m": 0.2, "rifle_at_m": [0.4, 0.5], "rifle_yaw_deg": 40}}}}
+  },
+  "set1_rifle_soldier": {
+    "source": "~/.local/share/advance-protocol/unit-sources/set1_rifle_soldier.glb",
+    "figure": {"out_dir": "set1", "prefix": "set1_", "yaw": 90, "tris": 800, "tex": 512,
+               "paint": {"uniform": [129, 142, 91], "helmet": [129, 142, 91], "kit": [82, 94, 55], "gun": [30, 31, 31], "boots": [48, 46, 40], "skin": [146, 110, 88], "gun_v": 0.09, "top_lift": 0.7, "camo": {"cell_px": 28, "threshold": 0.56, "depth": 0.4, "seed": 3}, "ao_gain": 0.0, "top_fade": 0.0, "rough": 0.95},
+               "variants": {"set1_assault_soldier": {"tube": {"length_m": 1.52, "diameter_m": 0.19, "bottom_m": 0.88, "side_m": 0.1, "tilt_deg": 12, "shades": [1.12, 1.0, 0.88, 0.76], "colour": [138, 152, 90], "cap": [60, 60, 50]}},
+                            "set1_rifle_soldier_crouch": {"crouch": {"hip_m": 0.95, "knee_m": 0.5, "thigh_deg": 72, "shin_deg": 125}},
+                            "set1_rifle_soldier_body": {"body": {"knee_m": 0.5, "knee_deg": 50, "roll_deg": 75, "rifle_r_m": 0.2, "rifle_at_m": [0.4, 0.0], "rifle_yaw_deg": 10}},
+                            "set1_rifle_soldier_body_prone": {"body": {"knee_m": 0.5, "knee_deg": 28, "roll_deg": 8, "rifle_r_m": 0.2, "rifle_at_m": [0.35, 0.0], "rifle_yaw_deg": -25}},
+                            "set1_rifle_soldier_body_back": {"body": {"knee_m": 0.5, "knee_deg": 20, "roll_deg": 175, "rifle_r_m": 0.2, "rifle_at_m": [0.4, 0.1], "rifle_yaw_deg": 40}}}}
+  },
+  "set2_rifle_soldier": {
+    "source": "~/.local/share/advance-protocol/unit-sources/set2_rifle_soldier.glb",
+    "figure": {"out_dir": "set2", "prefix": "set2_", "yaw": 0, "crown_cap_m": 1.7, "crown_squash": 0.15, "crown_rim_m": 1.58, "crown_rim_scale": 0.78, "crown_ring": [0.6, 0.03], "rifle_pose": {"r_m": 0.2, "axis": [-0.95, 0.12, -0.28], "at_m": [-0.08, 0.26, 1.12]}, "tris": 800, "tex": 512,
+               "paint": {"uniform": [170, 143, 96], "helmet": [153, 129, 86], "kit": [70, 56, 40], "gun": [46, 43, 38], "head_h": 0.86, "rifle_capsule_m": [[0.09, 0.05, 1.3], [-0.175, 0.4, 0.6], 0.16, 0.04], "boots": [48, 46, 40], "skin": [146, 110, 88], "top_lift": 0.9, "top_fade": 0.0, "rough": 0.95},
+               "variants": {"set2_assault_soldier": {"tube": {"length_m": 1.52, "diameter_m": 0.19, "bottom_m": 0.88, "side_m": 0.1, "tilt_deg": 12, "shades": [1.12, 1.0, 0.88, 0.76], "colour": [168, 144, 100], "cap": [60, 60, 50]}},
+                            "set2_rifle_soldier_crouch": {"kneel": {"hip_m": 0.95, "knee_m": 0.5, "front_sign": -1, "split_x_m": -0.075, "front": [82, -47], "rear": [-5, -85]}},
+                            "set2_rifle_soldier_body": {"body": {"knee_m": 0.5, "knee_deg": 75, "roll_deg": 75, "rifle_r_m": 0.2, "rifle_at_m": [0.45, 0.0], "rifle_yaw_deg": 10}},
+                            "set2_rifle_soldier_body_prone": {"body": {"knee_m": 0.5, "knee_deg": 62, "roll_deg": 8, "rifle_r_m": 0.2, "rifle_at_m": [0.35, 0.0], "rifle_yaw_deg": -25}},
+                            "set2_rifle_soldier_body_back": {"body": {"knee_m": 0.5, "knee_deg": 68, "roll_deg": 165, "rifle_r_m": 0.2, "rifle_at_m": [0.4, 0.1], "rifle_yaw_deg": 40}}}}
+  },
   "heavy_tank": {
     "source": "~/.local/share/advance-protocol/unit-sources/heavy_tank.glb",
     "type_id": 8,
@@ -1870,5 +1900,2111 @@
       ],
       "sides": 16
     }
+  },
+  "engineer_vehicle": {
+    "source": "~/.local/share/advance-protocol/unit-sources/engineer_vehicle.glb",
+    "type_id": 11,
+    "paint": {
+      "scheme": "plain",
+      "base": [
+        95,
+        97,
+        62
+      ],
+      "roof_dark": -0.9,
+      "roof_cool": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "roof_dust": 0.0,
+      "chip_lines": true,
+      "dark_floor": 0.5,
+      "dust": 0.35,
+      "dust_c": [
+        138,
+        132,
+        110
+      ],
+      "mud_max": 0.6,
+      "rough": 0.74,
+      "floor": 0.68,
+      "blade": {
+        "y_min": 3.75,
+        "colour": [
+          74,
+          68,
+          58
+        ]
+      }
+    },
+    "fwd": "x",
+    "hull_long": [
+      -0.5,
+      0.335
+    ],
+    "hull_lat": 0.221,
+    "ends_bottom_h": [
+      0.11,
+      0
+    ],
+    "end_floor": 0.1,
+    "body_tris": 2800,
+    "cut": {
+      "lat": [
+        0.104,
+        0.2015
+      ],
+      "below_skirt_h": 0.1,
+      "behind_skirt_lat": 0.19,
+      "gear_top_h": 0.15,
+      "open_ends_long": [
+        -0.39,
+        0.31
+      ],
+      "keep_ahead": 0.34
+    },
+    "gear": {
+      "track_lat": [
+        0.11,
+        0.2
+      ],
+      "track_t": 0.012,
+      "wheel_lat": [
+        0.153,
+        0.188
+      ],
+      "road": {
+        "r": 0.0365,
+        "h": 0.0485,
+        "long": [
+          -0.3375,
+          -0.235,
+          -0.1325,
+          -0.03,
+          0.07,
+          0.17
+        ]
+      },
+      "sprocket": {
+        "r": 0.045,
+        "h": 0.095,
+        "long": -0.4256
+      },
+      "idler": {
+        "r": 0.04,
+        "h": 0.1,
+        "long": 0.2736
+      },
+      "sides": 12
+    },
+    "end_floor_rear_only": true,
+    "k": 1.1,
+    "whole_model": true,
+    "grid_half": 0.33,
+    "plough": [
+      0.335,
+      1.29
+    ],
+    "lower": [
+      [
+        -0.46,
+        0.07,
+        -0.19,
+        -0.07,
+        0.21,
+        0.4
+      ]
+    ],
+    "add_boxes": [
+      [
+        -0.04,
+        0.07,
+        -0.17,
+        -0.085,
+        0.2,
+        0.245
+      ],
+      [
+        0.4742,
+        0.5242,
+        0.011,
+        0.029,
+        0.0,
+        0.05
+      ],
+      [
+        0.4446,
+        0.4946,
+        0.061,
+        0.079,
+        0.0,
+        0.05
+      ],
+      [
+        0.415,
+        0.465,
+        0.111,
+        0.129,
+        0.0,
+        0.05
+      ],
+      [
+        0.3854,
+        0.4354,
+        0.161,
+        0.179,
+        0.0,
+        0.05
+      ],
+      [
+        0.3558,
+        0.4058,
+        0.211,
+        0.229,
+        0.0,
+        0.05
+      ],
+      [
+        0.3291,
+        0.3791,
+        0.256,
+        0.274,
+        0.0,
+        0.05
+      ],
+      [
+        0.4742,
+        0.5242,
+        -0.029,
+        -0.011,
+        0.0,
+        0.05
+      ],
+      [
+        0.4446,
+        0.4946,
+        -0.079,
+        -0.061,
+        0.0,
+        0.05
+      ],
+      [
+        0.415,
+        0.465,
+        -0.129,
+        -0.111,
+        0.0,
+        0.05
+      ],
+      [
+        0.3854,
+        0.4354,
+        -0.179,
+        -0.161,
+        0.0,
+        0.05
+      ],
+      [
+        0.3558,
+        0.4058,
+        -0.229,
+        -0.211,
+        0.0,
+        0.05
+      ],
+      [
+        0.3291,
+        0.3791,
+        -0.274,
+        -0.256,
+        0.0,
+        0.05
+      ]
+    ]
+  },
+  "field_gun": {
+    "source": "~/.local/share/advance-protocol/unit-sources/field_gun.glb",
+    "type_id": 9,
+    "paint": {
+      "scheme": "plain",
+      "base": [
+        95,
+        97,
+        62
+      ],
+      "roof_dark": -0.9,
+      "roof_cool": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "roof_dust": 0.0,
+      "chip_lines": true,
+      "dark_floor": 0.5,
+      "dust": 0.35,
+      "dust_c": [
+        138,
+        132,
+        110
+      ],
+      "mud_max": 0.6,
+      "rough": 0.74,
+      "floor": 0.68,
+      "dark_gear": true,
+      "tyre_r": 0.64,
+      "lugs": 24,
+      "holes": 6,
+      "mud_from": 0.25,
+      "mud_h": 0.5,
+      "oil_dark": 0.0
+    },
+    "fwd": "-x",
+    "towed": true,
+    "yaw": [
+      9.4,
+      -0.03,
+      0.07
+    ],
+    "hull_long": [
+      -0.23,
+      0.24
+    ],
+    "hull_lat": 0.3058,
+    "body_tris": 3200,
+    "delete_boxes": [
+      [
+        0.15,
+        0.36,
+        0.06,
+        0.32,
+        0.0,
+        0.14
+      ]
+    ],
+    "gun": {
+      "axis_h": 0.367,
+      "start_long": 0.24,
+      "pitch": 18.8,
+      "clear_r": 0.035,
+      "sides": 10,
+      "profile": [
+        [
+          0.24,
+          0.0175
+        ],
+        [
+          0.41,
+          0.0158
+        ],
+        [
+          0.415,
+          0.026
+        ],
+        [
+          0.48,
+          0.029
+        ],
+        [
+          0.5145,
+          0.027
+        ]
+      ]
+    },
+    "gear": {
+      "kind": "wheels",
+      "road": {
+        "r": 0.094,
+        "h": 0.094,
+        "long": [
+          0.029
+        ]
+      },
+      "cut_lat": 0.12,
+      "cut_r": 1.04,
+      "wheel_lat": [
+        0.135,
+        0.19
+      ],
+      "sides": 16
+    },
+    "k": 0.715,
+    "whole_model": true,
+    "grid_half": 0.31,
+    "add_boxes": [
+      [
+        -0.102,
+        0.16,
+        -0.131,
+        0.131,
+        0.0,
+        0.0262
+      ],
+      [
+        -0.52,
+        -0.3976,
+        -0.4,
+        -0.3301,
+        0.0,
+        0.0524
+      ],
+      [
+        -0.38,
+        -0.2576,
+        -0.4,
+        -0.3301,
+        0.0,
+        0.0524
+      ],
+      [
+        -0.51,
+        -0.3876,
+        -0.395,
+        -0.3251,
+        0.0524,
+        0.1048
+      ]
+    ]
+  },
+  "howitzer": {
+    "source": "~/.local/share/advance-protocol/unit-sources/howitzer.glb",
+    "type_id": 10,
+    "paint": {
+      "scheme": "plain",
+      "base": [
+        95,
+        97,
+        62
+      ],
+      "roof_dark": -0.9,
+      "roof_cool": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "roof_dust": 0.0,
+      "chip_lines": true,
+      "dark_floor": 0.5,
+      "dust": 0.35,
+      "dust_c": [
+        138,
+        132,
+        110
+      ],
+      "mud_max": 0.6,
+      "rough": 0.74,
+      "floor": 0.68,
+      "dark_gear": true,
+      "tyre_r": 0.64,
+      "lugs": 24,
+      "holes": 6,
+      "mud_from": 0.25,
+      "mud_h": 0.5,
+      "oil_dark": 0.0
+    },
+    "fwd": "y",
+    "towed": true,
+    "hull_long": [
+      -0.26,
+      0.14
+    ],
+    "hull_lat": 0.3133,
+    "body_tris": 3300,
+    "gun": {
+      "axis_h": 0.297,
+      "start_long": 0.14,
+      "pitch": 13.5,
+      "clear_r": 0.032,
+      "sides": 10,
+      "profile": [
+        [
+          0.14,
+          0.0126
+        ],
+        [
+          0.2,
+          0.0105
+        ],
+        [
+          0.366,
+          0.0099
+        ],
+        [
+          0.376,
+          0.0163
+        ],
+        [
+          0.45,
+          0.0177
+        ],
+        [
+          0.504,
+          0.0167
+        ]
+      ]
+    },
+    "gear": {
+      "kind": "wheels",
+      "road": {
+        "r": 0.0577,
+        "h": 0.0577,
+        "src_r": 0.095,
+        "src_h": 0.095,
+        "long": [
+          -0.011
+        ]
+      },
+      "cut_lat": 0.1,
+      "cut_r": 1.04,
+      "wheel_lat": [
+        0.077,
+        0.117
+      ],
+      "sides": 16
+    },
+    "k": 1.3,
+    "whole_model": true,
+    "grid_half": 0.42
+  },
+  "field_gun_travel": {
+    "source": "~/.local/share/advance-protocol/unit-sources/field_gun.glb",
+    "type_id": 9,
+    "paint": {
+      "scheme": "plain",
+      "base": [
+        95,
+        97,
+        62
+      ],
+      "roof_dark": -0.9,
+      "roof_cool": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "roof_dust": 0.0,
+      "chip_lines": true,
+      "dark_floor": 0.5,
+      "dust": 0.35,
+      "dust_c": [
+        138,
+        132,
+        110
+      ],
+      "mud_max": 0.6,
+      "rough": 0.74,
+      "floor": 0.68,
+      "dark_gear": true,
+      "tyre_r": 0.64,
+      "lugs": 24,
+      "holes": 6,
+      "mud_from": 0.25,
+      "mud_h": 0.5,
+      "oil_dark": 0.0
+    },
+    "fwd": "-x",
+    "towed": true,
+    "yaw": [
+      9.4,
+      -0.03,
+      0.07
+    ],
+    "hull_long": [
+      -0.23,
+      0.24
+    ],
+    "hull_lat": 0.3058,
+    "body_tris": 3200,
+    "delete_boxes": [
+      [
+        0.15,
+        0.36,
+        0.06,
+        0.32,
+        0.0,
+        0.14
+      ]
+    ],
+    "gun": {
+      "axis_h": 0.367,
+      "start_long": 0.24,
+      "pitch": 18.8,
+      "clear_r": 0.035,
+      "sides": 10,
+      "profile": [
+        [
+          0.24,
+          0.0175
+        ],
+        [
+          0.41,
+          0.0158
+        ],
+        [
+          0.415,
+          0.026
+        ],
+        [
+          0.48,
+          0.029
+        ],
+        [
+          0.5145,
+          0.027
+        ]
+      ]
+    },
+    "gear": {
+      "kind": "wheels",
+      "road": {
+        "r": 0.094,
+        "h": 0.094,
+        "long": [
+          0.029
+        ]
+      },
+      "cut_lat": 0.12,
+      "cut_r": 1.04,
+      "wheel_lat": [
+        0.135,
+        0.19
+      ],
+      "sides": 16
+    },
+    "k": 0.715,
+    "whole_model": true,
+    "grid_half": 0.31,
+    "trail_close": {
+      "hinge": [
+        -0.125,
+        0.115
+      ],
+      "tip": [
+        -0.54,
+        0.255
+      ],
+      "lat_min": 0.07,
+      "h_max": 0.17,
+      "tip_lat": 0.03
+    }
+  },
+  "howitzer_travel": {
+    "source": "~/.local/share/advance-protocol/unit-sources/howitzer.glb",
+    "type_id": 10,
+    "paint": {
+      "scheme": "plain",
+      "base": [
+        95,
+        97,
+        62
+      ],
+      "roof_dark": -0.9,
+      "roof_cool": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "roof_dust": 0.0,
+      "chip_lines": true,
+      "dark_floor": 0.5,
+      "dust": 0.35,
+      "dust_c": [
+        138,
+        132,
+        110
+      ],
+      "mud_max": 0.6,
+      "rough": 0.74,
+      "floor": 0.68,
+      "dark_gear": true,
+      "tyre_r": 0.64,
+      "lugs": 24,
+      "holes": 6,
+      "mud_from": 0.25,
+      "mud_h": 0.5,
+      "oil_dark": 0.0
+    },
+    "fwd": "y",
+    "towed": true,
+    "hull_long": [
+      -0.26,
+      0.14
+    ],
+    "hull_lat": 0.3133,
+    "body_tris": 3300,
+    "gun": {
+      "axis_h": 0.297,
+      "start_long": 0.14,
+      "pitch": 13.5,
+      "clear_r": 0.032,
+      "sides": 10,
+      "profile": [
+        [
+          0.14,
+          0.0126
+        ],
+        [
+          0.2,
+          0.0105
+        ],
+        [
+          0.366,
+          0.0099
+        ],
+        [
+          0.376,
+          0.0163
+        ],
+        [
+          0.45,
+          0.0177
+        ],
+        [
+          0.504,
+          0.0167
+        ]
+      ]
+    },
+    "gear": {
+      "kind": "wheels",
+      "road": {
+        "r": 0.0577,
+        "h": 0.0577,
+        "src_r": 0.095,
+        "src_h": 0.095,
+        "long": [
+          -0.011
+        ]
+      },
+      "cut_lat": 0.1,
+      "cut_r": 1.04,
+      "wheel_lat": [
+        0.077,
+        0.117
+      ],
+      "sides": 16
+    },
+    "k": 1.3,
+    "whole_model": true,
+    "grid_half": 0.42,
+    "trail_close": {
+      "hinge": [
+        -0.13,
+        0.118
+      ],
+      "tip": [
+        -0.5,
+        0.295
+      ],
+      "lat_min": 0.07,
+      "h_max": 0.17,
+      "tip_lat": 0.03
+    }
+  },
+  "set1_field_gun": {
+    "source": "~/.local/share/advance-protocol/unit-sources/set1_field_gun.glb",
+    "out": "set1/field_gun",
+    "type_id": 9,
+    "paint": {
+      "scheme": "plain",
+      "base": [
+        107,
+        113,
+        91
+      ],
+      "mottle": 0.1,
+      "roof_cool": [
+        -0.028,
+        -0.04,
+        0.0
+      ],
+      "dark_gear": true,
+      "roof_dark": -0.3,
+      "roof_rough": 0.15,
+      "dust": 0.3,
+      "dust_c": [
+        146,
+        138,
+        110
+      ],
+      "rough": 0.74,
+      "floor": 0.68,
+      "tyre_r": 0.64,
+      "lugs": 24,
+      "holes": 6,
+      "mud_from": 0.25
+    },
+    "fwd": "-x",
+    "towed": true,
+    "hull_long": [
+      -0.03,
+      0.27
+    ],
+    "hull_lat": 0.2,
+    "body_tris": 3200,
+    "gun": {
+      "axis_h": 0.39,
+      "start_long": 0.19,
+      "pitch": 25.5,
+      "clear_r": 0.05,
+      "sides": 10,
+      "profile": [
+        [
+          0.19,
+          0.048
+        ],
+        [
+          0.298,
+          0.048
+        ],
+        [
+          0.304,
+          0.029
+        ],
+        [
+          0.383,
+          0.029
+        ],
+        [
+          0.389,
+          0.036
+        ],
+        [
+          0.516,
+          0.036
+        ]
+      ]
+    },
+    "gear": {
+      "kind": "wheels",
+      "road": {
+        "r": 0.095,
+        "h": 0.095,
+        "src_r": 0.107,
+        "src_h": 0.107,
+        "long": [
+          0.12
+        ]
+      },
+      "cut_lat": 0.105,
+      "cut_r": 1.04,
+      "wheel_lat": [
+        0.105,
+        0.158
+      ],
+      "sides": 16
+    },
+    "k": 0.7125,
+    "whole_model": true,
+    "grid_half": 0.31,
+    "add_discs": [
+      [
+        0.12,
+        0.0,
+        0.0,
+        0.0262,
+        0.1404
+      ]
+    ],
+    "add_boxes": [
+      [
+        -0.5,
+        -0.378,
+        -0.4,
+        -0.3301,
+        0.0,
+        0.0524
+      ],
+      [
+        -0.36,
+        -0.238,
+        -0.4,
+        -0.3301,
+        0.0,
+        0.0524
+      ],
+      [
+        -0.49,
+        -0.368,
+        -0.395,
+        -0.3251,
+        0.0524,
+        0.1048
+      ]
+    ]
+  },
+  "set1_howitzer": {
+    "source": "~/.local/share/advance-protocol/unit-sources/set1_howitzer.glb",
+    "out": "set1/howitzer",
+    "type_id": 10,
+    "paint": {
+      "scheme": "plain",
+      "base": [
+        107,
+        113,
+        91
+      ],
+      "mottle": 0.1,
+      "roof_cool": [
+        -0.028,
+        -0.04,
+        0.0
+      ],
+      "dark_gear": true,
+      "roof_dark": -0.3,
+      "roof_rough": 0.15,
+      "dust": 0.3,
+      "dust_c": [
+        146,
+        138,
+        110
+      ],
+      "rough": 0.74,
+      "floor": 0.68,
+      "tyre_r": 0.64,
+      "lugs": 24,
+      "holes": 6,
+      "mud_from": 0.25
+    },
+    "fwd": "x",
+    "towed": true,
+    "yaw": [
+      3.0,
+      0.0,
+      0.0
+    ],
+    "hull_long": [
+      -0.2,
+      0.0
+    ],
+    "hull_lat": 0.15,
+    "body_tris": 3300,
+    "delete_boxes": [
+      [
+        -0.03,
+        0.3,
+        0.09,
+        0.4,
+        0.0,
+        0.2
+      ]
+    ],
+    "gun": {
+      "axis_h": 0.304,
+      "start_long": 0.13,
+      "pitch": 18.7,
+      "clear_r": 0.045,
+      "sides": 10,
+      "profile": [
+        [
+          0.13,
+          0.018
+        ],
+        [
+          0.15,
+          0.0168
+        ],
+        [
+          0.415,
+          0.015
+        ],
+        [
+          0.426,
+          0.0165
+        ],
+        [
+          0.468,
+          0.0185
+        ],
+        [
+          0.485,
+          0.0213
+        ],
+        [
+          0.515,
+          0.0185
+        ]
+      ]
+    },
+    "gear": {
+      "kind": "wheels",
+      "road": {
+        "r": 0.0625,
+        "h": 0.0625,
+        "src_r": 0.078,
+        "src_h": 0.084,
+        "long": [
+          -0.1
+        ]
+      },
+      "cut_lat": 0.085,
+      "cut_r": 1.04,
+      "wheel_lat": [
+        0.082,
+        0.122
+      ],
+      "sides": 16
+    },
+    "k": 1.3,
+    "whole_model": true,
+    "grid_half": 0.5
+  },
+  "set1_engineer_vehicle": {
+    "source": "~/.local/share/advance-protocol/unit-sources/set1_engineer_vehicle.glb",
+    "out": "set1/engineer_vehicle",
+    "type_id": 11,
+    "paint": {
+      "scheme": "plain",
+      "base": [
+        107,
+        113,
+        91
+      ],
+      "mottle": 0.1,
+      "roof_cool": [
+        -0.028,
+        -0.04,
+        0.0
+      ],
+      "dark_gear": true,
+      "roof_dark": -0.3,
+      "roof_rough": 0.15,
+      "dust": 0.3,
+      "dust_c": [
+        146,
+        138,
+        110
+      ],
+      "rough": 0.74,
+      "floor": 0.68,
+      "blade": {
+        "y_min": 3.62,
+        "colour": [
+          66,
+          69,
+          56
+        ]
+      },
+      "glass_boxes": [
+        [
+          0.5,
+          1.9,
+          2.55,
+          2.8
+        ]
+      ]
+    },
+    "_layout": "hull stretched 0.129 behind the turret ring to 6.8 m (reach), blade squeezed up to 0.26 m from the bow; source cab removed above the stowed boom and replaced by an off-centre box cab; boom lowered onto the deck and ending in a flat claw",
+    "fwd": "x",
+    "hull_long": [
+      -0.287,
+      0.484
+    ],
+    "hull_lat": 0.2,
+    "ends_bottom_h": [
+      0.11,
+      0
+    ],
+    "end_floor": 0.1,
+    "body_tris": 2800,
+    "no_glass_in_boxes": true,
+    "reach": [
+      [
+        -0.09,
+        -0.03,
+        0.129
+      ],
+      [
+        0.489,
+        0.579,
+        -0.07
+      ]
+    ],
+    "lower": [
+      [
+        -0.37,
+        0.3,
+        -0.06,
+        0.06,
+        0.19,
+        0.2
+      ]
+    ],
+    "delete_boxes": [
+      [
+        -0.55,
+        -0.36,
+        0.0,
+        0.3,
+        0.0,
+        0.5
+      ],
+      [
+        0.1,
+        0.5,
+        0.0,
+        0.25,
+        0.225,
+        0.5
+      ]
+    ],
+    "cut": {
+      "lat": [
+        0.105,
+        0.205
+      ],
+      "below_skirt_h": 0.1,
+      "behind_skirt_lat": 0.195,
+      "gear_top_h": 0.145,
+      "open_ends_long": [
+        -0.285,
+        0.489
+      ],
+      "keep_ahead": 0.5
+    },
+    "gear": {
+      "track_lat": [
+        0.11,
+        0.2
+      ],
+      "track_t": 0.012,
+      "wheel_lat": [
+        0.153,
+        0.188
+      ],
+      "road": {
+        "r": 0.0426,
+        "h": 0.0546,
+        "long": [
+          -0.1452,
+          -0.0422,
+          0.0608,
+          0.1638,
+          0.2668,
+          0.3698
+        ]
+      },
+      "sprocket": {
+        "r": 0.04,
+        "h": 0.08,
+        "long": -0.245
+      },
+      "idler": {
+        "r": 0.04,
+        "h": 0.095,
+        "long": 0.465
+      },
+      "sides": 12
+    },
+    "end_floor_rear_only": true,
+    "k": 1.1,
+    "whole_model": true,
+    "grid_half": 0.33,
+    "plough": [
+      0.4,
+      1.15
+    ],
+    "add_boxes": [
+      [
+        0.12,
+        0.27,
+        0.06,
+        0.185,
+        0.15,
+        0.355
+      ],
+      [
+        0.27,
+        0.3,
+        0.06,
+        0.185,
+        0.15,
+        0.32
+      ],
+      [
+        0.3,
+        0.33,
+        0.06,
+        0.185,
+        0.15,
+        0.28
+      ],
+      [
+        0.17,
+        0.21,
+        0.1,
+        0.14,
+        0.355,
+        0.385
+      ],
+      [
+        -0.4,
+        -0.36,
+        -0.027,
+        0.027,
+        0.18,
+        0.215
+      ],
+      [
+        -0.44,
+        -0.4,
+        -0.08,
+        0.08,
+        0.18,
+        0.205
+      ],
+      [
+        -0.5,
+        -0.44,
+        0.055,
+        0.08,
+        0.18,
+        0.205
+      ],
+      [
+        -0.5,
+        -0.44,
+        -0.08,
+        -0.055,
+        0.18,
+        0.205
+      ],
+      [
+        0.46,
+        0.52,
+        0.07,
+        0.1,
+        0.03,
+        0.1
+      ],
+      [
+        0.46,
+        0.52,
+        -0.1,
+        -0.07,
+        0.03,
+        0.1
+      ],
+      [
+        0.46,
+        0.52,
+        0.15,
+        0.18,
+        0.03,
+        0.1
+      ],
+      [
+        0.46,
+        0.52,
+        -0.18,
+        -0.15,
+        0.03,
+        0.1
+      ],
+      [
+        0.514,
+        0.53,
+        -0.236,
+        0.236,
+        0.0,
+        0.03
+      ]
+    ]
+  },
+  "set2_field_gun": {
+    "source": "~/.local/share/advance-protocol/unit-sources/set2_field_gun.glb",
+    "out": "set2/field_gun",
+    "type_id": 9,
+    "paint": {
+      "scheme": "plain",
+      "base": [
+        156,
+        127,
+        82
+      ],
+      "roof_dark": 0.12,
+      "dust": 0.3,
+      "dust_c": [
+        172,
+        145,
+        103
+      ],
+      "mottle": 0.05,
+      "rough": 0.74,
+      "floor": 0.68,
+      "mud_h": 1.2,
+      "streak": 0.7,
+      "grime": 0.4,
+      "blotch": 0.1,
+      "rough_var": 0.14,
+      "oil_dark": 0.3,
+      "mud_max": 0.7,
+      "wheel_mud": 0.5,
+      "tyre_r": 0.64,
+      "lugs": 24,
+      "holes": 6,
+      "mud_from": 0.25
+    },
+    "fwd": "y",
+    "towed": true,
+    "hull_long": [
+      -0.09,
+      0.11
+    ],
+    "hull_lat": 0.15,
+    "body_tris": 3200,
+    "gun": {
+      "axis_h": 0.344,
+      "start_long": 0.25,
+      "pitch": 17.6,
+      "clear_r": 0.03,
+      "sides": 10,
+      "profile": [
+        [
+          0.25,
+          0.0195
+        ],
+        [
+          0.397,
+          0.0185
+        ],
+        [
+          0.418,
+          0.0197
+        ],
+        [
+          0.46,
+          0.0233
+        ],
+        [
+          0.496,
+          0.0238
+        ],
+        [
+          0.506,
+          0.02
+        ]
+      ]
+    },
+    "gear": {
+      "kind": "wheels",
+      "road": {
+        "r": 0.08,
+        "h": 0.08,
+        "src_r": 0.092,
+        "src_h": 0.102,
+        "long": [
+          0.01
+        ]
+      },
+      "cut_lat": 0.1,
+      "cut_r": 1.04,
+      "wheel_lat": [
+        0.103,
+        0.15
+      ],
+      "sides": 16
+    },
+    "k": 0.79,
+    "whole_model": true,
+    "grid_half": 0.3,
+    "add_discs": [
+      [
+        0.01,
+        0.0,
+        0.0,
+        0.0237,
+        0.1266
+      ]
+    ],
+    "add_boxes": [
+      [
+        -0.3,
+        -0.19,
+        -0.36,
+        -0.297,
+        0.0,
+        0.0475
+      ],
+      [
+        -0.42,
+        -0.31,
+        -0.36,
+        -0.297,
+        0.0,
+        0.0475
+      ],
+      [
+        -0.41,
+        -0.3,
+        -0.355,
+        -0.292,
+        0.0475,
+        0.095
+      ]
+    ]
+  },
+  "set2_howitzer": {
+    "source": "~/.local/share/advance-protocol/unit-sources/set2_howitzer.glb",
+    "out": "set2/howitzer",
+    "type_id": 10,
+    "paint": {
+      "scheme": "plain",
+      "base": [
+        156,
+        127,
+        82
+      ],
+      "roof_dark": 0.12,
+      "dust": 0.3,
+      "dust_c": [
+        172,
+        145,
+        103
+      ],
+      "mottle": 0.05,
+      "rough": 0.74,
+      "floor": 0.68,
+      "mud_h": 1.2,
+      "streak": 0.7,
+      "grime": 0.4,
+      "blotch": 0.1,
+      "rough_var": 0.14,
+      "oil_dark": 0.3,
+      "mud_max": 0.7,
+      "wheel_mud": 0.5,
+      "tyre_r": 0.64,
+      "lugs": 24,
+      "holes": 6,
+      "mud_from": 0.25
+    },
+    "fwd": "y",
+    "towed": true,
+    "yaw": [
+      12.9,
+      0.033,
+      0.0
+    ],
+    "mirror": {
+      "box": [
+        0.15,
+        0.3,
+        0.07,
+        0.27,
+        0.0,
+        0.2
+      ],
+      "keep": -1
+    },
+    "hull_long": [
+      0.0,
+      0.15
+    ],
+    "hull_lat": 0.15,
+    "body_tris": 3300,
+    "gun": {
+      "axis_h": 0.315,
+      "start_long": 0.23,
+      "pitch": 26.0,
+      "clear_r": 0.075,
+      "sides": 10,
+      "profile": [
+        [
+          0.23,
+          0.0185
+        ],
+        [
+          0.43,
+          0.017
+        ],
+        [
+          0.452,
+          0.0185
+        ],
+        [
+          0.491,
+          0.0228
+        ],
+        [
+          0.543,
+          0.021
+        ]
+      ]
+    },
+    "gear": {
+      "kind": "wheels",
+      "road": {
+        "r": 0.05,
+        "h": 0.05,
+        "src_r": 0.0725,
+        "src_h": 0.085,
+        "long": [
+          0.072
+        ]
+      },
+      "cut_lat": 0.07,
+      "cut_r": 1.04,
+      "wheel_lat": [
+        0.09,
+        0.13
+      ],
+      "sides": 16
+    },
+    "k": 1.34,
+    "whole_model": true,
+    "grid_half": 0.44
+  },
+  "set2_engineer_vehicle": {
+    "source": "~/.local/share/advance-protocol/unit-sources/set2_engineer_vehicle.glb",
+    "out": "set2/engineer_vehicle",
+    "type_id": 11,
+    "paint": {
+      "scheme": "plain",
+      "base": [
+        156,
+        127,
+        82
+      ],
+      "roof_dark": 0.0,
+      "dust": 0.3,
+      "dust_c": [
+        172,
+        145,
+        103
+      ],
+      "mottle": 0.05,
+      "rough": 0.74,
+      "floor": 0.68,
+      "mud_h": 1.2,
+      "streak": 0.7,
+      "grime": 0.4,
+      "blotch": 0.1,
+      "rough_var": 0.14,
+      "oil_dark": 0.3,
+      "mud_max": 0.7,
+      "wheel_mud": 0.5,
+      "blade": {
+        "y_min": 6.5,
+        "colour": [
+          58,
+          54,
+          46
+        ]
+      }
+    },
+    "fwd": "x",
+    "hull_long": [
+      -0.49,
+      0.268
+    ],
+    "hull_lat": 0.19,
+    "ends_bottom_h": [
+      0.09,
+      0
+    ],
+    "end_floor": 0.09,
+    "body_tris": 2800,
+    "cut": {
+      "lat": [
+        0.1,
+        0.205
+      ],
+      "below_skirt_h": 0.09,
+      "behind_skirt_lat": 0.195,
+      "gear_top_h": 0.13,
+      "open_ends_long": [
+        -0.41,
+        0.245
+      ],
+      "keep_ahead": 0.27
+    },
+    "gear": {
+      "track_lat": [
+        0.108,
+        0.19
+      ],
+      "track_t": 0.012,
+      "wheel_lat": [
+        0.15,
+        0.185
+      ],
+      "road": {
+        "r": 0.037,
+        "h": 0.049,
+        "long": [
+          -0.3035,
+          -0.219,
+          -0.135,
+          -0.051,
+          0.0365,
+          0.125
+        ]
+      },
+      "sprocket": {
+        "r": 0.03,
+        "h": 0.087,
+        "long": -0.3825
+      },
+      "idler": {
+        "r": 0.03,
+        "h": 0.087,
+        "long": 0.2125
+      },
+      "sides": 12
+    },
+    "no_glass_in_boxes": true,
+    "end_floor_rear_only": true,
+    "k": 1.25,
+    "whole_model": true,
+    "grid_half": 0.36,
+    "plough": [
+      0.27,
+      1.07
+    ],
+    "reach": [
+      0.27,
+      0.34,
+      0.22
+    ],
+    "delete_boxes": [
+      [
+        -0.5,
+        0.26,
+        0.0,
+        0.3,
+        0.2,
+        0.5
+      ]
+    ],
+    "add_boxes": [
+      [
+        -0.31,
+        0.02,
+        -0.14,
+        0.14,
+        0.12,
+        0.26
+      ],
+      [
+        0.69,
+        0.722,
+        -0.2305,
+        0.2305,
+        0.0,
+        0.02
+      ],
+      [
+        -0.3,
+        0.01,
+        0.047,
+        0.053,
+        0.26,
+        0.263
+      ],
+      [
+        -0.3,
+        0.01,
+        -0.053,
+        -0.047,
+        0.26,
+        0.263
+      ],
+      [
+        -0.203,
+        -0.197,
+        -0.13,
+        0.13,
+        0.26,
+        0.263
+      ],
+      [
+        -0.103,
+        -0.097,
+        -0.13,
+        0.13,
+        0.26,
+        0.263
+      ],
+      [
+        0.0,
+        0.006,
+        -0.13,
+        0.13,
+        0.26,
+        0.263
+      ]
+    ]
+  },
+  "set1_field_gun_travel": {
+    "source": "~/.local/share/advance-protocol/unit-sources/set1_field_gun.glb",
+    "out": "set1/field_gun_travel",
+    "type_id": 9,
+    "paint": {
+      "scheme": "plain",
+      "base": [
+        107,
+        113,
+        91
+      ],
+      "mottle": 0.1,
+      "roof_cool": [
+        -0.028,
+        -0.04,
+        0.0
+      ],
+      "dark_gear": true,
+      "roof_dark": -0.3,
+      "roof_rough": 0.15,
+      "dust": 0.3,
+      "dust_c": [
+        146,
+        138,
+        110
+      ],
+      "rough": 0.74,
+      "floor": 0.68,
+      "tyre_r": 0.64,
+      "lugs": 24,
+      "holes": 6,
+      "mud_from": 0.25
+    },
+    "fwd": "-x",
+    "towed": true,
+    "hull_long": [
+      -0.03,
+      0.27
+    ],
+    "hull_lat": 0.2,
+    "body_tris": 3200,
+    "gun": {
+      "axis_h": 0.39,
+      "start_long": 0.19,
+      "pitch": 25.5,
+      "clear_r": 0.05,
+      "sides": 10,
+      "profile": [
+        [
+          0.19,
+          0.048
+        ],
+        [
+          0.298,
+          0.048
+        ],
+        [
+          0.304,
+          0.029
+        ],
+        [
+          0.383,
+          0.029
+        ],
+        [
+          0.389,
+          0.036
+        ],
+        [
+          0.516,
+          0.036
+        ]
+      ]
+    },
+    "gear": {
+      "kind": "wheels",
+      "road": {
+        "r": 0.095,
+        "h": 0.095,
+        "src_r": 0.107,
+        "src_h": 0.107,
+        "long": [
+          0.12
+        ]
+      },
+      "cut_lat": 0.105,
+      "cut_r": 1.04,
+      "wheel_lat": [
+        0.105,
+        0.158
+      ],
+      "sides": 16
+    },
+    "k": 0.7125,
+    "whole_model": true,
+    "grid_half": 0.31,
+    "trail_close": {
+      "hinge": [
+        0.03,
+        0.14
+      ],
+      "tip": [
+        -0.48,
+        0.243
+      ],
+      "lat_min": 0.09,
+      "h_max": 0.22,
+      "tip_lat": 0.03
+    }
+  },
+  "set1_howitzer_travel": {
+    "source": "~/.local/share/advance-protocol/unit-sources/set1_howitzer.glb",
+    "out": "set1/howitzer_travel",
+    "type_id": 10,
+    "paint": {
+      "scheme": "plain",
+      "base": [
+        107,
+        113,
+        91
+      ],
+      "mottle": 0.1,
+      "roof_cool": [
+        -0.028,
+        -0.04,
+        0.0
+      ],
+      "dark_gear": true,
+      "roof_dark": -0.3,
+      "roof_rough": 0.15,
+      "dust": 0.3,
+      "dust_c": [
+        146,
+        138,
+        110
+      ],
+      "rough": 0.74,
+      "floor": 0.68,
+      "tyre_r": 0.64,
+      "lugs": 24,
+      "holes": 6,
+      "mud_from": 0.25
+    },
+    "fwd": "x",
+    "towed": true,
+    "yaw": [
+      3.0,
+      0.0,
+      0.0
+    ],
+    "hull_long": [
+      -0.2,
+      0.0
+    ],
+    "hull_lat": 0.15,
+    "body_tris": 3300,
+    "delete_boxes": [
+      [
+        -0.03,
+        0.3,
+        0.09,
+        0.4,
+        0.0,
+        0.2
+      ]
+    ],
+    "gun": {
+      "axis_h": 0.304,
+      "start_long": 0.13,
+      "pitch": 18.7,
+      "clear_r": 0.045,
+      "sides": 10,
+      "profile": [
+        [
+          0.13,
+          0.018
+        ],
+        [
+          0.15,
+          0.0168
+        ],
+        [
+          0.415,
+          0.015
+        ],
+        [
+          0.426,
+          0.0165
+        ],
+        [
+          0.468,
+          0.0185
+        ],
+        [
+          0.485,
+          0.0213
+        ],
+        [
+          0.515,
+          0.0185
+        ]
+      ]
+    },
+    "gear": {
+      "kind": "wheels",
+      "road": {
+        "r": 0.0625,
+        "h": 0.0625,
+        "src_r": 0.078,
+        "src_h": 0.084,
+        "long": [
+          -0.1
+        ]
+      },
+      "cut_lat": 0.085,
+      "cut_r": 1.04,
+      "wheel_lat": [
+        0.082,
+        0.122
+      ],
+      "sides": 16
+    },
+    "k": 1.3,
+    "whole_model": true,
+    "grid_half": 0.5,
+    "trail_close": {
+      "hinge": [
+        -0.06,
+        0.09
+      ],
+      "tip": [
+        -0.46,
+        0.322
+      ],
+      "lat_min": 0.07,
+      "h_max": 0.2,
+      "tip_lat": 0.03
+    }
+  },
+  "set2_field_gun_travel": {
+    "source": "~/.local/share/advance-protocol/unit-sources/set2_field_gun.glb",
+    "out": "set2/field_gun_travel",
+    "type_id": 9,
+    "paint": {
+      "scheme": "plain",
+      "base": [
+        156,
+        127,
+        82
+      ],
+      "roof_dark": 0.12,
+      "dust": 0.3,
+      "dust_c": [
+        172,
+        145,
+        103
+      ],
+      "mottle": 0.05,
+      "rough": 0.74,
+      "floor": 0.68,
+      "mud_h": 1.2,
+      "streak": 0.7,
+      "grime": 0.4,
+      "blotch": 0.1,
+      "rough_var": 0.14,
+      "oil_dark": 0.3,
+      "mud_max": 0.7,
+      "wheel_mud": 0.5,
+      "tyre_r": 0.64,
+      "lugs": 24,
+      "holes": 6,
+      "mud_from": 0.25
+    },
+    "fwd": "y",
+    "towed": true,
+    "hull_long": [
+      -0.09,
+      0.11
+    ],
+    "hull_lat": 0.15,
+    "body_tris": 3200,
+    "gun": {
+      "axis_h": 0.344,
+      "start_long": 0.25,
+      "pitch": 17.6,
+      "clear_r": 0.03,
+      "sides": 10,
+      "profile": [
+        [
+          0.25,
+          0.0195
+        ],
+        [
+          0.397,
+          0.0185
+        ],
+        [
+          0.418,
+          0.0197
+        ],
+        [
+          0.46,
+          0.0233
+        ],
+        [
+          0.496,
+          0.0238
+        ],
+        [
+          0.506,
+          0.02
+        ]
+      ]
+    },
+    "gear": {
+      "kind": "wheels",
+      "road": {
+        "r": 0.08,
+        "h": 0.08,
+        "src_r": 0.092,
+        "src_h": 0.102,
+        "long": [
+          0.01
+        ]
+      },
+      "cut_lat": 0.1,
+      "cut_r": 1.04,
+      "wheel_lat": [
+        0.103,
+        0.15
+      ],
+      "sides": 16
+    },
+    "k": 0.79,
+    "whole_model": true,
+    "grid_half": 0.3,
+    "trail_close": {
+      "hinge": [
+        -0.08,
+        0.075
+      ],
+      "tip": [
+        -0.482,
+        0.187
+      ],
+      "lat_min": 0.06,
+      "h_max": 0.15,
+      "tip_lat": 0.03
+    }
+  },
+  "set2_howitzer_travel": {
+    "source": "~/.local/share/advance-protocol/unit-sources/set2_howitzer.glb",
+    "out": "set2/howitzer_travel",
+    "type_id": 10,
+    "paint": {
+      "scheme": "plain",
+      "base": [
+        156,
+        127,
+        82
+      ],
+      "roof_dark": 0.12,
+      "dust": 0.3,
+      "dust_c": [
+        172,
+        145,
+        103
+      ],
+      "mottle": 0.05,
+      "rough": 0.74,
+      "floor": 0.68,
+      "mud_h": 1.2,
+      "streak": 0.7,
+      "grime": 0.4,
+      "blotch": 0.1,
+      "rough_var": 0.14,
+      "oil_dark": 0.3,
+      "mud_max": 0.7,
+      "wheel_mud": 0.5,
+      "tyre_r": 0.64,
+      "lugs": 24,
+      "holes": 6,
+      "mud_from": 0.25
+    },
+    "fwd": "y",
+    "towed": true,
+    "yaw": [
+      12.9,
+      0.033,
+      0.0
+    ],
+    "hull_long": [
+      0.0,
+      0.15
+    ],
+    "hull_lat": 0.15,
+    "body_tris": 3300,
+    "gun": {
+      "axis_h": 0.315,
+      "start_long": 0.23,
+      "pitch": 26.0,
+      "clear_r": 0.075,
+      "sides": 10,
+      "profile": [
+        [
+          0.23,
+          0.0185
+        ],
+        [
+          0.43,
+          0.017
+        ],
+        [
+          0.452,
+          0.0185
+        ],
+        [
+          0.491,
+          0.0228
+        ],
+        [
+          0.543,
+          0.021
+        ]
+      ]
+    },
+    "gear": {
+      "kind": "wheels",
+      "road": {
+        "r": 0.05,
+        "h": 0.05,
+        "src_r": 0.0725,
+        "src_h": 0.085,
+        "long": [
+          0.072
+        ]
+      },
+      "cut_lat": 0.07,
+      "cut_r": 1.04,
+      "wheel_lat": [
+        0.09,
+        0.13
+      ],
+      "sides": 16
+    },
+    "k": 1.34,
+    "whole_model": true,
+    "grid_half": 0.44,
+    "trail_close": {
+      "hinge": [
+        -0.03,
+        0.07
+      ],
+      "tip": [
+        -0.438,
+        0.217
+      ],
+      "lat_min": 0.055,
+      "h_max": 0.12,
+      "tip_lat": 0.03
+    },
+    "delete_boxes": [
+      [
+        0.15,
+        0.3,
+        0.07,
+        0.28,
+        0.0,
+        0.2
+      ]
+    ]
   }
 }

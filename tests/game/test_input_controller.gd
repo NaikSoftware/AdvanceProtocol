@@ -1066,6 +1066,73 @@ func test_pending_move_survives_the_turn_and_second_tap_confirms() -> void:
 	assert_eq(u.pos, target, "другий тап підтверджує")
 
 
+# --- Підпис міни -------------------------------------------------------------
+
+func _caption_log() -> Array:
+	var log: Array = []
+	controller.mine_caption.connect(func(o: int, c: Vector2i) -> void: log.append([o, c]))
+	return log
+
+
+## Своя міна без вибраного юніта й відома ворожа дають підпис із власником.
+func test_tap_on_a_visible_mine_captions_it() -> void:
+	_start()
+	service.state.add_unit(5, 0, Vector2i(2, 2), 0)
+	_begin_and_drain()
+	Mines.place(service.state, Vector2i(8, 8), 0)
+	Mines.place(service.state, Vector2i(9, 9), 1)
+	service.state.mines[1].known_to[0] = true
+	var log: Array = _caption_log()
+	controller.tap_cell(Vector2i(8, 8))
+	controller.tap_cell(Vector2i(9, 9))
+	assert_eq(log, [[-1, Vector2i(8, 8)], [0, Vector2i(8, 8)], [-1, Vector2i(9, 9)], [1, Vector2i(9, 9)]])
+
+
+## Нерозкрита ворожа міна: сигнали ті самі, що й на порожній землі, жодного підпису.
+func test_tap_on_an_unrevealed_enemy_mine_is_identical_to_empty_ground() -> void:
+	_start()
+	_begin_and_drain()
+	Mines.place(service.state, Vector2i(9, 9), 1)
+	var log: Array = _caption_log()
+	controller.tap_cell(Vector2i(9, 9))
+	controller.tap_cell(Vector2i(10, 10))
+	assert_eq(log, [[-1, Vector2i(9, 9)], [-1, Vector2i(10, 10)]])
+	assert_eq(_selections.size(), 0)
+	assert_eq(_previews.size(), 0)
+
+
+## Юніт вибрано, тайл поза його зоною: відома міна дає підпис, нерозкрита ворожа мовчить.
+func test_out_of_zone_tap_captions_a_known_mine_and_is_silent_on_an_unknown_one() -> void:
+	_start(30, 30)
+	var u: Unit = service.state.add_unit(5, 0, Vector2i(2, 2), 0)
+	_begin_and_drain()
+	Mines.place(service.state, Vector2i(25, 25), 1)
+	Mines.place(service.state, Vector2i(26, 26), 1)
+	service.state.mines[0].known_to[0] = true
+	controller.tap_cell(u.pos)
+	var log: Array = _caption_log()
+	controller.tap_cell(Vector2i(25, 25))
+	controller.tap_cell(Vector2i(26, 26))
+	assert_eq(log, [[-1, Vector2i(25, 25)], [1, Vector2i(25, 25)], [-1, Vector2i(26, 26)]])
+
+
+## Нічого не вибрано: тап по своєму юніту його вибирає (без підпису), а тап по тайлу міни без
+## юніта дає підпис і нічого не вибирає.
+func test_with_nothing_selected_a_unit_tile_selects_and_a_mine_tile_captions() -> void:
+	_start()
+	var u: Unit = service.state.add_unit(5, 0, Vector2i(5, 5), 0)
+	_begin_and_drain()
+	Mines.place(service.state, Vector2i(8, 8), 0)
+	var log: Array = _caption_log()
+	controller.tap_cell(u.pos)
+	assert_eq(_selections, [u])
+	assert_eq(log, [[-1, u.pos]], "тайл юніта: лише зняття підпису")
+	controller.tap_cell(u.pos)  # зняти вибір
+	log.clear()
+	_selections.clear()
+	controller.tap_cell(Vector2i(8, 8))
+	assert_eq(log, [[-1, Vector2i(8, 8)], [0, Vector2i(8, 8)]])
+	assert_eq(_selections.size(), 0)
 ## Огляд — рівно те, що вирішив core/, плюс id юніта для картки утримання.
 func _expected_inspection(unit_id: int) -> Dictionary:
 	var out: Dictionary = Targeting.inspection(service.state, unit_id, 0)

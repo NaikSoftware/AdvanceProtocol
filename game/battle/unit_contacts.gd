@@ -18,6 +18,8 @@ var map: MapData = null
 var _views: Array[UnitView] = []
 var _placed: Array[Transform3D] = []
 var _road: Array[float] = []
+## Дані екземпляра, поставлені в слот: R — асфальт, G — сила плями (без неї шейдер мав би 0 і ховав би кожну пляму).
+var _custom: Array[Color] = []
 
 
 func _init() -> void:
@@ -42,6 +44,7 @@ func _init() -> void:
 	set_process(false)
 
 
+## Скільки юнітів (не квадів) стежить за плямами.
 func count() -> int:
 	return _views.size()
 
@@ -82,30 +85,57 @@ func _terrain() -> void:
 		_material.set_shader_parameter("height_origin", -0.5 - th.margin)
 
 
+## Квадів у слотах: юніт дає їх стільки, скільки `contact_slots()` (техніка — один, відділення — по
+## бійцю), і всі вони — екземпляри того самого `MultiMesh`, тож виклик малювання один.
+func _slot_count() -> int:
+	var n: int = 0
+	for v in _views:
+		n += v.contact_slots()
+	return n
+
+
 func _resize() -> void:
 	_terrain()
-	multimesh.instance_count = _views.size()
+	var n: int = _slot_count()
+	multimesh.instance_count = n
 	_placed.clear()
-	_placed.resize(_views.size())
+	_placed.resize(n)
 	_placed.fill(HIDDEN)
 	_road.clear()
-	_road.resize(_views.size())
-	_road.fill(0.0)
-	for i in _views.size():
+	_road.resize(n)
+	_road.fill(-1.0)
+	_custom.clear()
+	_custom.resize(n)
+	_custom.fill(Color(-1.0, -1.0, 0.0, 0.0))
+	for i in n:
 		multimesh.set_instance_transform(i, HIDDEN)
 	sync()
 
 
 ## Ставить квади за поточним станом юнітів; незмінені не чіпає, щоб нерухомий екран не будив кадр.
 func sync() -> void:
-	for i in _views.size():
-		var xf: Transform3D = _views[i].contact_transform()
-		var road: float = 1.0 if _on_road(_views[i]) else 0.0
-		if xf != _placed[i] or road != _road[i]:
-			_placed[i] = xf
-			_road[i] = road
-			multimesh.set_instance_transform(i, xf)
-			multimesh.set_instance_custom_data(i, Color(road, 0.0, 0.0, 0.0))
+	if _slot_count() != _placed.size():
+		_resize()  # перев'язаний вигляд міг стати іншим типом, з іншим числом квадів
+		return
+	var slot: int = 0
+	for view in _views:
+		var road: float = 1.0 if _on_road(view) else 0.0
+		var quads: Array[Transform3D] = view.contact_transforms()
+		for qi in quads.size():
+			var xf: Transform3D = quads[qi]
+			var custom := Color(road, view.contact_strength_at(qi), 0.0, 0.0)
+			if xf != _placed[slot] or custom != _custom[slot]:
+				_placed[slot] = xf
+				_road[slot] = road
+				_custom[slot] = custom
+				multimesh.set_instance_transform(slot, xf)
+				multimesh.set_instance_custom_data(slot, custom)
+			slot += 1
+
+
+## Дані екземпляра слота рівно такі, як їх поставлено в MultiMesh (під headless назад не читаються).
+func custom_of(slot: int) -> Color:
+	return _custom[slot]
 
 
 ## 1.0, коли юніт стоїть на асфальті (дорога чи міст), інакше 0.0; поставлене останньою синхронізацією.

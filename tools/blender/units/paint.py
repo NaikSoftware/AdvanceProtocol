@@ -142,9 +142,18 @@ rough = rough + C.get("rough_var", 0.06) * 2 * (fbm(P, [(2.5, 0.6), (0.8, 0.4)],
 # Generated colour: keep only what it says is near-black on the roof items (sight glass). It
 # also paints whole parts dark (the gun), so the barrel and anything low are excluded.
 tip = cfg["spec"]["barrel"] * lib.TILE_M
-az = lib.m_len(cfg, cfg["gun"]["axis_h"]) * lib.TILE_M
-rad = np.hypot(P[..., 0], P[..., 2] - az)
-on_gun = (rad < 0.4) & (P[..., 1] > lib.m_long(cfg, cfg["gun"]["start_long"]) * lib.TILE_M)
+if cfg.get("gun"):
+    _y0, az, _sp, _cp = (v * lib.TILE_M if i < 2 else v for i, v in enumerate(lib.gun_axis(cfg)))
+    if _sp:
+        # a raised barrel: distance across the tilted axis, and ahead of the breech along it
+        rad = np.hypot(P[..., 0], (P[..., 2] - az) * _cp - (P[..., 1] - _y0) * _sp)
+        on_gun = (rad < 0.4) & ((P[..., 1] - _y0) * _cp + (P[..., 2] - az) * _sp > 0)
+    else:
+        rad = np.hypot(P[..., 0], P[..., 2] - az)
+        on_gun = (rad < 0.4) & (P[..., 1] > _y0)
+else:
+    # no gun (engineer vehicle): nothing is a barrel, so no texel is exempt from the floors and none gets soot
+    az, rad, on_gun = 99.0, np.full(P.shape[:2], 99.0), np.zeros(P.shape[:2], bool)
 src_l = (d["src"] @ np.array([0.2126, 0.7152, 0.0722], np.float32)) if "src" in d else np.ones((N, N))
 if plain and "src" in d:
     # per-model: relative to the body's own median, so the threshold means "a third of the typical
@@ -380,6 +389,13 @@ if C.get("ground_ao"):
     lo_h, hi_h = C.get("ground_ao_band", (0.45, 1.3))
     col = col * (1 - C["ground_ao"] * smooth(hi_h, lo_h, h))[..., None]
     col = col * (1 - 0.35 * smooth(0.6, 0.3, ao) * smooth(1.6, 0.8, h))[..., None]
+
+# Worn blade (units.json paint `blade`: y_min in metres from the model centre, sRGB colour): a mine plough is bare steel and dirt
+# up to its edge, darker than the body paint, like the running gear: wear on the same paint, not a second scheme.
+bl = C.get("blade")
+if bl:
+    bm = ((P[..., 1] > bl["y_min"]) & (d["cov"] > 0.5)).astype(np.float32)[..., None]
+    col = col * (1 - 0.9 * bm) + lin(*bl["colour"]) * (0.7 + 0.3 * ao[..., None]) * 0.9 * bm
 
 # Baked relief a little deeper (`normal_gain`): bolts, panel joints and bevels catch the light at
 # 7 cm/px, where a 1:1 bake reads as a moulded surface.

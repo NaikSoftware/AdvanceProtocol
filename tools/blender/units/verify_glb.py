@@ -66,27 +66,46 @@ hx = hull[:, 0].max() - hull[:, 0].min(); hz = hull[:, 2].max() - hull[:, 2].min
 cxz = (hull[:, 0].max() + hull[:, 0].min()) / 2, (hull[:, 2].max() + hull[:, 2].min()) / 2
 print(f"     hull X {hx:.4f} (spec {spec['hull'][0]}), Z {hz:.4f} (spec {spec['hull'][2]}), "
       f"height {pos[:, 1].max():.4f}, centre x {cxz[0]:+.4f} z {cxz[1]:+.4f}")
-check(abs(cxz[0]) < 0.012 and abs(cxz[1]) < 0.012, "hull footprint centred on the origin")
-check(hx <= spec["hull"][0] + 0.01 and hz <= spec["hull"][2] + 0.01, "hull inside the spec box")
-if wheeled:
-    # the gun sits inside the hull outline (a short barrel on a roof mount), so the muzzle is the front-most vertex at bore
-    # height beside the centreline, not the model's front-most vertex
+if cfg.get("whole_model"):
+    # the row describes the solid carriage or hull, not the whole model (trails, barrel, plough):
+    # the box is then compared with the model's wheels, tracks and carriage by
+    # test_rows_match_carriage_and_running_gear_in_every_set in tests/game/test_unit_sets.gd, and
+    # the muzzle and wheels below still hold
+    whole = pos[:, 0].max() - pos[:, 0].min(), pos[:, 2].max() - pos[:, 2].min()
+    print(f"     whole model X {whole[0]:.4f} Z {whole[1]:.4f} (z {pos[:, 2].min():+.4f}..{pos[:, 2].max():+.4f}); row hull {spec['hull'][0]} x {spec['hull'][2]}")
+else:
+    check(abs(cxz[0]) < 0.012 and abs(cxz[1]) < 0.012, "hull footprint centred on the origin")
+    check(hx <= spec["hull"][0] + 0.01 and hz <= spec["hull"][2] + 0.01, "hull inside the spec box")
+if wheeled and not cfg.get("towed"):
+    # the gun sits inside the hull outline (a short barrel on a roof mount), so the muzzle is the
+    # front-most vertex at bore height beside the centreline, not the model's front-most vertex
     sel = (np.abs(pos[:, 0]) < 0.06) & (np.abs(pos[:, 1] - (spec["hull"][1] + 0.05)) < 0.02)
     tip = pos[sel][np.argmin(pos[sel, 2])]
 else:
     tip = pos[np.argmin(pos[:, 2])]
 print(f"     muzzle vertex {tip.round(4).tolist()} (spec z {-spec['barrel']}, y {spec['hull'][1] + 0.05:.3f})")
-check(abs(tip[0]) < 0.03 and abs(tip[2] + spec["barrel"]) < 0.01, "front is -Z, muzzle at the spec length")
-if wheeled:
+if spec["barrel"]:      # no gun (engineer vehicle): nothing to measure
+    check(abs(tip[0]) < 0.03 and abs(tip[2] + spec["barrel"]) < 0.01, "front is -Z, muzzle at the spec length")
+if cfg.get("towed") and spec.get("bore"):
+    # a raised barrel: the row carries the measured bore height, and UnitSilhouettes.muzzle()
+    # returns it
+    check(abs(tip[1] - spec["bore"]) < 0.02, f"muzzle at the row's bore height {spec['bore']} (vertex y {tip[1]:.4f})")
+if wheeled and not cfg.get("towed"):
     check(abs(tip[1] - (spec["hull"][1] + 0.05)) < 0.02, f"muzzle at bore height {spec['hull'][1] + 0.05:.3f} (UnitSilhouettes.muzzle)")
 row = lib.set_row(cfg)
 if cfg.get("out", "").startswith("set"):
     check(row is not None, "a set model has its _SET_SPECS row")
 if row:
     # the game reads the set's row for this model: it must describe the model as built
-    check(abs(hx - row["hull"][0]) <= 0.002 and abs(hz - row["hull"][2]) <= 0.002, f"_SET_SPECS hull {row['hull'][0]} x {row['hull'][2]} matches the model ({hx:.4f} x {hz:.4f})")
-    check(abs(tip[2] + row["barrel"]) < 0.01 and abs(tip[1] - (row["hull"][1] + 0.05)) < 0.005,
-          f"_SET_SPECS barrel {row['barrel']} and bore height {row['hull'][1] + 0.05:.3f} match the muzzle vertex {tip.round(4).tolist()}")
+    # a whole-model row is the carriage or hull alone, so it is not compared with the model's
+    # extents here: tests/game/test_unit_sets.gd compares it with the wheels and tracks
+    if not cfg.get("whole_model"):
+        check(abs(hx - row["hull"][0]) <= 0.002 and abs(hz - row["hull"][2]) <= 0.002, f"_SET_SPECS hull {row['hull'][0]} x {row['hull'][2]} matches the model ({hx:.4f} x {hz:.4f})")
+    # a raised barrel carries its measured bore height
+    bore = row["bore"] if row.get("bore") else row["hull"][1] + 0.05
+    if row["barrel"]:    # no gun (engineer vehicle): nothing to measure
+        check(abs(tip[2] + row["barrel"]) < 0.01 and abs(tip[1] - bore) < 0.005,
+              f"_SET_SPECS barrel {row['barrel']} and bore height {bore:.3f} match the muzzle vertex {tip.round(4).tolist()}")
 
 trk = col[:, 1] > 0.5; whl = col[:, 2] > 0.5
 other = ~(trk | whl)
@@ -102,6 +121,8 @@ if not wheeled:
     ends = cfg.get("ends_bottom_h")
     check(ends is not None, "units.json has ends_bottom_h")
     for name, end, h in (("rear", body & (pos[:, 2] > z1), (ends or [0, 0])[0]), ("bow", body & (pos[:, 2] < z0), (ends or [0, 0])[1])):
+        if name == "bow" and cfg.get("end_floor_rear_only"):
+            continue          # the plough reaches the ground
         if end.any():
             lim = max(floor, h * cfg["k"]) - 0.004
             check(pos[end, 1].min() >= lim, f"{name}: nothing below the hull bottom ({pos[end, 1].min():.4f} >= {lim:.4f})")
@@ -116,19 +137,21 @@ if not wheeled:
     print(f"     track UV2 u {u.min():.4f}..{u.max():.4f}  v {v.min():.4f}..{v.max():.4f}")
     check(u.min() > -1e-4 and v.min() > -1e-4 and v.max() < 1 + 1e-4, "track UV2 v in 0..1, u from 0")
     check(abs((u.max() / lib.TREAD_PERIOD) - round(u.max() / lib.TREAD_PERIOD)) < 1e-3, "track loop is whole tread periods")
-    # bottom run (lowest track verts): u must grow towards the front (-Z) so travel moves it rearwards
+    # bottom run (lowest track verts): u must grow towards the front (-Z) so travel moves it
+    # rearwards
     low = trk & (pos[:, 1] < 0.003)
     lz, lu = pos[low, 2], uv2[low, 0]
     check(np.corrcoef(lz, lu)[0, 1] < -0.9, f"bottom run u grows towards the front (corr {np.corrcoef(lz, lu)[0, 1]:.3f})")
 d = np.hypot(pos[whl, 1] - uv2[whl, 0], pos[whl, 2] - uv2[whl, 1])
 print(f"     wheel vertex distance from axle {d.min():.4f}..{d.max():.4f}; axle heights {np.unique(uv2[whl, 0].round(4)).tolist()}")
-check(d.max() < (0.12 if wheeled else 0.06), "wheel UV2 is the axle centre (every wheel vertex within a radius of it)")
+check(d.max() < (max(0.12, 1.1 * cfg["gear"]["road"]["r"] * cfg["k"]) if wheeled else 0.06), "wheel UV2 is the axle centre (every wheel vertex within a radius of it)")
 # every wheel turns at travel / its own radius: alpha carries the rate relative to the road wheels
 check(col4.shape[1] == 4, "COLOR_0 has alpha")
 if col4.shape[1] == 4:
     rate = 2.0 * col4[whl, 3]
     road_r = cfg["gear"]["road"]["r"] * cfg["k"]
-    # every wheel vertex sits on its rim; a tyre's hub face lies inside it, so only the rim is held there
+    # every wheel vertex sits on its rim; a tyre's hub face lies inside it, so only the rim is
+    # held there
     err = abs((rate * d).max() - road_r) if wheeled else np.abs(rate * d - road_r).max()
     check(err < 0.002, f"wheel spin rate x wheel radius == road wheel radius (worst {err:.4f})")
 # the game turns wheels by travel / _SPECS.wheel, so that number must be the road wheels' radius

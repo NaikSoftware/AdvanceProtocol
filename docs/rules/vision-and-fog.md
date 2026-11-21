@@ -163,15 +163,21 @@ cover rule needs: a squad's earlier moves are hidden by where it ends up later.
 - **The search runs at the start of the engineer's owner's turn and from every tile the engineer
   passes through** — not only from the tile it stops on. An engineer sweeps as it advances, so a
   mine glimpsed in the middle of a route is found even if the engineer drives on past it.
-- **A tile occupied by a unit is never entered** (§3.2), so a unit standing on a mine keeps it from
-  detonating: whoever is blocked stops in front and takes nothing, and the mine stays buried.
 - **Only an engineer finds an enemy mine**, and it finds one within its own `vision` radius —
   the same diamond as tile fog (§3.1), so a revealed mine is always on a tile you can actually
   see. Visibility is **per player**, tracked on the mine, exactly like tile fog.
-- Driving onto an unrevealed mine detonates it.
-- **A known enemy mine is an obstacle**: planning treats it like an occupied tile,
-  so routes and both movement zones bend around it and its tile is not a legal destination. Your
-  own mines never are.
+- **A mine detonates under whoever drives onto it**, whoever laid it. Your own mines hit your own
+  units, so no unit ever stands on a mine.
+- **A known mine is an obstacle**: planning treats it like an occupied tile, so routes and both
+  movement zones bend around it and its tile is not a legal destination. You know every mine you
+  laid, so your own mines are always obstacles to you; an enemy mine becomes one once an engineer
+  finds it. A mine nobody on your side has found still detonates on entry.
+- **A mine may be laid on a bridge, never where no unit can enter** — water, a destroyed bridge,
+  or marsh outside frozen ground — because it could never go off there. Driving onto a mined
+  bridge brings the span down by the same path as an engineer's demolition ([units](units.md)):
+  the tile becomes a destroyed bridge, the unit on it is lost with the bridge and leaves no wreck,
+  and a wreck already on the span goes into the river. Any demolition takes a mine on the span
+  with it, so a repaired bridge is never mined.
 - **An engineer that finds a mine on its route mid-walk stops in front of it**, with the same halt
   as for an unseen unit, and pays only for the tiles it entered.
 

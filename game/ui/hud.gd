@@ -34,6 +34,7 @@ const ENGINEER_TAP_GUARD_MS: int = 300
 ## Скільки камера мусить стояти, щоб розкладка стала наново.
 const VIEW_SETTLE_SECONDS: float = 0.12
 const TOAST_FADE: float = 0.15
+const NO_CELL: Vector2i = Vector2i(-1, -1)
 const _EDGE: float = 24.0
 const _BOTTOM: float = 12.0
 const _TOAST_GAP: float = 8.0
@@ -69,6 +70,14 @@ var _toast_tween: Tween = null
 ## Тег: де стояв щодо юніта (зсув від лівого верхнього кута його коробки) — гістерезис: тримається,
 ## поки законний, тож тег їде за юнітом при русі камери й не стрибає при кожному перерахунку.
 var _tag: UnitTag = null
+## Підпис міни, якої торкнувся гравець; NO_CELL — не показано.
+var _mine_tag: UnitTag = null
+var _mine_cell: Vector2i = NO_CELL
+var _mine_box_pos: Vector2 = Vector2.ZERO
+## Зсув підпису від тайла міни, поки місце законне, і чи знайшлося місце взагалі.
+var _mine_offset: Vector2 = Vector2.ZERO
+var _mine_has_offset: bool = false
+var _mine_spot_ok: bool = true
 var _card: HoldCard = null
 var _tag_offset: Vector2 = Vector2.ZERO
 var _tag_has_offset: bool = false
@@ -156,6 +165,8 @@ func _ready() -> void:
 		b.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_tag = UnitTag.new()
 	add_child(_tag)
+	_mine_tag = UnitTag.new()
+	add_child(_mine_tag)
 	_card = HoldCard.new()
 	add_child(_card)
 	# Підпис «щонайменше» живе в картці, але тести й сцена читають його за %ThreatFloorLabel.
@@ -323,6 +334,7 @@ func _show_target_row(target: Unit) -> void:
 func attach_controller(controller: InputController) -> void:
 	_controller = controller
 	controller.selection_changed.connect(show_selection)
+	controller.mine_caption.connect(_on_mine_caption)
 	controller.action_preview.connect(show_preview)
 	# Контролер скинув pending (озброєння верби, новий вибір) — прев'ю й Confirm не мають
 	# пережити дію, якої вже нема.
@@ -356,6 +368,7 @@ func attach_unit_views(provider: Callable) -> void:
 ## Рух камери: поки дошка їде, тег лише зсувається разом з юнітом; розкладка й стикування —
 ## раз, коли рух стих (інакше кожен крок інерції будував би растр перешкод).
 func _on_view_changed() -> void:
+	_shift_mine_tag()
 	var view: UnitView = _tag_view()
 	if _tag.visible and _tag_has_offset and view != null:
 		var pos: Vector2 = UnitScreenBox.of(view, _camera_rig).position
@@ -589,6 +602,7 @@ func _relayout() -> void:
 		_dock_drone_strip()
 	if _toast.visible:
 		_place_toast()
+	_place_mine_tag()
 	_request_tag()
 
 
@@ -646,7 +660,96 @@ func _neighbour_boxes() -> Array[Rect2]:
 
 # --- Решта --------------------------------------------------------------------
 
+## Підпис міни — тег того ж виду, що в юніта, над тайлом міни: назва й чия вона (§3.11). owner -1
+## знімає його. Контролер шле сюди лише міни, які глядач знає; нерозкрита ворожа сюди не доходить.
+func _on_mine_caption(owner: int, cell: Vector2i) -> void:
+	if owner < 0:
+		_hide_mine_caption()
+		return
+	_mine_cell = cell
+	_mine_spot_ok = true
+	_mine_tag.show_mine(_state != null and owner == _state.active_player, owner)
+	_mine_tag.size = _mine_tag.get_combined_minimum_size().ceil()
+	_place_mine_tag()
+	# Тег юніта мусить обійти новий підпис.
+	_request_tag()
+
+
+func _hide_mine_caption() -> void:
+	_mine_cell = NO_CELL
+	_mine_has_offset = false
+	_mine_tag.visible = false
+	_mine_tag.clear_leader()
+
+
+## Місце вибирає той самий TagPlacement, що й для тега юніта: «юніт» тут — тайл міни, а обходяться
+## видимі юніти, тег юніта й хром HUD. Місця нема — підпис ховається, а не лягає на плиту.
+func _place_mine_tag() -> void:
+	if _camera_rig == null or _mine_cell == NO_CELL:
+		return
+	var box: Rect2 = UnitScreenBox.cell_rect(_mine_cell, _camera_rig)
+	var others: Array[Rect2] = []
+	var views: Dictionary = _unit_views.call() if _unit_views.is_valid() else {}
+	for id: Variant in views:
+		var other := views[id] as UnitView
+		if other != null and is_instance_valid(other):
+			var r: Rect2 = UnitScreenBox.with_marks(other, _camera_rig)
+			if r.size != Vector2.ZERO:
+				others.append(r)
+	if _tag.visible:
+		others.append(Rect2(_tag.position, _tag.size))
+	var scene: Dictionary = {
+		"tag_size": _mine_tag.size, "unit": box, "core": box,
+		"core_poly": UnitScreenBox.cell_poly(_mine_cell, _camera_rig),
+		"others": others, "chrome": _chrome_rects(), "screen": Rect2(Vector2.ZERO, size),
+	}
+	var placement := TagPlacement.new(scene)
+	var rect := Rect2()
+	# Підпис тримає зсув від тайла, поки місце законне: між рівноцінними місцями він не стрибає.
+	if _mine_has_offset:
+		var kept := Rect2(box.position + _mine_offset, _mine_tag.size)
+		if placement.is_legal(kept):
+			rect = kept
+	if rect.size == Vector2.ZERO:
+		var pick: Dictionary = placement.best()
+		if not pick["found"]:
+			_mine_has_offset = false
+			_mine_spot_ok = false
+			_sync_mine_tag_visibility()
+			return
+		rect = pick["rect"]
+	_mine_offset = rect.position - box.position
+	_mine_has_offset = true
+	_mine_spot_ok = true
+	_mine_tag.position = rect.position.round()
+	_mine_tag.size = rect.size
+	_mine_box_pos = box.position
+	if placement.needs_leader(rect):
+		var ends: PackedVector2Array = placement.leader_points(rect)
+		_mine_tag.set_leader(ends[0], ends[1])
+	else:
+		_mine_tag.clear_leader()
+	_sync_mine_tag_visibility()
+
+
+## Поки картка утримання на екрані, підпис не показується (як тег юніта); без законного місця
+## він не повертається й після відпускання.
+func _sync_mine_tag_visibility() -> void:
+	_mine_tag.visible = _mine_cell != NO_CELL and _mine_spot_ok and not _card.visible
+
+
+## Рух камери: підпис лише їде разом з тайлом, а місце перебирається, коли рух стих.
+func _shift_mine_tag() -> void:
+	if _camera_rig == null or _mine_cell == NO_CELL or not _mine_tag.visible:
+		return
+	var pos: Vector2 = UnitScreenBox.cell_rect(_mine_cell, _camera_rig).position
+	_mine_tag.position += (pos - _mine_box_pos).round()
+	_mine_box_pos = pos
+
+
 func _render_selection() -> void:
+	# Вибір чи оновлення стану: підпис міни, що стояв, застарів.
+	_hide_mine_caption()
 	# Юніт міг загинути від відповіді (§3.3.1) між вибором і перемальовуванням.
 	if _selected_unit != null and not _selected_unit.is_alive():
 		_selected_unit = null
@@ -783,6 +886,22 @@ func _tag_view() -> UnitView:
 	return (_unit_views.call() as Dictionary).get(_selected_unit.id, null) as UnitView
 
 
+## Плити й кнопки HUD, що зараз на екрані: тегам юніта й міни їх не накривати.
+func _chrome_rects() -> Array[Rect2]:
+	var chrome: Array[Rect2] = []
+	var parts: Array[Control] = [_chip, _pause_button, _end_turn_button, _plate, _row, _drone_button, _drone_strip]
+	if _engineer_panel.visible:
+		parts.append(_engineer_panel.strip() if _engineer_panel.strip().visible else _engineer_panel.plate())
+	for c in parts:
+		if c.is_visible_in_tree():
+			var cr: Rect2 = _local_rect(c)
+			# Плита щойно показана ще не стиснута до свого розміру: застарілий розмір вигнав би тег зі свого місця.
+			if c == _plate:
+				cr.size.y = minf(cr.size.y, c.get_combined_minimum_size().y)
+			chrome.append(cr)
+	return chrome
+
+
 ## Усе, що тег обходить, з реальних екранних даних видимих UnitView. Невидимий ворог тут не
 ## з'являється ніде: стоїть лише те, що має вузол (§3.5).
 func _tag_scene(view: UnitView, tag_size: Vector2) -> Dictionary:
@@ -796,17 +915,10 @@ func _tag_scene(view: UnitView, tag_size: Vector2) -> Dictionary:
 		if r.size != Vector2.ZERO:
 			others.append(r)
 	var unit_box: Rect2 = UnitScreenBox.of(view, _camera_rig)
-	var chrome: Array[Rect2] = []
-	var parts: Array[Control] = [_chip, _pause_button, _end_turn_button, _plate, _row, _drone_button, _drone_strip]
-	if _engineer_panel.visible:
-		parts.append(_engineer_panel.strip() if _engineer_panel.strip().visible else _engineer_panel.plate())
-	for c in parts:
-		if c.is_visible_in_tree():
-			var cr: Rect2 = _local_rect(c)
-			# Плита щойно показана ще не стиснута до свого розміру: застарілий розмір вигнав би тег зі свого місця.
-			if c == _plate:
-				cr.size.y = minf(cr.size.y, c.get_combined_minimum_size().y)
-			chrome.append(cr)
+	var chrome: Array[Rect2] = _chrome_rects()
+	# Підпис міни теж стоїть на дошці: тег юніта його обходить.
+	if _mine_tag.visible:
+		chrome.append(Rect2(_mine_tag.position, _mine_tag.size))
 	var polys: Array[PackedVector2Array] = []
 	if _own_selected() and _selected_unit.unit_class() == UnitTypes.UnitClass.ENGINEER:
 		# Клітинки, на які діють верби, — перешкода від вибору, тож озброєння верби тег не зрушує.
@@ -882,6 +994,7 @@ func _on_inspected(inspection: Dictionary) -> void:
 	var views: Dictionary = _unit_views.call() if _unit_views.is_valid() else {}
 	if unit == null or not views.has(unit.id) or _camera_rig == null:
 		_card.hide_card()
+		_sync_mine_tag_visibility()
 		_request_tag()
 		return
 	_card.show_unit(unit, bool(inspection.get("is_floor", false)))
@@ -907,6 +1020,7 @@ func _on_inspected(inspection: Dictionary) -> void:
 			# дістався б до прихованого «Підтвердити».
 			c.process_mode = Node.PROCESS_MODE_DISABLED
 			_covered.append(c)
+	_sync_mine_tag_visibility()
 	_request_tag()
 
 

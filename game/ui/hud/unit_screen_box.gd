@@ -20,12 +20,18 @@ static func of(view: Node3D, rig: IsoCameraRig) -> Rect2:
 			parts.append(n)
 	for n in parts:
 		var vi := n as VisualInstance3D
-		if vi == null or not vi.visible:
+		if vi == null or not vi.visible or _empty_mesh(vi):
 			continue
 		var r: Rect2 = part_rect(vi, rig)
 		box = r if not has else box.merge(r)
 		has = true
 	return box
+
+
+## Меш без поверхонь (відділення, в якого не лишилось стоячих): на екрані нічого, а опукла оболонка
+## порожнього мешу — помилка рушія.
+static func _empty_mesh(vi: VisualInstance3D) -> bool:
+	return vi is MeshInstance3D and ((vi as MeshInstance3D).mesh == null or (vi as MeshInstance3D).mesh.get_surface_count() == 0)
 
 
 ## Модель + приціл: те, що має лишатися вільним від плити, коли юніт — ціль прев'ю.
@@ -69,7 +75,7 @@ static func core(view: Node3D, rig: IsoCameraRig) -> Rect2:
 		parts.append(bar)
 	for n in parts:
 		var vi := n as VisualInstance3D
-		if vi == null or not vi.visible:
+		if vi == null or not vi.visible or _empty_mesh(vi):
 			continue
 		var r: Rect2 = part_rect(vi, rig)
 		box = r if not has else box.merge(r)
@@ -136,9 +142,14 @@ static func part_rect(vi: VisualInstance3D, rig: IsoCameraRig) -> Rect2:
 	var xf: Transform3D = vi.global_transform
 	var scale: Vector3 = xf.basis.get_scale()
 	var size: Vector2 = _billboard_size(vi)
-	var centre: Vector3 = xf.origin
-	var right: Vector3 = camera.global_transform.basis.x.normalized() * size.x * 0.5 * scale.x
-	var up: Vector3 = camera.global_transform.basis.y.normalized() * size.y * 0.5 * scale.y
+	var cam_x: Vector3 = camera.global_transform.basis.x.normalized()
+	var cam_y: Vector3 = camera.global_transform.basis.y.normalized()
+	# offset (у пікселях текстури чи тексту) зсуває намальоване від вузла: значок дронів стоїть над
+	# числом HP лише завдяки йому, і без зсуву тег ліг би на його точки.
+	var off: Vector2 = (vi.get("offset") as Vector2) * float(vi.get("pixel_size"))
+	var centre: Vector3 = xf.origin + cam_x * off.x * scale.x + cam_y * off.y * scale.y
+	var right: Vector3 = cam_x * size.x * 0.5 * scale.x
+	var up: Vector3 = cam_y * size.y * 0.5 * scale.y
 	var box := Rect2(rig.unproject(centre + right + up), Vector2.ZERO)
 	for corner: Vector3 in [centre + right - up, centre - right + up, centre - right - up]:
 		box = box.expand(rig.unproject(corner))
@@ -161,7 +172,7 @@ static func _billboard_size(vi: VisualInstance3D) -> Vector2:
 ## Висота цифр відносно кегля: рядок шрифту вищий за видимі цифри.
 const DIGIT_HEIGHT: float = 0.72
 
-## Опуклі оболонки сіток: рахуються раз на сітку, бо кадр не мусить обходити всі її вершини.
+## Опуклі оболонки мешів: рахуються раз на меш, бо кадр не мусить обходити всі його вершини.
 static var _hulls: Dictionary = {}
 
 

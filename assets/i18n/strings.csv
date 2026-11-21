@@ -26,6 +26,7 @@ ERR_DRONE_CANNOT_TARGET_INFANTRY,Дрон не бʼє піхоту,Drone cannot 
 ERR_NOT_AN_ENGINEER,Це не інженер,Unit is not an engineer
 ERR_NOT_ADJACENT,Ціль не на сусідній клітинці,Target is not on an adjacent tile
 ERR_MINE_ALREADY_THERE,Тут уже є міна,A mine is already here
+ERR_MINE_CANNOT_BE_LAID_HERE,Сюди ніхто не вʼїде — міна тут марна,No unit can enter here to set off a mine
 ERR_TILE_OCCUPIED,Клітинка зайнята,Tile is occupied
 ERR_NO_MINE_THERE,Тут немає міни,There is no mine here
 ERR_NO_BRIDGE_THERE,Тут немає мосту,There is no bridge here
@@ -98,7 +99,6 @@ pause_surrender_cancel,Скасувати,Cancel
 results_title,Матч завершено,Match over
 results_winner,Переможець,Winner
 results_losses,Втрати,Losses
-results_damage,Завдана шкода,Damage dealt
 results_rematch,Реванш,Rematch
 results_to_menu,В меню,To menu
 about_body,Мобільна покрокова тактика. Хот-сит на 2–3 гравці.,Mobile turn-based tactics. Hot-seat for 2–3 players.
@@ -124,6 +124,8 @@ eng_hint_tap_tile,Торкніться клітинки,Tap a tile
 drone_hint_tap_target,Торкніться цілі,Tap a target
 hud_map,Карта,Map
 ERR_NO_ADJACENT_TARGET,Поруч немає придатної цілі,No valid target adjacent
+mine_own,Ваша міна,Your mine
+mine_enemy,Ворожа міна,Enemy mine
 replay_turn,Хід %d · Гравець %d,Turn %d · Player %d
 replay_skip,Пропустити,Skip
 replay_rec,ЗАПИС,REC

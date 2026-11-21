@@ -30,15 +30,24 @@ const _SHADER: Shader = preload("res://assets/props/forest/forest_crown.gdshader
 const _DIR: String = "res://assets/props/forest/"
 ## Типовий зум гри — 12 (IsoCameraRig.zoom_level); до цього зуму включно ліс повний.
 const DETAIL_ZOOM: float = 15.0
-## Розчинення над юнітом — лише крони, що на екрані справді його перекривають: центр крони в
-## циліндрі вздовж променя «юніт → камера» радіусом у півсилует юніта (`UNIT_HALF`) плюс
-## `FADE_MARGIN`, і лише на тій відстані вздовж променя, де він проходить крізь висоту крони (від
-## `CROWN_LOW` висоти дерева до верху; нижня частина крони — рідкі гілочки): 1–4 дерева на юніта. Ширший вибір (радіус крони й поле
-## довкола клітинки) розчиняв шмат лісу 6 × 4 клітинки — пляму-«привид» довкола юніта.
+## Розчинення над юнітом — лише крони, що справді закривають бійців (`covers_slots`): крона — стовп свого
+## радіуса від `CROWN_LOW` висоти до верху, і крізь нього проходить промінь до камери від когось із бійців
+## (ступні–голова, бійці в межах `SLOT_SPREAD` від середини клітинки). Позаду юніта така крона лише та,
+## під якою він стоїть. Повний радіус крони й поле довкола клітинки розчиняли шмат лісу 6 × 4 клітинки.
 const UNIT_HALF: float = 0.25
 const FADE_MARGIN: float = 0.1
-const CROWN_LOW: float = 0.5
+## Бійці відділення — у квадраті ±0,2 від середини клітинки (місця й розкладки); ступні й голова (0,16 й 1,6 м)
+## — межі променя до камери.
+const SLOT_SPREAD: float = 0.2
+const FIGURE_LOW: float = 0.02
+const FIGURE_HIGH: float = 0.2
+## Середина фігури бійця над землею (0,9 м): довкола цієї точки розчинена крона прозора.
+const FIGURE_MID_Y: float = 0.11
+## Нижня чверть дерева — стовбур і рідкі гілки; вище промінь до юніта вже йде крізь листя.
+const CROWN_LOW: float = 0.25
 const FADE_SOFT: float = 0.08
+## Розчинена крона м'яко напівпрозора, на 35 %: юніт під нею читається цілим, а ліс не має дірки.
+## Стос крон не множиться — прохід глибини пропускає лише найближчу поверхню.
 const FADE_ALPHA: float = 0.35
 ## Розчинення перераховується, коли зум змінився більше ніж на стільки.
 const FADE_ZOOM_STEP: float = 0.5
@@ -60,9 +69,9 @@ const RING_NEAR: float = 5.0
 ## в сезон листя — справжніми сітками (голі дерева пізньої осені проксі передають і так).
 const RING_EDGE: float = 3.0
 const RING_DETAIL: float = 1.5
-## Розчиняється листя від цієї висоти (тайли, ~1,6 м): нижчий підріст юніта не ховає, а кожна
-## група розчинення — виклик малювання.
-const FADE_MIN_TOP: float = 0.2
+## Розчиняється листя від цієї висоти (тайли, ~0,8 м): кущ у півтора метра ховає пригнутого бійця
+## (1,42 м), а нижчий підріст — ні; кожна група розчинення — виклик малювання.
+const FADE_MIN_TOP: float = 0.1
 ## Новий пролам перепланує лише клітинки в межах стількох від зміни (ForestScatter.LANE_NEAR + крона).
 ## Стовбур дерева не ближче за стільки до проліту (тайли): сама просіка вільна від стовбурів.
 const TRUNK_CLEAR: float = 0.45
@@ -114,9 +123,16 @@ var _mesh: Dictionary = {}  ## ім'я вузла -> Mesh (і проксі `<в�
 ## Злиті сітки: шейдер із таблицею даних екземплярів і поріг альфи на атлас.
 var _batch_shader: Shader
 var _atlas_cut: Dictionary = {}
-## Розчинення: атлас -> ShaderMaterial прохід лише глибини, а в його next_pass — прохід кольору
+## Розчинення: атлас -> ShaderMaterial прохід лише глибини (`_fade_color` — прохід кольору; окремі вузли, не
+## next_pass: next_pass малюється одразу за своїм проходом, і колір ближчого атласу ліг би поверх кольору
+## дальшого — крони різних порід нашаровувались би)
 ## з прозорістю. Mesh -> атлас; Mesh -> масиви поверхні (для злиття розчинених екземплярів).
 var _fade_mat: Dictionary = {}
+var _fade_color: Dictionary = {}
+## Висота землі під клітинками показаних юнітів — раз на перерахунок розчинення, а не на кожну крону.
+var _reveal_ground: Dictionary = {}
+## Клітинки юнітів, над якими останній перерахунок справді розчинив крону: лише вони — точки шейдера.
+var _fading: Dictionary = {}
 var _atlas_of: Dictionary = {}
 var _arrays: Dictionary = {}
 var _ground_mesh: Mesh
@@ -184,8 +200,8 @@ func build(world: Board, world_surface: PackedByteArray, ring: int, board_size: 
 		_load_library()
 	if ring > 0:
 		var mats: Array = []
-		for fm: ShaderMaterial in _fade_mat.values():
-			mats.append_array([fm, fm.next_pass])
+		mats.append_array(_fade_mat.values())
+		mats.append_array(_fade_color.values())
 		for m: ShaderMaterial in mats:
 			Surroundings.apply(m, board_size)
 	_build_ring()
@@ -307,6 +323,28 @@ func _wire_units(mat: ShaderMaterial) -> void:
 	mat.set_shader_parameter("unit_cells", _unit_tex)
 
 
+## Скільки точок бере шейдер розчинення (`fade_points`).
+const FADE_POINTS: int = 32
+
+
+## Точки, довкола яких прозора розчинена крона (veg_body.gdshaderinc, VEG_FADE; `_FADE_GLSL`): клітинки
+## юнітів, над якими справді розчинено крону, на висоті середини фігури. Якщо їх більше за FADE_POINTS,
+## шейдер отримує fade_count = −1 і розчиняє кожну вибрану крону цілою до 35 %: інакше юніт поза списком
+## лишився б під непрозорою кроною.
+static func set_fade_points(m: ShaderMaterial, cells: Array) -> void:
+	var pts := PackedVector4Array()
+	var count: int = cells.size()
+	if count > FADE_POINTS:
+		push_warning("розчинення: %d юнітів під кронами, шейдер бере %d — крони гаснуть цілими" % [count, FADE_POINTS])
+		count = -1
+	else:
+		for c: Vector2i in cells:
+			pts.append(Vector4(c.x, TerrainHeight.ground_y(c.x, c.y) + FIGURE_MID_Y, c.y, 0.0))
+	pts.resize(FADE_POINTS)
+	m.set_shader_parameter("fade_points", pts)
+	m.set_shader_parameter("fade_count", count)
+
+
 ## Зум камери (IsoCameraRig.zoom_level): підлісок лише до DETAIL_ZOOM. Розчинення залежить
 ## від нахилу камери (з зумом), а не від пану — камера не обертається (`_cover`); тож воно
 ## перераховується лише на помітну зміну зуму, а не на кожен кадр перетягування.
@@ -314,14 +352,36 @@ func set_zoom(zoom: float) -> void:
 	_zoom = zoom
 	for n in _under:
 		n.visible = zoom <= DETAIL_ZOOM
-	if absf(zoom - _fade_zoom) > FADE_ZOOM_STEP:
+	# і на перетині DETAIL_ZOOM: підлісок там з'являється чи зникає, а розчинення його пропускає далі за ним
+	if absf(zoom - _fade_zoom) > FADE_ZOOM_STEP or (zoom <= DETAIL_ZOOM) != (_fade_zoom <= DETAIL_ZOOM):
 		_apply_fade()
+
+
+## Розчинена крона прозора лише довкола показаних юнітів (`set_fade_points`): відстань — у площині екрана,
+## перерахована в одиниці світу на глибині юніта, від 0,25 (35 %) до 0,6 (непрозора). Ціла крона зникала,
+## лишаючи голу галявину з чітким краєм листя.
+const _FADE_GLSL: String = """uniform vec4 fade_points[32];
+uniform int fade_count = 0;
+float fade_far(vec3 v, mat4 view) {
+	if (fade_count < 0) {
+		return 0.0;
+	}
+	vec2 frag = v.xy / max(-v.z, 0.001);
+	float d = 1e6;
+	for (int i = 0; i < fade_count; i++) {
+		vec3 q = (view * vec4(fade_points[i].xyz, 1.0)).xyz;
+		d = min(d, length(frag - q.xy / max(-q.z, 0.001)) * -q.z);
+	}
+	return smoothstep(0.25, 0.6, d);
+}"""
+const _FADE_ALPHA_LINE: String = "ALPHA = mix(COLOR.a, 1.0, fade_far(VERTEX, VIEW_MATRIX));"
 
 
 func _load_library() -> void:
 	_lib.clear()
 	_mesh.clear()
 	_fade_mat.clear()
+	_fade_color.clear()
 	_atlas_cut.clear()
 	_atlas_of.clear()
 	_arrays.clear()
@@ -332,12 +392,13 @@ func _load_library() -> void:
 	var color_code: String = _replace_checked(_SHADER.code, [
 			["depth_draw_opaque, ", ""], [", alpha_to_coverage", ""],
 			["|| (!shadow_pass && piece_hash > COLOR.a)", ""],
-			["ROUGHNESS = 1.0;", "ROUGHNESS = 1.0;\n\tALPHA = COLOR.a;"],
+			["varying flat float piece_hash;", "varying flat float piece_hash;\n" + _FADE_GLSL],
+			["ROUGHNESS = 1.0;", "ROUGHNESS = 1.0;\n\t" + _FADE_ALPHA_LINE],
 			["ALPHA = t.a; ALPHA_SCISSOR_THRESHOLD = cut; ALPHA_ANTIALIASING_EDGE = a2c_edge; ALPHA_TEXTURE_COORDINATE = UV * vec2(textureSize(albedo_tex, 0));", "if (t.a < cut) { discard; }"],
 			["inst_tone = dot(INSTANCE_CUSTOM.rgb, INSTANCE_CUSTOM.rgb) > 0.0 ? INSTANCE_CUSTOM.rgb : vec3(1.0);", "inst_tone = CUSTOM0.rgb;"]])
 	var depth_code: String = _replace_checked(color_code, [
 			["render_mode cull_disabled, skip_vertex_transform", "render_mode cull_disabled, depth_draw_always, skip_vertex_transform"],
-			["ALPHA = COLOR.a;", "ALPHA = 0.0;"]])
+			[_FADE_ALPHA_LINE, "ALPHA = 0.0;"]])
 	_batch_shader = Shader.new()
 	_batch_shader.code = batch_code(RenderingServer.get_current_rendering_method())
 	var color_shader := Shader.new()
@@ -363,12 +424,15 @@ func _load_library() -> void:
 				color.shader = color_shader
 				var depth := ShaderMaterial.new()
 				depth.shader = depth_shader
-				depth.render_priority = FOREST_PRIORITY
-				depth.next_pass = color
+				# Після контуру зон (BoardView.CONTOUR_PRIORITY), як і розчинені рослини: глибина розчиненої крони
+				# інакше ховала б контур під нею.
+				depth.render_priority = PropLayer.FADE_DEPTH_PRIORITY
+				color.render_priority = PropLayer.FADE_DEPTH_PRIORITY + 1
 				for fm: ShaderMaterial in [color, depth]:
 					fm.set_shader_parameter("albedo_tex", src.albedo_texture)
 					fm.set_shader_parameter("alpha_cutoff", src.alpha_scissor_threshold)
 				_fade_mat[src.albedo_texture] = depth
+				_fade_color[src.albedo_texture] = color
 		root.free()
 	var g: Node = (load(_DIR + "forest_ground.glb") as PackedScene).instantiate()
 	for mi: MeshInstance3D in g.find_children("*", "MeshInstance3D", true, false):
@@ -831,26 +895,52 @@ void fragment() {
 ## від сцени до камери (вісь погляду): він залежить лише від нахилу, тобто від зуму, а не від
 ## пану, тож розчинення не треба перераховувати, поки гравець тягне камеру.
 func _cover(entry: Dictionary, back: Vector3) -> float:
-	var a: float = 1.0
 	var flat := Vector2(back.x, back.z)
 	var dir: Vector2 = flat.normalized()
-	# Висота променя над землею на кожну клітинку вздовж погляду; без нахилу (погляд згори) — без
-	# перевірки висоти: крона закриває юніта, лише стоячи над ним.
+	# Висота променя над землею на кожну клітинку вздовж погляду; без нахилу (погляд згори) — крона
+	# закриває юніта, лише стоячи над ним.
 	var slope: float = back.y / flat.length() if flat.length() > 0.05 else -1.0
 	var p: Vector2 = entry["pos"]
 	var top: float = entry["top"]
-	var reach: float = FADE_MARGIN + UNIT_HALF
+	var r: float = float(entry.get("r", 0.0))
+	var a: float = 1.0
 	for c in _reveal:
 		var u := Vector2(c)
-		var t: float = 0.0
-		if slope > 0.0:
-			t = (p - u).dot(dir)
-			var y: float = t * slope
-			if t < 0.0 or y < top * CROWN_LOW - 0.1 or y > top:
-				continue  # позаду юніта або промінь іде під кроною чи над нею
-		var d: float = p.distance_to(u + dir * t)
-		a = minf(a, smoothstep(reach, reach + FADE_SOFT, d))
+		if slope <= 0.0:
+			var reach: float = FADE_MARGIN + UNIT_HALF
+			var k: float = smoothstep(reach, reach + FADE_SOFT, p.distance_to(u))
+			if k < 0.999:
+				_fading[c] = true
+			a = minf(a, k)
+			continue
+		# дешеве відсіювання вбік — до рельєфу
+		if absf((p - u).dot(Vector2(-dir.y, dir.x))) - SLOT_SPREAD >= r:
+			continue
+		# рельєф: крона стоїть на своїй землі, юніт — на своїй (кущ на схилі до камери сягає вище в погляд)
+		var base: float = (entry["xf"] as Transform3D).origin.y - float(_reveal_ground[c])
+		# усі юніти під цією кроною, не лише перший: точка потрібна кожному
+		if covers_slots(p, r, top, u, dir, slope, base):
+			_fading[c] = true
+			a = 0.0
 	return a
+
+
+## Чи закриває крона (стовп радіусом `r` від `CROWN_LOW` висоти до верху) хоч якийсь промінь до камери від
+## бійців юніта на клітинці `u`: бійці — у квадраті ±SLOT_SPREAD довкола середини, промінь — від ступень
+## (FIGURE_LOW) до голови (FIGURE_HIGH). Над кругом крони промінь іде відрізком s ∈ [t − w, t + w]
+## уздовж погляду (лише до камери, s ≥ 0) і піднімається на slope · s.
+## `base` — на скільки земля під кроною вища за землю під юнітом.
+static func covers_slots(p: Vector2, r: float, top: float, u: Vector2, dir: Vector2, slope: float, base: float = 0.0) -> bool:
+	var t: float = (p - u).dot(dir)
+	var lat: float = maxf(absf((p - u).dot(Vector2(-dir.y, dir.x))) - SLOT_SPREAD, 0.0)
+	if lat >= r:
+		return false
+	var w: float = sqrt(r * r - lat * lat)
+	var s0: float = maxf(t - SLOT_SPREAD - w, 0.0)
+	var s1: float = t + SLOT_SPREAD + w
+	if s1 <= s0:
+		return false
+	return FIGURE_LOW + slope * s0 <= base + top and FIGURE_HIGH + slope * s1 >= base + top * CROWN_LOW
 
 
 func _apply_fade() -> void:
@@ -859,9 +949,22 @@ func _apply_fade() -> void:
 	var cam3d: Camera3D = get_viewport().get_camera_3d() if is_inside_tree() else null
 	var back: Vector3 = cam3d.global_transform.basis.z if cam3d != null else Vector3.UP
 	var faded: Dictionary = {}  ## атлас -> Array[{mesh, xf, rgb, alpha}]
+	_reveal_ground.clear()
+	_fading.clear()
+	for c: Vector2i in _reveal:
+		_reveal_ground[c] = TerrainHeight.ground_y(c.x, c.y)
 	for g: Dictionary in _ring_fadable + _fadable:
 		var batch: FoliageBatch = g["batch"]
 		var list: Array = g["list"]
+		# підлісок далі за DETAIL_ZOOM не малюється — і нема чого розчиняти; set_zoom перерахує на наближенні
+		if _zoom > DETAIL_ZOOM and _under.has(g.get("mmi")):
+			for i in list.size():
+				batch.set_alive(int(g["first"]) + i, true)
+			var whole := PackedFloat32Array()
+			whole.resize(list.size())
+			whole.fill(1.0)
+			g["alpha"] = whole
+			continue
 		# Альфа екземплярів зберігається і тут: тести читають її, не зазираючи в таблицю батча.
 		var alpha := PackedFloat32Array()
 		alpha.resize(list.size())
@@ -878,6 +981,8 @@ func _apply_fade() -> void:
 	for g: Dictionary in _ring_fadable + _fadable:
 		(g["batch"] as FoliageBatch).upload()
 	_show_fade(faded)
+	for m: ShaderMaterial in _fade_color.values():
+		set_fade_points(m, _fading.keys())
 
 
 ## Прогрів за гейтом (BattleScreen._warm_board): розчинена крона кожного атласу — найближча до
@@ -918,6 +1023,15 @@ func _show_fade(faded: Dictionary) -> void:
 		n.set_meta("alphas", (faded[atlas] as Array).map(func(it: Dictionary) -> float: return it["alpha"]))
 		add_child(n)
 		_soft_nodes.append(n)
+		# той самий меш кольором — окремим вузлом, щоб пріоритет ставив його після глибини всіх атласів
+		var c := MeshInstance3D.new()
+		c.name = n.name + "_c"
+		c.mesh = n.mesh
+		c.material_override = _fade_color[atlas]
+		c.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		c.extra_cull_margin = 0.4
+		add_child(c)
+		_soft_nodes.append(c)
 
 
 ## Розчинені екземпляри одного атласу — одна сітка у світових координатах: вершини й нормалі

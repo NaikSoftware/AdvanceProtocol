@@ -61,6 +61,9 @@ func _init() -> void:
 ## own — свій юніт активного гравця: чужий тег натомість має смужку кольору власника.
 ## Лічильник дронів публічний (§3.9), тож показується завжди, поки в типу є дрони.
 func show_unit(unit: Unit, own: bool) -> void:
+	# Страховка: клас показує і юніта, і міну, тож залишки режиму міни тут скидаються.
+	_sil.visible = true
+	name_label.remove_theme_color_override("font_color")
 	name_label.text = tr(String(unit.type()["name_key"]))
 	_sil.texture = HudKit.SILHOUETTES[unit.unit_class()]
 	_tab.visible = not own
@@ -72,6 +75,23 @@ func show_unit(unit: Unit, own: bool) -> void:
 	reset_size()
 	# Запікаємо лише коли змінилося те, що видно: тег оновлюється й від руху камери.
 	var shown: String = "%s|%d|%d|%d|%s|%d" % [name_label.text, drones, unit.drones_left, unit.unit_class(), own, unit.owner]
+	if shown != _shown:
+		_shown = shown
+		request_bake()
+	visible = true
+
+
+## Підпис міни (§3.11): лише назва й чия вона, кольором HP-смуги власника; без силуета, смужки
+## гравця й дронів. Викликач показує його тільки для міни, яку глядач знає.
+func show_mine(own: bool, owner: int) -> void:
+	name_label.text = tr("mine_own" if own else "mine_enemy")
+	name_label.add_theme_color_override("font_color", UnitView.hp_fill_color(owner))
+	_sil.visible = false
+	_tab.visible = false
+	_pip_box.visible = false
+	update_minimum_size()
+	reset_size()
+	var shown: String = "mine|%s|%d" % [name_label.text, owner]
 	if shown != _shown:
 		_shown = shown
 		request_bake()

@@ -107,7 +107,8 @@ rifle squad and the engineer.
   occupancy. **They are how a player reads AP: no AP number is shown anywhere in the UI** — not
   on a unit, not in a preview, not in a card.
 - **A move is planned from what the player can see, and walked one tile at a time.** Planning and
-  the zones use fog-filtered occupancy plus known enemy mines and, for a vehicle, known wrecks;
+  the zones use fog-filtered occupancy plus known mines — the player's own and the enemy mines
+  found so far — and, for a vehicle, known wrecks;
   the walk checks the truth and **stops on the tile before** anything it could not see or an
   engineer has just found. AP is charged only for tiles actually entered. Planning against the
   true occupancy would leak — the route would detour around an invisible enemy and give away
@@ -222,9 +223,9 @@ mesh may sculpt three or four figures sharing a base, and it should.
 ### 3.8 Engineers → [verb list](docs/rules/units.md)
 
 No gun; a verb list instead. All actions are on an **orthogonally adjacent** tile and cost
-`fire_cost` AP: lay/clear mine, repair/demolish bridge (an enemy on it dies; a friendly unit
-on it forbids the demolition), repair a friendly unit. Repair is the one place where unspent AP
-matters.
+`fire_cost` AP: lay/clear mine (never where no unit can enter; a bridge may be mined),
+repair/demolish bridge (an enemy on it dies, a mine on it goes with the span; a friendly unit on it
+forbids the demolition), repair a friendly unit. Repair is the one place where unspent AP matters.
 
 ### 3.9 Drone strike — assault squad only → [details](docs/rules/units.md)
 
@@ -247,10 +248,12 @@ standing wins.
 
 Laid by engineers, invisible to everyone except the owner, **found only by an engineer** within
 its own vision diamond — searched at the start of its owner's turn and from **every tile it passes
-through**, not only the one it stops on. Driving onto an unrevealed mine detonates it — **on entry,
-not at the destination**, so a minefield cannot be crossed by stopping past it. **A known enemy
-mine is an obstacle** that planning routes around. A tile occupied by a unit is never entered, so
-a blocker standing on a mine keeps it from going off.
+through**, not only the one it stops on. **A mine detonates under whoever drives onto it**, its
+owner's units included, so no unit ever stands on a mine. It goes off **on entry, not at the
+destination**, so a minefield cannot be crossed by stopping past it. **A known mine is an
+obstacle** that planning routes around: every mine of the player's own, and every enemy mine an
+engineer has found. A mine on a bridge brings the bridge down, and the unit on it is lost with the
+bridge, as with a demolition (§3.8).
 
 ### 3.12 Weather, time of day, and ground state → [details](docs/rules/movement-and-terrain.md)
 
@@ -395,8 +398,9 @@ texture and effect from real metres.
 
 Budget on a mid-range phone at 60 fps: **under ~100 draw calls and ~150k triangles on screen.**
 Bake static terrain lighting. One directional light: it casts real shadows from units on every
-map and from the board's buildings on sunny maps; units also add a contact shadow on every map,
-centred under the hull when overcast; forest shadows are baked, and under River's overcast the
+map and from the board's buildings on sunny maps; vehicles also add a hull-sized contact shadow on
+every map, centred under the hull when overcast, and each standing soldier a small soft one under
+his feet; forest shadows are baked, and under River's overcast the
 light's shadows are faint and blurred
 ([details](docs/art-direction.md#rendering-and-mobile-budget)). No SSAO, no SSR, no volumetric
 fog. **Persistent battle scars** — wrecks, the scorch under them, lingering smoke, ruts — are the

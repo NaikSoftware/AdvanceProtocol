@@ -174,12 +174,12 @@ func test_clear_all_frees_every_moment() -> void:
 		assert_true(n.is_queued_for_deletion())
 
 
-## Розігрів малює кулю, влучання в броню, снаряд у ґрунт і постріл гармати — невидимо мало, без
+## Розігрів малює кулю, влучання в броню, снаряд у ґрунт, постріл гармати й дрон — невидимо мало, без
 ## світла, частинки нульові й нерухомі.
 func test_warm_up_is_invisible() -> void:
 	BattleFx.warm_up(parent, Vector3.ZERO)
 	var roots: Array[Node] = parent.get_children()
-	assert_eq(roots.size(), 6)
+	assert_eq(roots.size(), 7)
 	for r: Node in roots:
 		assert_eq((r as Node3D).scale, Vector3.ONE * 0.0001)
 		for l: Node in r.find_children("*", "OmniLight3D", true, false):
@@ -218,12 +218,26 @@ func test_rifles_have_no_muzzle_flash() -> void:
 	assert_true(m.is_queued_for_deletion())
 
 
-## Спалах — на кінчику ствола: танк (5,0 м попереду, вісь у башті) і гаубиця (над станиною).
+## Спалах — на кінчику ствола: танк (5,0 м попереду, вісь у башті) і гармати (за їхніми моделями).
 func test_muzzle_flash_sits_at_the_barrel_tip() -> void:
 	var tank: Node3D = BattleFx.spawn_muzzle(parent, Transform3D(Basis(), Vector3(2, 0, 3)), BattleFx.Weapon.TANK_GUN, 5)
 	assert_almost_eq(tank.position, Vector3(2.0, 0.3 - 0.05, 3.0 - 0.625), Vector3.ONE * 0.05)
-	var how: Node3D = BattleFx.spawn_muzzle(parent, Transform3D(), BattleFx.Weapon.SHELL, 10)
-	assert_almost_eq(how.position, Vector3(0.0, 0.34, -0.45), Vector3.ONE * 0.05)
+	# гармати — за справжньою моделлю: найпередніше коло її вершин, а не за формулою з рядка
+	UnitSilhouettes.reset_models()
+	for case: Vector2i in [Vector2i(9, 0), Vector2i(10, 0), Vector2i(9, 1), Vector2i(10, 1), Vector2i(9, 2), Vector2i(10, 2)]:
+		var id: int = case.x
+		var fx: Node3D = BattleFx.spawn_muzzle(parent, Transform3D(), BattleFx.Weapon.SHELL, id, case.y)
+		var v: PackedVector3Array = UnitSilhouettes.model_mesh(id, case.y).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+		var zmin: float = 0.0
+		for p in v:
+			zmin = minf(zmin, p.z)
+		var ring_y: float = 0.0
+		var n: int = 0
+		for p in v:
+			if p.z < zmin + 0.004:
+				ring_y += p.y
+				n += 1
+		assert_almost_eq(fx.position, Vector3(0.0, ring_y / float(n), zmin), Vector3(0.03, 0.02, 0.02), "спалах на дулі гармати типу %d набору %d" % [id, case.y])
 
 
 ## Постріл гармати: гаряче ядро на два кадри, 3–4 клуби сіро-бежевого порохового диму вздовж
@@ -389,7 +403,7 @@ func test_hit_sizes_follow_the_weapon_and_the_target() -> void:
 	assert_eq(BattleFx.hit_cloud_m(BattleFx.Weapon.TANK_GUN, true), 5.0)
 	assert_eq(BattleFx.hit_cloud_m(BattleFx.Weapon.TANK_GUN, false), 6.0)
 	assert_eq(BattleFx.hit_cloud_m(BattleFx.Weapon.SHELL, false), 12.0)
-	assert_eq(BattleFx.hit_cloud_m(BattleFx.Weapon.DRONE, true), 6.0)
+	assert_eq(BattleFx.hit_cloud_m(BattleFx.Weapon.DRONE, true), 3.0)
 
 
 ## Клуби влучання в броню стоять перед корпусом, а не в ньому: інакше корпус їх закриває.
@@ -525,3 +539,13 @@ func test_small_puffs_vary() -> void:
 	for q: Node in hit.find_children("Puff*", "MeshInstance3D", true, false):
 		rolls[_mat(q).get_shader_parameter("roll")] = true
 	assert_gt(rolls.size(), 1)
+
+
+## Пил старту дрона — окремий вузол миті: на передачі ходу його прибирають разом з рештою.
+func test_the_launch_puff_is_a_moment_cleared_with_the_rest() -> void:
+	BattleFx.spawn_drone(parent, Vector3.ZERO, Vector3(3.0, 0.0, 2.0))
+	var puffs: Array[Node] = parent.find_children("LaunchPuff*", "Node3D", false, false)
+	assert_eq(puffs.size(), 1)
+	assert_true(puffs[0].is_in_group(BattleFx.GROUP))
+	BattleFx.clear_all(get_tree())
+	assert_true(puffs[0].is_queued_for_deletion())

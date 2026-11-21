@@ -142,6 +142,67 @@ static func spawn_explosion(parent: Node, at: Vector3, size: float) -> Node3D:
 	return root
 
 
+## Політ дрона від загону до цілі (§3.9): виліт із тихим поп-звуком диму, підйом, дуга й
+## пікірування на ціль. Результат удару вже вирішено в core/ — тут лише показ, тож політ
+## короткий і фіксований (ходи читають, а не женуть). Вузол живе в контейнері юнітів, а не в
+## UnitView: види перебудовуються після кожного пакета подій, і стан на них гине.
+## Модель справжнього розміру (1,2 м), читається рухом і димом старту (docs/art-direction.md, «Drone»).
+const DRONE_FLIGHT_SEC: float = 0.9
+const DRONE_MODEL: PackedScene = preload("res://assets/props/ordnance/drone.glb")
+## Висота дуги над серединою шляху й над точками старту/удару, у тайлах.
+const DRONE_APEX: float = 1.5
+const DRONE_LAUNCH_LIFT: float = 0.25
+
+
+static var _drone_material: StandardMaterial3D
+
+
+## GLB-матеріал дрона ігнорує COLOR_0 і дає чисто білий силует; той самий матеріал, що в мін.
+static func _drone_mat() -> StandardMaterial3D:
+	if _drone_material == null:
+		_drone_material = StandardMaterial3D.new()
+		_drone_material.vertex_color_use_as_albedo = true
+		_drone_material.roughness = 0.7
+	return _drone_material
+
+
+## `warm` — безлюдний прогрів шейдерів: без диму старту, модель у масштабі 0,0001.
+static func spawn_drone(parent: Node, from: Vector3, to: Vector3, warm: bool = false) -> Node3D:
+	var root := _root("Drone", parent, from)
+	var model: Node3D = DRONE_MODEL.instantiate()
+	for mi: Node in model.find_children("*", "MeshInstance3D", true, false):
+		(mi as MeshInstance3D).material_override = _drone_mat()
+	root.add_child(model)
+	var scale: float = 0.0001 if warm else 1.0
+	var a: Vector3 = from + Vector3(0, DRONE_LAUNCH_LIFT, 0)
+	var c: Vector3 = (from + to) * 0.5 + Vector3(0, DRONE_APEX, 0)
+	var b: Vector3 = to + Vector3(0, DRONE_LAUNCH_LIFT, 0)
+	if not warm:
+		_launch_puff(parent, from)
+	var tw: Tween = root.create_tween()
+	tw.tween_method(func(t: float) -> void:
+		var pos: Vector3 = a.lerp(c, t).lerp(c.lerp(b, t), t)
+		var tangent: Vector3 = 2.0 * ((1.0 - t) * (c - a) + t * (b - c))
+		model.global_transform = Transform3D(Basis.looking_at(tangent.normalized(), Vector3.UP).scaled(Vector3.ONE * scale), pos),
+		0.0, 1.0, DRONE_FLIGHT_SEC)
+	tw.tween_callback(root.queue_free)
+	return root
+
+
+## Дим старту — короткий плаский радіальний розліт пилу на землі під загоном (до ~0,4 тайла за
+## 0,5 с, вдвічі прозоріший за звичайну хвилю): не здіймається й не закриває загін. Окремий вузол
+## контейнера, а не дитина дрона: дрон зникає на 0,9 с, а пил ще осідає.
+const LAUNCH_PUFF_SEC: float = 0.5
+static func _launch_puff(parent: Node, from: Vector3) -> void:
+	# Загін сидить на SQUAD_SINK нижче землі: пил від його початку ховав би ближню половину під ґрунтом.
+	var puff := _root("LaunchPuff", parent, from + Vector3(0.0, UnitView.SQUAD_SINK + 0.02, 0.0))
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(from)
+	# Ранні кадри атласу — суцільне тіло клуби; пізні мають радіальні волокна.
+	_wave(puff, rng, 6.0, LAUNCH_PUFF_SEC, 0.3, Vector2(8.0, 18.0))
+	_expire(puff, LAUNCH_PUFF_SEC + 0.1)
+
+
 ## Розігрів на старті бою: перша куля, іскри, грудки, ядро й кільце пилу інакше чекають на
 ## компіляцію шейдерів 0,2–1 с, і кадр застигає саме на першому вбивстві чи влучанні. Усе
 ## невидимо мале, світло вимкнене; звільняє себе сама.
@@ -149,6 +210,7 @@ static func warm_up(parent: Node, at: Vector3) -> Node3D:
 	var boom: Node3D = spawn_explosion(parent, at, 0.0001)
 	var all: Array[Node3D] = [boom, spawn_hit(parent, at, Weapon.TANK_GUN, true), spawn_hit(parent, at, Weapon.SHELL, false), spawn_muzzle(parent, Transform3D(Basis(), at), Weapon.TANK_GUN),
 			spawn_topple_hit(parent, at, at + Vector3.UP, Debris.CONCRETE, true), spawn_topple_land(parent, at, at + Vector3.RIGHT, Debris.WOOD, true)]
+	all.append(spawn_drone(parent, at, at + Vector3.RIGHT, true))
 	for hit: Node3D in all:
 		hit.scale = Vector3.ONE * 0.0001
 		for l: Node in hit.find_children("*", "OmniLight3D", true, false):
@@ -606,7 +668,8 @@ static func hit_cloud_m(weapon: Weapon, armoured: bool) -> float:
 		Weapon.SHELL:
 			return 12.0
 		Weapon.DRONE:
-			return 6.0
+			# Боєголовка дрона — ~3 м кулі проти цілі в 2,5–3 м, а не 6 м, як у гармати.
+			return 3.0
 	return 1.2
 
 
@@ -697,7 +760,7 @@ static func spawn_hit(parent: Node, at: Vector3, weapon: Weapon, armoured: bool)
 			_debris(root, cloud)
 		Weapon.DRONE:
 			# Удар згори: гаряче ядро на даху, чорна клуба на корпусі, іскри вниз і вбік, без ґрунту.
-			_hot(root, 3.0, Vector3(0, ROOF + 0.05, 0), 0.0, PRIORITY_CORE + 1)
+			_hot(root, 1.5, Vector3(0, ROOF + 0.05, 0), 0.0, PRIORITY_CORE + 1)
 			_sparks(root, "Sparks", rng.randi_range(5, 9), Vector3(0, ROOF, 0), _ricochet(rng), 45.0, 6.0, 14.0, 0.4, 1.4, 0.15, 0.3, 0.0)
 			_fireball(root, cloud, Vector3(0, ROOF, 0), 0.0, life, 1.0, 0.7)
 	if armoured:
@@ -1065,7 +1128,7 @@ static func _dirt(root: Node3D, cloud_m: float, offset: Vector3, delay: float, f
 ## Низька хвиля пилу, що розбігається від розриву: 24 невисокі (~2 м) рідкі бежеві клуби по колу,
 ## кожна ширша за крок між ними, зливаються в суцільний вал без «намиста» і з ease-out за DUST_SPREAD_SEC доходять до `d_m`/2 від центру;
 ## розчиняються за `life` с. Над сусідом вони лише рідшають (WAVE_CAP), а не вирізаються.
-static func _wave(root: Node3D, rng: RandomNumberGenerator, d_m: float, life: float) -> void:
+static func _wave(root: Node3D, rng: RandomNumberGenerator, d_m: float, life: float, alpha: float = 0.7, frames: Vector2 = Vector2(28.0, LAST_FRAME)) -> void:
 	var n: int = 24
 	for i in n:
 		var ang: float = TAU * (float(i) + rng.randf_range(-0.3, 0.3)) / float(n)
@@ -1074,10 +1137,10 @@ static func _wave(root: Node3D, rng: RandomNumberGenerator, d_m: float, life: fl
 		# Розбіг від 0,25 клітинки (пляма 0,5 клітинки) до краю хвилі.
 		q.position = dir * 0.25
 		var mat := q.material_override as ShaderMaterial
-		mat.set_shader_parameter("tint", Vector4(0.27, 0.24, 0.19, 0.7))
+		mat.set_shader_parameter("tint", Vector4(0.27, 0.24, 0.19, alpha))
 		mat.set_shader_parameter("feather", 1.0)
 		var reach: float = (d_m * 0.5 * rng.randf_range(0.85, 1.0)) / 8.0
-		_play_smoke(root, q, 0.15, life * rng.randf_range(0.7, 1.0), 0.0, 0.2, 0.8, Vector2(28.0 + float(i % 5), LAST_FRAME), Vector2.ZERO, 0.2 * life, 0.5, false, false, RISE_TAU_SEC, 1.0, dir * (reach - 0.25))
+		_play_smoke(root, q, 0.15, life * rng.randf_range(0.7, 1.0), 0.0, 0.2, 0.8, Vector2(frames.x + float(i % 5), frames.y), Vector2.ZERO, 0.2 * life, 0.5, false, false, RISE_TAU_SEC, 1.0, dir * (reach - 0.25))
 
 
 ## Чорне ядро фугасного розриву в ґрунті: 155 мм на +0,1 с — чорна куля, і лише за 1–2 с її

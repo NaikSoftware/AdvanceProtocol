@@ -39,6 +39,12 @@ signal drone_armed(center: Vector2i, radius: int, marks: Dictionary)
 ## та is_floor. {} — огляд знято (палець відпущено).
 signal inspected(inspection: Dictionary)
 
+## Тап по міні, яку активний гравець бачить (своя чи знайдена ворожа), що не збігся з жодною
+## іншою дією: підпис над тайлом, як для юніта. owner -1 — підпис зняти; цей сигнал іде на
+## кожен звичайний тап першим, тож нерозкрита міна нічим не відрізняється від порожньої землі.
+## Озброєння дрона чи верби теж знімає підпис: у режимі дії тап підпису не дає.
+signal mine_caption(owner: int, cell: Vector2i)
+
 ## Тип очікуваної на підтвердження дії — ключ "type" у словнику нижче.
 ## Обидва прев'ю несуть лише числа й ідентифікатори, ніколи готовий рядок
 ## для показу (§9/§10 CLAUDE.md, «жодних хардкод-рядків») — текст і кнопку
@@ -116,7 +122,7 @@ func _recompute_zones_for_selected() -> void:
 	var state: BattleState = _match_service.state
 	if _selected_unit != null and _selected_unit.is_alive() and _selected_unit.owner == state.active_player:
 		# R5: known, ніколи occupied_map() — це і є весь зміст рішення. Те саме
-		# джерело, що й у MoveCommand: разом із відомими ворожими мінами (§3.11).
+		# джерело, що й у MoveCommand: разом з усіма відомими мінами, і своїми (§3.11).
 		var occupied: Dictionary = state.known_blocked_map(_selected_unit.owner)
 		occupied.erase(_selected_unit.pos)  # власний тайл юніта завжди прохідний для нього самого
 		_zones = Pathing.compute_zones(state.board, _selected_unit, occupied,
@@ -153,6 +159,7 @@ func tap_cell(cell: Vector2i) -> void:
 	if _drone_armed:
 		_tap_in_drone_mode(state, cell)
 		return
+	mine_caption.emit(-1, cell)
 	if not state.board.in_bounds(cell):
 		_deselect()
 		return
@@ -179,6 +186,7 @@ func tap_cell(cell: Vector2i) -> void:
 		return
 
 	if _selected_unit == null:
+		_caption_mine(state, cell)
 		return
 
 	_maybe_turn(state, cell)
@@ -189,7 +197,17 @@ func tap_cell(cell: Vector2i) -> void:
 
 	if _zones != null and _zones.can_reach(cell):
 		_set_pending_move(cell)
-	# інакше: тайл поза зоною вибраного юніта — no-op, а не здогад про намір
+	else:
+		# Тайл без юніта й без ходу: якщо там видима гравцеві міна — підпис.
+		_caption_mine(state, cell)
+
+
+## Підпис лише для міни, яку гравець знає: своя або ворожа з known_to. Нерозкрита ворожа сюди
+## не доходить зовсім (§3.11): ні підпису, ні іншої реакції.
+func _caption_mine(state: BattleState, cell: Vector2i) -> void:
+	var m: Mines.Mine = Mines.mine_at(state, cell)
+	if m != null and (m.owner == state.active_player or Mines.is_known(state, cell, state.active_player)):
+		mine_caption.emit(m.owner, cell)
 
 
 ## Поворот на місці — побічний ефект тапу, а не окрема дія: подається тим самим
@@ -311,6 +329,8 @@ func arm_engineer(action: int) -> void:
 	if tiles.is_empty():
 		action_refused.emit(status["reason"])
 		return
+	# Підпис знімається до `_clear_pending()`: скидання прев'ю перерозкладає HUD, а підпис уже зайвий.
+	mine_caption.emit(-1, _selected_unit.pos)
 	_clear_pending()
 	_armed_action = action
 	_armed_at_ms = Time.get_ticks_msec()
@@ -328,6 +348,7 @@ func arm_drone() -> void:
 	if reason != "":
 		action_refused.emit(reason)
 		return
+	mine_caption.emit(-1, _selected_unit.pos)
 	_clear_pending()
 	disarm()
 	_drone_armed = true

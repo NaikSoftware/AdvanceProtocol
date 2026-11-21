@@ -77,7 +77,6 @@ func test_demolish_bridge_with_enemy_on_it() -> void:
 	await _e2e.engineer_act(ENG, A.DEMOLISH_BRIDGE, TARGET)
 	assert_eq(_state().board.kind_at(TARGET), Terrain.Kind.BRIDGE_DESTROYED)
 	assert_false(victim.is_alive())
-	assert_eq(_state().damage_dealt[0], 100)
 	assert_eq(_board_view().kind_at(TARGET), Terrain.Kind.BRIDGE_DESTROYED, "дошку перебудовано на BridgeChanged")
 	assert_eq(_e2e.events_of(Events.BridgeChanged).size(), 1)
 

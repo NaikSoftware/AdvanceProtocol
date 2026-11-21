@@ -56,8 +56,10 @@ func test_mine_markers_are_outside_the_probe_mask() -> void:
 	var state := BattleState.create(Board.create(4, 3, Terrain.GroundState.DRY), 2, 7)
 	Mines.place(state, Vector2i(1, 1), 0)
 	mines.rebuild(state, 0)
-	var marker: VisualInstance3D = mines.marker_at(Vector2i(1, 1))
-	assert_eq(marker.layers & view.reflection_probe().cull_mask, 0)
+	var visuals: Array[Node] = mines.find_children("*", "VisualInstance3D", true, false)
+	assert_eq(visuals.size(), 2, "модель і кільце")
+	for v: VisualInstance3D in visuals:
+		assert_eq(v.layers & view.reflection_probe().cull_mask, 0)
 
 
 func test_probe_box_covers_the_board() -> void:

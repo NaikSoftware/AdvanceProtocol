@@ -24,6 +24,7 @@ extends Node
 ## <map>@forest@x,y@zoom — танк гравця 0 проламав ліс на x,y і сусідню клітинку, піхота — у стоячому
 ## лісі поруч; камера на танку. <map>@forest@x,y@zoom@sel — те саме, піхоту вибрано (контури зон під кронами);
 ## @peek замість @sel — довгий натиск на танк (кільце дальності). З обома інтерфейс схований.
+## @bodies — ще й тіла трьох наборів поруч.
 ## Кадри тримаються в пам'яті й пишуться в кінці: save_png блокує ~1 с і з'їв би наступні кадри.
 
 const WINDOW: Vector2i = Vector2i(1600, 900)
@@ -238,6 +239,15 @@ func _ready() -> void:
 						break
 			for q: Vector2i in lane:
 				state.broken_forest[q] = true
+			# <map>@forest@x,y@zoom@bodies: ще й тіла трьох наборів (власники 0–2) поруч — шар тіл малює
+			# MultiMesh на набір і позу, тож саме тут видно, скільки він коштує.
+			if parts.size() >= 5 and parts[4] == "bodies":
+				var k: int = 0
+				for d: Vector2i in [Vector2i(1, 1), Vector2i(-1, 1), Vector2i(1, -1)]:
+					var b := Casualties.Body.new(9000 + k, c + d, k, 0, k * 2, 0, Casualties.SQUAD_FIGURES)
+					b.revealed_to = 1
+					state.bodies.append(b)
+					k += 1
 			state.refresh_vision(0)
 			screen.call("_rebuild_units_for_active_player")
 			# @sel: піхоту в лісі вибрано — контури її зон руху лягають під крони; @peek: довгий натиск на
