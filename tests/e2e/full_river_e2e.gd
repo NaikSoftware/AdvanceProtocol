@@ -98,7 +98,9 @@ func _wait_idle(max_seconds: float = 15.0) -> void:
 		return
 	var deadline: int = Time.get_ticks_msec() + int(max_seconds * 1000.0)
 	await get_tree().process_frame
-	while _e2e.screen._event_player.is_playing():
+	# Повтор ходів противника після гейта грає між тактами програвача: поки він
+	# триває, дошка чужа й тап по юніту ігнорується, тож чекаємо і його.
+	while _e2e.screen._event_player.is_playing() or _e2e.screen._replay_state != null:
 		if Time.get_ticks_msec() > deadline:
 			fail_test("не дочекались завершення анімації подій")
 			return
