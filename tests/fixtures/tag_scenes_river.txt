@@ -3,6 +3,7 @@
 "found": true,
 "key": "tank z8 d(-1.0, 0.0) s0",
 "leader": true,
+"leader_points": PackedVector2Array(431, 283, 455.6944, 231.90492),
 "rect": Rect2(311, 283, 120, 26),
 "relax": 0,
 "scene": {
@@ -24,6 +25,7 @@
 "found": true,
 "key": "tank z12 d(0.0, -1.0) s2",
 "leader": true,
+"leader_points": PackedVector2Array(472, 188, 485.2487, 158.80502),
 "rect": Rect2(352, 188, 120, 26),
 "relax": 0,
 "scene": {
@@ -45,6 +47,7 @@
 "found": false,
 "key": "tank z8 d(-1.0, 0.0) s22",
 "leader": false,
+"leader_points": PackedVector2Array(),
 "rect": Rect2(0, 0, 0, 0),
 "relax": 0,
 "scene": {
@@ -66,6 +69,7 @@
 "found": false,
 "key": "tank z18 d(-1.0, 0.0) s26",
 "leader": false,
+"leader_points": PackedVector2Array(),
 "rect": Rect2(0, 0, 0, 0),
 "relax": 0,
 "scene": {
@@ -87,6 +91,7 @@
 "found": true,
 "key": "tank z8 d(0.0, 1.0) s3",
 "leader": false,
+"leader_points": PackedVector2Array(),
 "rect": Rect2(534.81866, 295.8426, 120, 26),
 "relax": 0,
 "scene": {
@@ -108,6 +113,7 @@
 "found": true,
 "key": "tank z8 d(0.0, 1.0) s6",
 "leader": false,
+"leader_points": PackedVector2Array(),
 "rect": Rect2(542.8071, 401.74698, 120, 26),
 "relax": 0,
 "scene": {
@@ -129,6 +135,7 @@
 "found": true,
 "key": "engineer z8 d(-1.0, 0.0) s0",
 "leader": true,
+"leader_points": PackedVector2Array(469.4184, 287, 468.4902, 231.21947),
 "rect": Rect2(322, 287, 149, 26),
 "relax": 1,
 "scene": {
@@ -150,6 +157,7 @@
 "found": true,
 "key": "engineer z12 d(-1.0, 0.0) s9",
 "leader": true,
+"leader_points": PackedVector2Array(222, 267, 235.94609, 229.99658),
 "rect": Rect2(73, 267, 149, 26),
 "relax": 1,
 "scene": {
@@ -171,6 +179,7 @@
 "found": false,
 "key": "engineer z8 d(-1.0, 0.0) s19",
 "leader": false,
+"leader_points": PackedVector2Array(),
 "rect": Rect2(0, 0, 0, 0),
 "relax": 2,
 "scene": {
@@ -192,6 +201,7 @@
 "found": false,
 "key": "engineer z18 d(-1.0, 0.0) s23",
 "leader": false,
+"leader_points": PackedVector2Array(),
 "rect": Rect2(0, 0, 0, 0),
 "relax": 2,
 "scene": {
@@ -213,6 +223,7 @@
 "found": true,
 "key": "engineer z8 d(1.0, 0.0) s7",
 "leader": false,
+"leader_points": PackedVector2Array(),
 "rect": Rect2(510.53003, 265.97522, 149, 26),
 "relax": 2,
 "scene": {
@@ -234,6 +245,7 @@
 "found": true,
 "key": "engineer z12 d(0.0, -1.0) s40",
 "leader": false,
+"leader_points": PackedVector2Array(),
 "rect": Rect2(214.55762, 114.798035, 149, 26),
 "relax": 2,
 "scene": {
@@ -255,6 +267,7 @@
 "found": true,
 "key": "engineer z8 d(1.0, 0.0) s23",
 "leader": true,
+"leader_points": PackedVector2Array(960, 423.2112, 1001.65045, 421.6489),
 "rect": Rect2(811, 407, 149, 26),
 "relax": 2,
 "scene": {
@@ -276,6 +289,7 @@
 "found": true,
 "key": "engineer z12 d(1.0, 0.0) s20",
 "leader": true,
+"leader_points": PackedVector2Array(865, 431, 884.20013, 449.03192),
 "rect": Rect2(716, 405, 149, 26),
 "relax": 2,
 "scene": {
@@ -297,6 +311,7 @@
 "found": true,
 "key": "engineer z8 d(0.0, -1.0) s10",
 "leader": true,
+"leader_points": PackedVector2Array(339, 48, 367.76114, 50.59547),
 "rect": Rect2(190, 22, 149, 26),
 "relax": 0,
 "scene": {
@@ -318,6 +333,7 @@
 "found": true,
 "key": "engineer z8 d(0.0, -1.0) s12",
 "leader": true,
+"leader_points": PackedVector2Array(319, 35, 343.48514, 37.629353),
 "rect": Rect2(170, 9, 149, 26),
 "relax": 0,
 "scene": {
@@ -333,6 +349,34 @@
 "screen": Rect2(0, 0, 985, 442),
 "tag_size": Vector2(149, 26),
 "unit": Rect2(339.28766, 43.129353, 45.19702, 32.12665)
+}
+},
+{
+"found": true,
+"from": {
+Vector2(667, 37): PackedVector2Array(667, 37, 668.5, 114.5),
+Vector2(673, 101): PackedVector2Array(673, 101, 674.5, 114.5),
+Vector2(679, 44.5): PackedVector2Array(679, 44.5, 680.5, 114.5),
+Vector2(685, 67): PackedVector2Array(685, 67, 686.5, 114.5)
+},
+"key": "tie eng 13/9",
+"leader": false,
+"leader_points": PackedVector2Array(),
+"rect": Rect2(577.5, 86, 149, 26),
+"relax": 0,
+"scene": {
+"chrome": Array[Rect2]([]),
+"core": Rect2(652, 124, 50, 38),
+"core_poly": PackedVector2Array(652, 124, 702, 124, 702, 162, 652, 162),
+"fire": PackedVector2Array(),
+"icon": Rect2(694, 118, 8, 8),
+"label": Rect2(664.5, 120, 25, 5),
+"marks": Array[PackedVector2Array]([PackedVector2Array(690.707, 118.260124, 733.1855, 144.64906), PackedVector2Array(605.75, 12.704378, 648.2285, -13.684561), PackedVector2Array(945.57794, -66.46244, 903.0994, -40.0735), PackedVector2Array(818.14246, 65.482254, 775.66394, 91.87119), PackedVector2Array(733.1855, 144.64908, 690.707, 118.26014), PackedVector2Array(563.2715, 65.482254, 520.79297, 39.093315), PackedVector2Array(690.707, 39.093315, 733.1855, 65.482254), PackedVector2Array(775.66394, 12.704378, 818.14246, 39.093315), PackedVector2Array(818.14246, -13.684561, 775.66394, -40.0735), PackedVector2Array(435.836, -145.62924, 478.31448, -119.2403)]),
+"others": Array[Rect2]([Rect2(594.39856, -145.78842, 31.604916, 60.613735)]),
+"polys": Array[PackedVector2Array]([PackedVector2Array(643, 119, 677, 131, 643, 143, 609, 131), PackedVector2Array(643, 143, 677, 155, 643, 167, 609, 155)]),
+"screen": Rect2(0, 0, 985, 442),
+"tag_size": Vector2(149, 26),
+"unit": Rect2(652, 120, 50, 42)
 }
 }
 ]

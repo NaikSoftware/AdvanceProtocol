@@ -333,11 +333,18 @@ func test_a_leadered_tag_hugging_another_unit_pays_the_crowded_cost() -> void:
 ## лідера, з лідером, рівні 0, 1 і 2, і «місця нема».
 func test_best_keeps_the_recorded_picks_on_real_river_scenes() -> void:
 	var cases: Array = str_to_var(FileAccess.get_file_as_string("res://tests/fixtures/tag_scenes_river.txt"))
-	assert_eq(cases.size(), 16, "передумова: усі сцени прочитано")
+	assert_eq(cases.size(), 17, "передумова: усі сцени прочитано")
 	for c: Dictionary in cases:
 		var p := TagPlacement.new(c["scene"])
 		var pick: Dictionary = p.best()
 		assert_eq([pick["found"], pick["rect"], pick["leader"], p.relax_used], [c["found"], c["rect"], c["leader"], c["relax"]], c["key"])
+		# Кінець лідера записано старим кодом із повною точністю (float32 у Vector2), тож порівняння точне.
+		var ends: PackedVector2Array = p.leader_points(pick["rect"]) if pick["found"] and pick["leader"] else PackedVector2Array()
+		assert_eq(ends, c["leader_points"], "кінці лідера: " + c["key"])
+		# Симетричні кінці клітинок: за рівної ціни обирає тай-брейк (менша відстань + статична частина, потім номер).
+		var from: Dictionary = c.get("from", {})
+		for tag_pt: Vector2 in from:
+			assert_eq(TagPlacement.new(c["scene"])._leader_from(tag_pt), from[tag_pt], "лідер від %s: %s" % [tag_pt, c["key"]])
 
 
 ## Повний перебір 4-dp сітки без відсіву за нижньою межею ціни: звіряє порядок і відсів у best(). Законність і
