@@ -688,6 +688,11 @@ func _place_mine_tag() -> void:
 	if _camera_rig == null or _mine_cell == NO_CELL:
 		return
 	var box: Rect2 = UnitScreenBox.cell_rect(_mine_cell, _camera_rig)
+	if _far_off_screen(box):
+		_mine_has_offset = false
+		_mine_spot_ok = false
+		_sync_mine_tag_visibility()
+		return
 	var others: Array[Rect2] = []
 	var views: Dictionary = _unit_views.call() if _unit_views.is_valid() else {}
 	for id: Variant in views:
@@ -832,6 +837,10 @@ func _update_tag() -> void:
 		_tag_unit_id = _selected_unit.id
 		_tag_has_offset = false
 	_tag.show_unit(_selected_unit, _own_selected())
+	if _far_off_screen(UnitScreenBox.of(view, _camera_rig)):
+		_tag.visible = false
+		_tag_has_offset = false
+		return
 	var tag_size: Vector2 = _tag.get_combined_minimum_size().ceil()
 	var scene: Dictionary = _tag_scene(view, tag_size)
 	var placement := TagPlacement.new(scene)
@@ -878,6 +887,13 @@ func _update_tag() -> void:
 		_tag.clear_leader()
 	# Поки картка утримання на екрані, тег не показується зовсім (на дошці лишаються лише контури й кільця).
 	_tag.visible = not _card.visible
+
+
+## Законне місце тега лежить на екрані й не далі MAX_LEAD від юніта, тож за цією смугою його нема, а
+## пошуку не треба: коробка за кадром у перспективі розлітається на тисячі dp, а растр і сітка пошуку на
+## ній — це сотні мілісекунд.
+func _far_off_screen(box: Rect2) -> bool:
+	return not box.intersects(Rect2(Vector2.ZERO, size).grow(TagPlacement.MAX_LEAD), true)
 
 
 func _tag_view() -> UnitView:

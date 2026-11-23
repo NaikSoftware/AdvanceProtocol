@@ -1307,3 +1307,70 @@ func test_a_caption_near_the_screen_edge_keeps_off_end_turn_and_confirm() -> voi
 		end_turn.position = end_home
 		row.position = row_home
 	assert_gt(shown, 0, "хоч один підпис показано")
+
+
+# --- Юніт і міна за кадром ------------------------------------------------------
+
+## HUD із камерою на cell і UnitView юніта u; reads рахує звернення до постачальника UnitView: сцену
+## тега (чи підпису міни) будують лише з усіх видимих юнітів, тож без звернення її не будувалось.
+func _hud_counting_reads(state: BattleState, u: Unit, cell: Vector2i, reads: Array[int]) -> IsoCameraRig:
+	var rig: IsoCameraRig = _rig_for(cell)
+	var views: Dictionary = {}
+	if u != null:
+		var view: UnitView = UnitViewScene.instantiate()
+		add_child_autofree(view)
+		view.bind(u)
+		view.global_position = IsoCameraRig.cell_to_world(u.pos)
+		views[u.id] = view
+	hud.bind(state)
+	hud.attach_camera(rig)
+	hud.attach_unit_views(func() -> Dictionary:
+		reads[0] += 1
+		return views)
+	hud.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	hud.size = rig.get_viewport().get_visible_rect().size
+	return rig
+
+
+## Юніт далеко за кадром: законне місце тега лежить не далі MAX_LEAD від юніта й у межах екрана, тож
+## його нема, а коробка юніта за кадром у перспективі розлітається на тисячі dp, і пошук на ній
+## тривав секунди. Тег ховається без сцени й пошуку; юніт повернувся — тег стає звичайним пошуком.
+func test_an_off_screen_unit_hides_its_tag_without_a_placement_search() -> void:
+	var state: BattleState = _state()
+	var u: Unit = state.add_unit(5, 0, Vector2i(11, 11), 0)
+	var reads: Array[int] = [0]
+	var rig: IsoCameraRig = _hud_counting_reads(state, u, u.pos, reads)
+	hud.show_selection(u)
+	await wait_frames(3)
+	assert_true(hud.unit_tag().visible, "передумова: юніт на екрані — тег є")
+	rig.center_on(Vector2i(0, 0))
+	var box: Rect2 = UnitScreenBox.of(hud._tag_view(), rig)
+	assert_false(box.intersects(Rect2(Vector2.ZERO, hud.size).grow(TagPlacement.MAX_LEAD), true),
+		"передумова: юніт далеко за кадром (%s)" % box)
+	reads[0] = 0
+	hud._update_tag()
+	assert_false(hud.unit_tag().visible, "за кадром тега нема")
+	assert_eq(reads[0], 1, "прочитано лише UnitView вибраного: сцени тега з іншими юнітами не будувалось")
+	rig.center_on(u.pos)
+	hud._update_tag()
+	assert_true(hud.unit_tag().visible, "юніт знову на екрані — тег повернувся")
+
+
+func test_an_off_screen_mine_caption_hides_without_a_placement_search() -> void:
+	var state: BattleState = _state()
+	var cell := Vector2i(11, 11)
+	var reads: Array[int] = [0]
+	var rig: IsoCameraRig = _hud_counting_reads(state, null, cell, reads)
+	hud._on_mine_caption(0, cell)
+	assert_true(_mine_tag().visible, "передумова: тайл на екрані — підпис є")
+	rig.center_on(Vector2i(0, 0))
+	var box: Rect2 = UnitScreenBox.cell_rect(cell, rig)
+	assert_false(box.intersects(Rect2(Vector2.ZERO, hud.size).grow(TagPlacement.MAX_LEAD), true),
+		"передумова: тайл далеко за кадром (%s)" % box)
+	reads[0] = 0
+	hud._place_mine_tag()
+	assert_false(_mine_tag().visible, "за кадром підпису нема")
+	assert_eq(reads[0], 0, "сцени підпису з видимими юнітами не будувалось")
+	rig.center_on(cell)
+	hud._place_mine_tag()
+	assert_true(_mine_tag().visible, "тайл знову на екрані — підпис повернувся")
