@@ -13,8 +13,8 @@ extends RefCounted
 ## точна геометрія перетину), бо точний перетин на тисячі кандидатів не вкладається в кадр;
 ## шукати точніше, якщо тег помітно сідає на 1–2 dp повз ребро контуру.
 ## shortcut: best() вибирає рівно те, що й повний перебір 4-dp сітки, але відсікає кандидатів за нижньою
-## межею ціни; на десктопі це ~9 ms для танка на River. Інженер із клітинками верби коштує до ~55 ms: рівень 0
-## там доводиться доводити порожнім, а кожна нова точка t рахує лідера (_leader_from) з перебором кінців.
+## межею ціни; на десктопі це ~9 ms для танка на River. Інженер із клітинками верби коштує до ~55 ms на найважчій
+## сцені фікстури River: рівень 0 там доводиться доводити порожнім, а кожна нова точка t рахує лідера (_leader_from) з перебором кінців.
 ## Пошук іде на виборі й на спокої камери, коли збережене місце накриває позначки, а не на кожному кадрі
 ## руху — тоді тег лише їде з юнітом. Прискорювати _leader_from далі, коли інженер стане помітним.
 
@@ -271,23 +271,23 @@ func _leader_from(t: Vector2) -> PackedVector2Array:
 			_ends_floor[i] = END_IN_CELL_COST if _ends_static[i] >= END_IN_CELL_COST - CLEARANCE_WEIGHT * CLEARANCE_CAP else 0.0
 	# Ціна кінця = відстань + штрафи, а штрафи — це напис, кінець у клітинці й перетин (не менше 200 dp). Нижня межа без
 	# перетину й напису — відстань плюс «кінець у клітинці»: вона ближча до ціни, ніж межа зі статичною частиною (та сягає
-	# −200 dp), тож перетини лінії з клітинками рахуються лише для кількох найближчих кінців. Старий порядок
-	# (відстань + статична частина, потім номер) лишається за розв'язання нічиїх: виграє перший у ньому.
+	# −200 dp), тож перетини лінії з клітинками рахуються для меншої частки кінців. За рівної ціни виграє кінець
+	# з меншою відстанню плюс статична частина (rank_costs), а за рівної й цієї — з меншим номером.
 	var n: int = _ends.size()
 	var lows := PackedFloat64Array()
-	var olds := PackedFloat64Array()
+	var rank_costs := PackedFloat64Array()
 	var keys := PackedInt64Array()
 	lows.resize(n)
-	olds.resize(n)
+	rank_costs.resize(n)
 	keys.resize(n)
 	for i in n:
 		var d: float = t.distance_to(_ends[i])
 		lows[i] = d + _ends_floor[i]
-		olds[i] = d + _ends_static[i]
+		rank_costs[i] = d + _ends_static[i]
 		keys[i] = (int(floor(lows[i] * 64.0)) << _INDEX_BITS) | i
 	keys.sort()
 	var best_cost: float = INF
-	var best_old: float = INF
+	var best_rank: float = INF
 	var best_i: int = n
 	for key: int in keys:
 		if float(key >> _INDEX_BITS) / 64.0 > best_cost:
@@ -297,9 +297,9 @@ func _leader_from(t: Vector2) -> PackedVector2Array:
 			continue
 		var q: Vector2 = _ends[i]
 		var cost: float = t.distance_to(q) + _end_cost(t, q, _ends_static[i])
-		if cost < best_cost or (cost == best_cost and (olds[i] < best_old or (olds[i] == best_old and i < best_i))):
+		if cost < best_cost or (cost == best_cost and (rank_costs[i] < best_rank or (rank_costs[i] == best_rank and i < best_i))):
 			best_cost = cost
-			best_old = olds[i]
+			best_rank = rank_costs[i]
 			best_i = i
 			u = q
 	return PackedVector2Array([t, u])
