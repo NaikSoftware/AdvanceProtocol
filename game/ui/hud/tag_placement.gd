@@ -13,7 +13,7 @@ extends RefCounted
 ## точна геометрія перетину), бо точний перетин на тисячі кандидатів не вкладається в кадр;
 ## шукати точніше, якщо тег помітно сідає на 1–2 dp повз ребро контуру.
 ## shortcut: best() вибирає рівно те, що й повний перебір 4-dp сітки, але відсікає кандидатів за нижньою
-## межею ціни; на десктопі це ~9 ms для танка на River. Інженер із клітинками верби коштує до ~55 ms на найважчій
+## межею ціни; на десктопі це ~9 ms для танка на River. Інженер із клітинками верби коштує до ~70 ms на найважчій
 ## сцені фікстури River: рівень 0 там доводиться доводити порожнім, а кожна нова точка t рахує лідера (_leader_from) з перебором кінців.
 ## Пошук іде на виборі й на спокої камери, коли збережене місце накриває позначки, а не на кожному кадрі
 ## руху — тоді тег лише їде з юнітом. Прискорювати _leader_from далі, коли інженер стане помітним.
@@ -268,7 +268,7 @@ func _leader_from(t: Vector2) -> PackedVector2Array:
 		_ends_floor.resize(_ends.size())
 		for i in _ends.size():
 			_ends_static[i] = _static_cost(_ends[i])
-			_ends_floor[i] = END_IN_CELL_COST if _ends_static[i] >= END_IN_CELL_COST - CLEARANCE_WEIGHT * CLEARANCE_CAP else 0.0
+			_ends_floor[i] = END_IN_CELL_COST if _in_cell(_ends_static[i]) else 0.0
 	# Ціна кінця = відстань + штрафи, а штрафи — це напис, кінець у клітинці й перетин (не менше 200 dp). Нижня межа без
 	# перетину й напису — відстань плюс «кінець у клітинці»: вона ближча до ціни, ніж межа зі статичною частиною (та сягає
 	# −200 dp), тож перетини лінії з клітинками рахуються для меншої частки кінців. За рівної ціни виграє кінець
@@ -349,13 +349,19 @@ func _end_cost(t: Vector2, u: Vector2, static_cost: float = INF) -> float:
 	if _cells_raw.is_empty():
 		return cost
 	var st: float = _static_cost(u) if static_cost == INF else static_cost
-	var in_cell: bool = st >= END_IN_CELL_COST - CLEARANCE_WEIGHT * CLEARANCE_CAP
+	# _ends_floor — нижня межа лише доти, доки решта доданків ціни кінця ≥ 0.
+	var in_cell: bool = _in_cell(st)
 	if in_cell:
 		cost += END_IN_CELL_COST
 	if _crosses_cells(t, u):
 		# Лінія все одно крізь клітинку: хай кінець стоїть там, де від клітинок найдалі.
 		cost += CROSS_COST + (st - (END_IN_CELL_COST if in_cell else 0.0))
 	return cost
+
+
+## Кінець лежить у клітинці дії, коли її статична ціна не менша за поріг із запасом на зазор.
+func _in_cell(static_cost: float) -> bool:
+	return static_cost >= END_IN_CELL_COST - CLEARANCE_WEIGHT * CLEARANCE_CAP
 
 
 ## Квадрат кінця на написі чи значку — 1000, лінія крізь нього — 500.
