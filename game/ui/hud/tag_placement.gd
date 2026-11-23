@@ -13,10 +13,10 @@ extends RefCounted
 ## точна геометрія перетину), бо точний перетин на тисячі кандидатів не вкладається в кадр;
 ## шукати точніше, якщо тег помітно сідає на 1–2 dp повз ребро контуру.
 ## shortcut: best() вибирає рівно те, що й повний перебір 4-dp сітки, але відсікає кандидатів за нижньою
-## межею ціни; на десктопі це ~9 ms для танка на River. Інженер із клітинками верби коштує до ~300 ms: рівень 0
+## межею ціни; на десктопі це ~9 ms для танка на River. Інженер із клітинками верби коштує до ~55 ms: рівень 0
 ## там доводиться доводити порожнім, а кожна нова точка t рахує лідера (_leader_from) з перебором кінців.
 ## Пошук іде на виборі й на спокої камери, коли збережене місце накриває позначки, а не на кожному кадрі
-## руху — тоді тег лише їде з юнітом. Прискорювати _leader_from, коли інженер стане помітним.
+## руху — тоді тег лише їде з юнітом. Прискорювати _leader_from далі, коли інженер стане помітним.
 
 const LEAD_AT: float = 12.0
 const MAX_LEAD: float = 60.0
@@ -97,6 +97,7 @@ var _leaders: Dictionary = {}
 ## Кінці лідера й їхня ціна, що не залежить від t (кінець у клітинці, запас від клітинок): рахуються раз.
 var _ends: PackedVector2Array = PackedVector2Array()
 var _ends_static: PackedFloat32Array = PackedFloat32Array()
+var _ends_floor: PackedFloat32Array = PackedFloat32Array()
 var _mark_sat: PackedFloat32Array = PackedFloat32Array()
 const _NEVER: int = 1 << 30
 var _leader_levels: Dictionary = {}
@@ -264,23 +265,42 @@ func _leader_from(t: Vector2) -> PackedVector2Array:
 	if _ends.is_empty():
 		_ends = _end_candidates(ring)
 		_ends_static.resize(_ends.size())
+		_ends_floor.resize(_ends.size())
 		for i in _ends.size():
 			_ends_static[i] = _static_cost(_ends[i])
+			_ends_floor[i] = END_IN_CELL_COST if _ends_static[i] >= END_IN_CELL_COST - CLEARANCE_WEIGHT * CLEARANCE_CAP else 0.0
+	# Ціна кінця = відстань + штрафи, а штрафи — це напис, кінець у клітинці й перетин (не менше 200 dp). Нижня межа без
+	# перетину й напису — відстань плюс «кінець у клітинці»: вона ближча до ціни, ніж межа зі статичною частиною (та сягає
+	# −200 dp), тож перетини лінії з клітинками рахуються лише для кількох найближчих кінців. Старий порядок
+	# (відстань + статична частина, потім номер) лишається за розв'язання нічиїх: виграє перший у ньому.
+	var n: int = _ends.size()
+	var lows := PackedFloat64Array()
+	var olds := PackedFloat64Array()
+	var keys := PackedInt64Array()
+	lows.resize(n)
+	olds.resize(n)
+	keys.resize(n)
+	for i in n:
+		var d: float = t.distance_to(_ends[i])
+		lows[i] = d + _ends_floor[i]
+		olds[i] = d + _ends_static[i]
+		keys[i] = (int(floor(lows[i] * 64.0)) << _INDEX_BITS) | i
+	keys.sort()
 	var best_cost: float = INF
-	# Нижня межа ціни — відстань плюс статична частина: беремо кінці за її зростанням і зупиняємось, щойно
-	# межа не менша за найкращу ціну, тож дорогі перевірки перетину виконуються для кількох кінців, а не для всіх.
-	var bounds: Array[float] = []
-	for i in _ends.size():
-		bounds.append(t.distance_to(_ends[i]) + _ends_static[i])
-	while not bounds.is_empty():
-		var i: int = bounds.find(bounds.min())
-		if bounds[i] >= best_cost:
+	var best_old: float = INF
+	var best_i: int = n
+	for key: int in keys:
+		if float(key >> _INDEX_BITS) / 64.0 > best_cost:
 			break
-		bounds[i] = INF
+		var i: int = key & ((1 << _INDEX_BITS) - 1)
+		if lows[i] > best_cost:
+			continue
 		var q: Vector2 = _ends[i]
 		var cost: float = t.distance_to(q) + _end_cost(t, q, _ends_static[i])
-		if cost < best_cost:
+		if cost < best_cost or (cost == best_cost and (olds[i] < best_old or (olds[i] == best_old and i < best_i))):
 			best_cost = cost
+			best_old = olds[i]
+			best_i = i
 			u = q
 	return PackedVector2Array([t, u])
 
@@ -322,13 +342,10 @@ func _static_cost(u: Vector2) -> float:
 func _end_cost(t: Vector2, u: Vector2, static_cost: float = INF) -> float:
 	var cost: float = 0.0
 	var square := Rect2(u - Vector2(END_HALF, END_HALF), Vector2(END_HALF, END_HALF) * 2.0)
-	for avoid: Rect2 in [_label, _icon]:
-		if avoid.size == Vector2.ZERO:
-			continue
-		if avoid.intersects(square):
-			cost += 1000.0
-		elif _segment_hits(t, u, avoid):
-			cost += 500.0
+	if _label.size != Vector2.ZERO:
+		cost += _avoid_cost(t, u, square, _label)
+	if _icon.size != Vector2.ZERO:
+		cost += _avoid_cost(t, u, square, _icon)
 	if _cells_raw.is_empty():
 		return cost
 	var st: float = _static_cost(u) if static_cost == INF else static_cost
@@ -339,6 +356,13 @@ func _end_cost(t: Vector2, u: Vector2, static_cost: float = INF) -> float:
 		# Лінія все одно крізь клітинку: хай кінець стоїть там, де від клітинок найдалі.
 		cost += CROSS_COST + (st - (END_IN_CELL_COST if in_cell else 0.0))
 	return cost
+
+
+## Квадрат кінця на написі чи значку — 1000, лінія крізь нього — 500.
+func _avoid_cost(t: Vector2, u: Vector2, square: Rect2, avoid: Rect2) -> float:
+	if avoid.intersects(square):
+		return 1000.0
+	return 500.0 if _segment_hits(t, u, avoid) else 0.0
 
 
 func _in_any(p: Vector2, polys: Array[PackedVector2Array]) -> bool:
@@ -724,9 +748,19 @@ static func _segment_hits(a: Vector2, b: Vector2, r: Rect2) -> bool:
 	var t0: float = 0.0
 	var t1: float = 1.0
 	var d: Vector2 = b - a
+	# Чотири півплощини, розгорнуті без масивів: цей виклик іде на кожен кінець лідера.
+	var p: float = -d.x
+	var q: float = a.x - r.position.x
 	for k in 4:
-		var p: float = [-d.x, d.x, -d.y, d.y][k]
-		var q: float = [a.x - r.position.x, r.end.x - a.x, a.y - r.position.y, r.end.y - a.y][k]
+		if k == 1:
+			p = d.x
+			q = r.end.x - a.x
+		elif k == 2:
+			p = -d.y
+			q = a.y - r.position.y
+		elif k == 3:
+			p = d.y
+			q = r.end.y - a.y
 		if p == 0.0:
 			if q < 0.0:
 				return false
