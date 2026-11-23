@@ -394,8 +394,9 @@ func _clearance(p: Vector2) -> float:
 
 
 ## Частка прямокутника під контурами зон і дугами кілець (0..1): за нею гістерезис відрізняє збережене
-## місце, що накриває позначки, від чистого. Растр покриває лише безпечну зону, тож і ця частка, і score()
-## правдиві лише для прямокутника в ній — для законного вони завжди такі.
+## місце, що накриває позначки, від чистого. Растр покриває лише безпечну зону навколо юніта: і ця частка, і score()
+## правдиві лише для прямокутника, що може бути законним, — у безпечній зоні й не далі MAX_LEAD від юніта.
+## Поза цим растр обрізає край, і значення відрізняється.
 func mark_cover(r: Rect2) -> float:
 	return minf(1.0, _sat_sum_f(_mark_sat, r) / maxf(1.0, r.size.x * r.size.y))
 
@@ -598,7 +599,10 @@ func _build() -> void:
 ## по цій осі до юніта й до core (як у _dist()) і маска чужих коробок і хрому, які він перекриває по цій
 ## осі (як у Rect2.intersects()). Вузли поза безпечною зоною не потрапляють у таблицю.
 func _axis_table(at: Array, axis: int, extent: float) -> Dictionary:
-	var out: Dictionary = {"at": PackedInt32Array(), "unit": PackedFloat64Array(), "core": PackedFloat64Array(), "mask": PackedInt64Array()}
+	var nodes := PackedInt32Array()
+	var unit_gap := PackedFloat64Array()
+	var core_gap := PackedFloat64Array()
+	var masks := PackedInt64Array()
 	# Маска на 62 коробки; більше їх на екрані не буває, а як буде — відсіє _rect_level().
 	var masked: bool = _blocked.size() <= 62
 	for v: int in at:
@@ -607,16 +611,16 @@ func _axis_table(at: Array, axis: int, extent: float) -> Dictionary:
 		var hi: float = r.end[axis]
 		if lo < _safe.position[axis] or hi > _safe.end[axis]:
 			continue
-		out["at"].append(v)
-		out["unit"].append(maxf(maxf(_unit.position[axis] - hi, lo - _unit.end[axis]), 0.0))
-		out["core"].append(maxf(maxf(_core.position[axis] - hi, lo - _core.end[axis]), 0.0))
+		nodes.append(v)
+		unit_gap.append(maxf(maxf(_unit.position[axis] - hi, lo - _unit.end[axis]), 0.0))
+		core_gap.append(maxf(maxf(_core.position[axis] - hi, lo - _core.end[axis]), 0.0))
 		var mask: int = 0
 		if masked:
 			for k in _blocked.size():
 				if not (lo >= _blocked[k].end[axis] or hi <= _blocked[k].position[axis]):
 					mask |= 1 << k
-		out["mask"].append(mask)
-	return out
+		masks.append(mask)
+	return {"at": nodes, "unit": unit_gap, "core": core_gap, "mask": masks}
 
 
 func _on_blocked(r: Rect2) -> bool:

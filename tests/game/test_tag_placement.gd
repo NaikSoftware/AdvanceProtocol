@@ -340,7 +340,8 @@ func test_best_keeps_the_recorded_picks_on_real_river_scenes() -> void:
 		assert_eq([pick["found"], pick["rect"], pick["leader"], p.relax_used], [c["found"], c["rect"], c["leader"], c["relax"]], c["key"])
 
 
-## Повний перебір 4-dp сітки без жодного відсіву: еталон, з яким звіряється best().
+## Повний перебір 4-dp сітки без відсіву за нижньою межею ціни: звіряє порядок і відсів у best(). Законність і
+## ціну він бере в самого TagPlacement (is_legal, score), тож їх фіксують окремо сцени з фікстури.
 func _brute_best(p: TagPlacement) -> Array:
 	var w: float = p._tag.x
 	var h: float = p._tag.y

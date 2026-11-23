@@ -1334,7 +1334,7 @@ func _hud_counting_reads(state: BattleState, u: Unit, cell: Vector2i, reads: Arr
 
 ## Юніт далеко за кадром: законне місце тега лежить не далі MAX_LEAD від юніта й у межах екрана, тож
 ## його нема, а коробка юніта за кадром у перспективі розлітається на тисячі dp, і пошук на ній
-## тривав секунди. Тег ховається без сцени й пошуку; юніт повернувся — тег стає звичайним пошуком.
+## займає секунди. Тег ховається без сцени й пошуку; юніт повернувся — тег стає звичайним пошуком.
 func test_an_off_screen_unit_hides_its_tag_without_a_placement_search() -> void:
 	var state: BattleState = _state()
 	var u: Unit = state.add_unit(5, 0, Vector2i(11, 11), 0)
