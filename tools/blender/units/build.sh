@@ -9,7 +9,7 @@
 set -euo pipefail
 unit="$1"; from="${3:-prep}"
 here="$(cd "$(dirname "$0")" && pwd)"
-blender="${BLENDER:-$HOME/.local/opt/blender-5.2.3-linux-x64/blender}"
+blender="${BLENDER:-blender}"
 run() { "$blender" --background --factory-startup --python "$here/$1" -- "$unit"; }
 stages=(prep bake paint assemble)
 go=0
