@@ -256,11 +256,27 @@ void hex_grid(vec2 uv, out vec2 id[3], out vec3 w) {
 	}
 }
 
+// Цілочисельний хеш комірки (pcg2d) у [0, 1). Не hash12: на аргументах у сотні його float-проміжні
+// сягають ~2·10⁴, і результат залежить від порядку й злиття операцій (FMA), тож різні варіанти
+// конвеєра того самого шейдера дають різні зсуви гекса. Цілі операції точні на будь-якому GPU.
+float cell_hash(vec2 cell, int salt) {
+	uvec2 v = uvec2(ivec2(cell) + ivec2(salt * 7919, salt * 104729));
+	v = v * 1664525u + 1013904223u;
+	v.x += v.y * 1664525u;
+	v.y += v.x * 1664525u;
+	v ^= v >> 16u;
+	v.x += v.y * 1664525u;
+	v.y += v.x * 1664525u;
+	v ^= v >> 16u;
+	return float((v.x ^ v.y) >> 8u) * (1.0 / 16777216.0);
+}
+
 // forced >= 0 — поворот лише 0/180° від цього кута (борозни); інакше кут довільний: поворот,
 // кратний 90°, клав би лінії текстури вздовж осей сітки.
 void hex_rand(vec2 id, float salt, float forced, out vec2 off, out mat2 r) {
-	off = vec2(hash12(id + salt * 13.1), hash12(id + 7.7 + salt * 5.3)) * 8.0;
-	float a = hash12(id + 3.3 + salt * 2.9) * 6.2831853;
+	int s = int(salt) * 4;
+	off = vec2(cell_hash(id, s), cell_hash(id, s + 1)) * 8.0;
+	float a = cell_hash(id, s + 2) * 6.2831853;
 	if (forced >= 0.0) {
 		a = forced + floor(a / 3.1415927) * 3.1415927;
 	}
@@ -321,7 +337,7 @@ void sample_layer(int layer, vec2 p, vec2 dpx, vec2 dpy, vec2 pom_w, float dfade
 		hex_rand(id[i], fl, layer_aligned[layer] == 2 ? 0.0 : -1.0, off[i], rot[i]);
 		// Варіант текстури шару — з хешу комірки; середнє кожного варіанта окреме,
 		// бо контраст-зберігаюче змішування віднімає власне середнє семпла.
-		float var_f = min(floor(hash12(id[i] + fl * 3.7 + 91.3) * float(macro_variants)), float(macro_variants - 1));
+		float var_f = min(floor(cell_hash(id[i], int(fl) * 4 + 3) * float(macro_variants)), float(macro_variants - 1));
 		mlay[i] = fl * float(macro_variants) + var_f;
 		mmv[i] = textureLod(macro_array, vec3(0.5, 0.5, mlay[i]), 14.0);
 	}
