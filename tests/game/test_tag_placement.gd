@@ -324,3 +324,93 @@ func test_a_leadered_tag_hugging_another_unit_pays_the_crowded_cost() -> void:
 	# Два крауди (< 12 dp; ближче за d + 8), тісний чужий, основа й 19 dp різниці відстаней.
 	assert_eq(with.score(r) - far.score(r), 2.0 * TagPlacement.CROWD_COST + TagPlacement.NEAR_OTHER_CROWDED_COST \
 		+ TagPlacement.NEAR_OTHER_COST + TagPlacement.NEAR_OTHER_PER_DP * 19.0)
+
+
+# --- Швидкий пошук вибирає те саме, що й повний перебір ----------------------------------------------
+
+## Справжні сцени River (свій танк і свій інженер на зумах 8/12/18, камера в русі) разом із тим, що
+## повний перебір сітки вибирає на них: місце, лідер і рівень послаблення. Тут є всі різновиди — без
+## лідера, з лідером, рівні 0, 1 і 2, і «місця нема».
+func test_best_keeps_the_recorded_picks_on_real_river_scenes() -> void:
+	var cases: Array = str_to_var(FileAccess.get_file_as_string("res://tests/fixtures/tag_scenes_river.txt"))
+	assert_eq(cases.size(), 17, "передумова: усі сцени прочитано")
+	for c: Dictionary in cases:
+		var p := TagPlacement.new(c["scene"])
+		var pick: Dictionary = p.best()
+		assert_eq([pick["found"], pick["rect"], pick["leader"], p.relax_used], [c["found"], c["rect"], c["leader"], c["relax"]], c["key"])
+		# Кінець лідера записано старим кодом із повною точністю (float32 у Vector2), тож порівняння точне.
+		var ends: PackedVector2Array = p.leader_points(pick["rect"]) if pick["found"] and pick["leader"] else PackedVector2Array()
+		assert_eq(ends, c["leader_points"], "кінці лідера: " + c["key"])
+		# Симетричні кінці клітинок: за рівної ціни обирає тай-брейк (менша відстань + статична частина, потім номер).
+		var from: Dictionary = c.get("from", {})
+		for tag_pt: Vector2 in from:
+			assert_eq(TagPlacement.new(c["scene"])._leader_from(tag_pt), from[tag_pt], "лідер від %s: %s" % [tag_pt, c["key"]])
+
+
+## Повний перебір 4-dp сітки без відсіву за нижньою межею ціни: звіряє порядок і відсів у best(). Законність і
+## ціну він бере в самого TagPlacement (is_legal, score), тож їх фіксують окремо сцени з фікстури.
+func _brute_best(p: TagPlacement) -> Array:
+	var w: float = p._tag.x
+	var h: float = p._tag.y
+	var u: Rect2 = p._unit
+	var cands: Array[Rect2] = []
+	for gap: float in p._gaps:
+		for i in 11:
+			var f: float = i / 10.0
+			var cy: float = u.position.y + u.size.y * f
+			var cx: float = u.position.x + u.size.x * f
+			for q: Vector2 in [Vector2(u.position.x - gap - w, cy - h / 2.0), Vector2(u.end.x + gap, cy - h / 2.0),
+					Vector2(cx - w / 2.0, u.position.y - gap - h), Vector2(cx - w / 2.0, u.end.y + gap),
+					Vector2(u.position.x - w + 12.0, u.position.y - gap - h), Vector2(u.end.x - 12.0, u.position.y - gap - h),
+					Vector2(u.position.x - w + 12.0, u.end.y + gap), Vector2(u.end.x - 12.0, u.end.y + gap)]:
+				cands.append(Rect2(q, p._tag))
+	for x in range(roundi(u.position.x - w - TagPlacement.MAX_LEAD), roundi(u.end.x + TagPlacement.MAX_LEAD + 1.0), 4):
+		for y in range(roundi(u.position.y - h - TagPlacement.MAX_LEAD), roundi(u.end.y + TagPlacement.MAX_LEAD + 1.0), 4):
+			var r := Rect2(x, y, w, h)
+			if TagPlacement._dist(r, p._core) > p._lead_at:
+				cands.append(r)
+	var top: int = 1 if p._cells_raw.is_empty() else 3
+	var out: Array = []
+	for level in top:
+		var best_rect := Rect2()
+		var best_score: float = INF
+		for r: Rect2 in cands:
+			if p.is_legal(r, level):
+				var s: float = p.score(r)
+				if s < best_score:
+					best_score = s
+					best_rect = r
+		out = [best_score < INF, best_rect, best_score < INF and p.needs_leader(best_rect), level]
+		if out[0]:
+			break
+	return out
+
+
+func test_best_equals_the_full_grid_scan_on_every_kind_of_scene() -> void:
+	var cell := PackedVector2Array([Vector2(300, 150), Vector2(400, 150), Vector2(400, 250), Vector2(300, 250)])
+	var stripes: Array[PackedVector2Array] = []
+	for y in range(180, 300, 6):
+		stripes.append(PackedVector2Array([Vector2(250, y), Vector2(760, y)]))
+	var scenes: Array[Dictionary] = [
+		_scene(),
+		_scene({"others": [Rect2(380, 190, 40, 50), Rect2(580, 190, 40, 50)] as Array[Rect2], "chrome": [Rect2(24, 12, 160, 36)] as Array[Rect2]}),
+		_scene({"polys": [cell] as Array[PackedVector2Array]}),
+		_scene({"fire": PackedVector2Array([Vector2(500, 225), Vector2(900, 225)])}),
+		_scene({"marks": stripes}),
+		# Біля краю екрана: частина сітки лежить за безпечною зоною.
+		_scene({"unit": Rect2(900, 380, 40, 50), "core": Rect2(900, 400, 40, 30)}),
+		# Коробка, що в перспективі розлетілась донизу за кадр, але ще зачіпає його.
+		_scene({"unit": Rect2(420, 300, 300, 1500), "core": Rect2(420, 300, 300, 1500)}),
+		_engineer_scene(),
+		_shrunk_engineer_scene(0.6),
+		_shrunk_engineer_scene(0.8),
+	]
+	var ring: Array[PackedVector2Array] = []
+	for c: Rect2 in [Rect2(440, 170, 120, 43.5), Rect2(440, 256.5, 120, 43.5), Rect2(440, 213.5, 33.5, 43), Rect2(526.5, 213.5, 33.5, 43)]:
+		ring.append(PackedVector2Array([c.position, Vector2(c.end.x, c.position.y), c.end, Vector2(c.position.x, c.end.y)]))
+	scenes.append(_scene({"polys": ring}))
+	for i in scenes.size():
+		var expected: Array = _brute_best(TagPlacement.new(scenes[i]))
+		var p := TagPlacement.new(scenes[i])
+		var pick: Dictionary = p.best()
+		assert_eq([pick["found"], pick["rect"], pick["leader"], p.relax_used], expected, "сцена %d" % i)
